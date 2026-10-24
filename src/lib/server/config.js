@@ -40,6 +40,7 @@ export const DEFAULT_SETTINGS = {
   intervals: { probe: 30, widgets: 60, cert: 21600 },
   thresholds: {
     backupMaxAgeHours: 26,
+    offsiteMaxDetachedDays: 135, // removable PBS datastore not seen attached for this long → reminder
     certWarnDays: 14,
     latencyWarnMs: 250,
     storageAmberPct: 70,

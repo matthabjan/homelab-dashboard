@@ -62,7 +62,10 @@ export async function demoCollect(type, w, ctx) {
         stats: [{ k: 'oldest backup', v: overdue ? '30 h' : '6 h', level: overdue ? 'warn' : null }, { k: 'datastore', v: '62%' }, { k: 'groups', v: '6' }],
         line: overdue ? '1 backup overdue' : 'Last backup 6 h ago · store 62%',
         alerts: overdue ? [{ sev: 'warn', key: 'backup-103', title: 'Backup overdue', detail: '103 omv · last success 30 h ago' }] : [],
-        storage: [{ name: 'pbs-main · backups', used: 1.24 * TiB, total: 2 * TiB, pct: 62, sub: fmtPair(1.24 * TiB, 2 * TiB) + ' · dedup 14.2×', source: 'pbs' }],
+        storage: [
+          { name: 'pbs-main · backups', used: 1.24 * TiB, total: 2 * TiB, pct: 62, sub: fmtPair(1.24 * TiB, 2 * TiB) + ' · dedup 14.2×', source: 'pbs' },
+          { name: 'offsite · removable', offline: true, sub: 'detached · last attached 41 d ago', source: 'pbs' }
+        ],
         backups: { overdue: overdue ? 1 : 0, oldestAge: overdue ? 30 * 3600_000 : 6 * 3600_000, known: true }
       };
     }

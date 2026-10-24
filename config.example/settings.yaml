@@ -42,6 +42,7 @@ intervals:                 # seconds
 
 thresholds:
   backupMaxAgeHours: 26
+  offsiteMaxDetachedDays: 135  # removable PBS datastore (offsite disk) not attached for this long
   certWarnDays: 14
   latencyWarnMs: 250
   storageAmberPct: 70

@@ -1,19 +1,50 @@
 // Proxmox Backup Server — token auth (username = USER@REALM!TOKENID, password = secret).
 // Backup freshness needs Datastore.Audit on the datastore; usage works with homepage's permissions.
+// Removable datastores (PBS 3.3+, mount-status other than "nonremovable") are an offsite disk that is plugged
+// in now and then: detached is normal, they only alert after offsiteMaxDetachedDays, and backup freshness skips them.
 import { getJson, trimUrl } from '../http.js';
+import { kvGet, kvSet } from '../db.js';
 import { fmtPair, fmtDuration, pct } from '../format.js';
+
+const usageRow = (name, s) => ({ name, used: s.used, total: s.total, pct: pct(s.used, s.total), sub: fmtPair(s.used, s.total), source: 'pbs' });
+const removable = (s) => s['mount-status'] != null && s['mount-status'] !== 'nonremovable';
+
+/** Row and alert for a removable store; remembers when it was last seen attached (survives restarts). */
+function removableStatus(s, now, maxDays) {
+  const key = `pbs.attached.${s.store}`;
+  const stored = kvGet(key);
+  const seen = stored ?? { first: now, last: null };
+  if (s.total > 0) {
+    kvSet(key, { ...seen, last: now });
+    return { row: usageRow(`${s.store} · removable`, s) };
+  }
+  if (!stored) kvSet(key, seen);
+  const age = now - (seen.last ?? seen.first);
+  return {
+    row: { name: `${s.store} · removable`, offline: true, sub: seen.last ? `detached · last attached ${fmtDuration(age)} ago` : 'detached · never seen attached', source: 'pbs' },
+    alert: age > maxDays * 86_400_000 ? { sev: 'info', key: `detached-${s.store}`, title: `${s.store} detached for ${fmtDuration(age)}`, detail: 'Plug in the offsite disk to refresh its copy' } : null
+  };
+}
 
 export async function collect(w, ctx) {
   const base = trimUrl(w.url) + '/api2/json';
   const opts = { headers: { Authorization: `PBSAPIToken=${w.username}:${w.password}` }, insecure: ctx.insecure };
   const { data: usage } = await getJson(`${base}/status/datastore-usage`, opts);
-  const stores = usage.filter((s) => (w.datastore ? s.store === w.datastore : true) && s.total > 0);
-  const storage = stores.map((s) => ({ name: `${s.store} · backups`, used: s.used, total: s.total, pct: pct(s.used, s.total), sub: fmtPair(s.used, s.total), source: 'pbs' }));
-  for (const s of stores) ctx.metric(`storage.pbs.${s.store}`, pct(s.used, s.total));
-
+  const wanted = w.datastore == null ? null : [].concat(w.datastore);
+  const selected = usage.filter((s) => (wanted ? wanted.includes(s.store) : true));
+  // freshness and the widget's stats are about the regular stores
+  const stores = selected.filter((s) => !removable(s) && s.total > 0);
   const now = ctx.now;
-  const maxAge = ctx.settings.thresholds.backupMaxAgeHours * 3600_000;
   const alerts = [];
+  const storage = stores.map((s) => usageRow(`${s.store} · backups`, s));
+  for (const s of selected.filter(removable)) {
+    const { row, alert } = removableStatus(s, now, ctx.settings.thresholds.offsiteMaxDetachedDays);
+    storage.push(row);
+    if (alert) alerts.push(alert);
+  }
+  for (const s of selected.filter((x) => x.total > 0)) ctx.metric(`storage.pbs.${s.store}`, pct(s.used, s.total));
+
+  const maxAge = ctx.settings.thresholds.backupMaxAgeHours * 3600_000;
   const events = [];
   let groups = [];
   let freshnessError = null;
@@ -50,7 +81,7 @@ export async function collect(w, ctx) {
   }
   ctx.state.latest = latest;
 
-  const store = storage[0];
+  const store = stores.length ? storage[0] : null;
   const stats = [
     { k: 'oldest backup', v: oldest ? fmtDuration(oldest.age) : '—', level: oldest && oldest.age > maxAge ? 'warn' : null },
     { k: 'datastore', v: store ? `${Math.round(store.pct)}%` : '—' },
@@ -61,7 +92,7 @@ export async function collect(w, ctx) {
   const overdue = alerts.filter((a) => a.title === 'Backup overdue').length;
   return {
     stats,
-    line: overdue ? `${overdue} backup${overdue > 1 ? 's' : ''} overdue` : oldest ? `Last backup ${fmtDuration(now - latest * 1000)} ago · store ${Math.round(store?.pct ?? 0)}%` : `Store ${Math.round(store?.pct ?? 0)}%`,
+    line: overdue ? `${overdue} backup${overdue > 1 ? 's' : ''} overdue` : oldest ? `Last backup ${fmtDuration(now - latest * 1000)} ago · store ${Math.round(store?.pct ?? 0)}%` : store ? `Store ${Math.round(store.pct)}%` : 'Online',
     alerts,
     events,
     storage,

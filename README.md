@@ -200,7 +200,7 @@ Give the dashboard its own read-only account wherever the product allows it. Don
 | Service | What to create |
 |---|---|
 | **Proxmox VE** | A privilege-separated token with `PVEAuditor` (see below). It's read-only, and `Sys.Audit` in that role also covers the update count. |
-| **Proxmox Backup Server** | A token with `DatastoreAudit` on the datastore (see below). Without it you get usage but no backup freshness. |
+| **Proxmox Backup Server** | A token with `DatastoreAudit` on the datastore (see below). Without it you get usage but no backup freshness. `datastore:` takes one name, a list, or nothing for all. A removable datastore (an offsite disk) shows as detached while unplugged, is left out of backup freshness, and raises a reminder after `thresholds.offsiteMaxDetachedDays` (135) without being attached. |
 | **OPNsense** | A dedicated user without the admin group. Grant only the privileges for **Diagnostics: Activity** and the **traffic** API (check *Effective Privileges*), then create the API key for that user. |
 | **OpenMediaVault** | Needs an admin login; OMV's RPC has no read-only role. Treat this password as highly sensitive and use `https://`. |
 | **AdGuard Home** | Needs the AdGuard login; AdGuard has no read-only role. Use `https://`. |

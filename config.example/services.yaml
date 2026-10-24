@@ -33,7 +33,7 @@
           url: https://pbs.home.arpa:8007
           username: dashboard@pbs!dashboard
           password: ${PBS_TOKEN_SECRET}
-          datastore: main
+          datastore: [main, offsite]   # one name, a list, or leave out for all; removable stores show as detached when unplugged
     - OPNsense:
         icon: opnsense
         href: https://opnsense.home.arpa
