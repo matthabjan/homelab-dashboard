@@ -6,7 +6,9 @@
   import ThemeToggle from '$lib/components/ThemeToggle.svelte';
   import Palette from '$lib/components/Palette.svelte';
 
+  /** @type {import('./$types').PageProps} */
   let { data } = $props();
+  // svelte-ignore state_referenced_locally — only the first snapshot comes from load; the stream replaces it
   let snap = $state(data.snapshot);
   let live = $state('connecting'); // connecting | live | reconnecting
   let now = $state(Date.now());
@@ -74,6 +76,7 @@
     for (const id of ['top', ...ids]) { const el = document.getElementById(id); if (el) spy.observe(el); }
     return spy;
   }
+  /** @returns {'location' | undefined} */
   const current = (id) => (section === id ? 'location' : undefined);
 
   function onKey(e) {

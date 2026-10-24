@@ -2,6 +2,7 @@
 // Token needs PVEAuditor on "/" (read-only).
 import { trimUrl } from '../http.js';
 import { fmtPair, fmtDuration, pct } from '../format.js';
+/** @import { Alert, Context, Widget, WidgetResult } from '$lib/types' */
 
 /**
  * The node's storages for the storage card (filtered by host.storages, unavailable ones kept as `down`)
@@ -24,6 +25,11 @@ function nodeStorages(res, nodeName, { storages: wanted, storage: pinned }) {
   };
 }
 
+/**
+ * @param {Widget} w
+ * @param {Context} ctx
+ * @returns {Promise<WidgetResult>}
+ */
 export async function collect(w, ctx) {
   const base = trimUrl(w.url) + '/api2/json';
   const opts = { headers: { Authorization: `PVEAPIToken=${w.username}=${w.password}` }, insecure: ctx.insecure };
@@ -58,6 +64,7 @@ export async function collect(w, ctx) {
   ctx.shared.guestIds = new Set(guests.map((g) => String(g.id)));
   ctx.shared.guestNames = Object.fromEntries(guests.map((g) => [String(g.id), g.name]));
 
+  /** @type {Alert[]} */
   const alerts = [];
   if (node.status !== 'online') alerts.push({ sev: 'crit', title: `Node ${node.node} is offline`, detail: 'Proxmox reports the node as ' + node.status });
   if (updates) alerts.push({ sev: 'info', key: 'updates', title: `${updates} updates available on ${node.node}`, detail: 'apt packages pending' });

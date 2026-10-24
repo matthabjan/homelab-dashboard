@@ -8,6 +8,8 @@ import adguard from './adguard.js';
 import portainer from './portainer.js';
 import openmediavault from './openmediavault.js';
 
+/** @import { Fixtures, Transport } from '$lib/types' */
+
 export const FIXTURES = { proxmox, proxmoxbackupserver, opnsense, fritzbox, adguard, portainer, openmediavault };
 
 const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -17,6 +19,9 @@ const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
  * Keys are "METHOD /path" (query string ignored; ":name" matches one segment). Values are functions of
  * { now, scenario, params, headers, body, url } returning an object (sent as JSON) or a string (sent as XML).
  * Unknown routes answer 404, like a real API would.
+ * @param {Fixtures} table
+ * @param {{ scenario?: string, now?: number }} [opts]
+ * @returns {Transport}
  */
 export function fixtureTransport(table, { scenario = 'issues', now } = {}) {
   const routes = Object.entries(table).map(([key, fn]) => {

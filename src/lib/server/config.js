@@ -5,11 +5,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import YAML from 'yaml';
+/** @import { Config, Discovered, Service, Settings } from '$lib/types' */
 
 export const CONFIG_DIR = path.resolve(process.env.CONFIG_DIR || 'config');
 export const DATA_DIR = path.resolve(process.env.DATA_DIR || 'data');
 const SECRETS_DIR = process.env.SECRETS_DIR || '/run/secrets';
 
+/** @type {Settings} */
 export const DEFAULT_SETTINGS = {
   title: 'Homelab',
   theme: 'system', // default for new visitors: system | light | dark (each viewer can switch)
@@ -107,6 +109,7 @@ function deepMerge(base, over) {
 
 export const slug = (s) => s.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
+/** @returns {Service} */
 function toService(gname, name, def, settings) {
   return {
     id: slug(gname + '-' + name),
@@ -128,6 +131,9 @@ function toService(gname, name, def, settings) {
  * Add services discovered from container labels ({ group, name, def }) to a loaded config.
  * They join the services.yaml group of the same name (or a new group at the end);
  * a service already defined in services.yaml under the same group and name wins.
+ * @param {Config} cfg
+ * @param {Discovered[]} discovered
+ * @returns {Config}
  */
 export function withDiscovered(cfg, discovered) {
   if (!discovered?.length) return cfg;
@@ -146,6 +152,7 @@ export function withDiscovered(cfg, discovered) {
   return { ...cfg, groups, services };
 }
 
+/** @returns {Config} */
 export function loadConfig() {
   const settings = deepMerge(DEFAULT_SETTINGS, readYaml('settings.yaml', {}));
   const raw = readYaml('services.yaml', []) || [];

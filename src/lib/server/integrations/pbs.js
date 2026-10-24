@@ -4,11 +4,16 @@
 // in now and then: detached is normal, they only alert after offsiteMaxDetachedDays, and backup freshness skips them.
 import { trimUrl } from '../http.js';
 import { fmtPair, fmtDuration, pct } from '../format.js';
+/** @import { Alert, StorageRow, WidgetEvent, Context, Widget, WidgetResult } from '$lib/types' */
 
+/** @returns {StorageRow} */
 const usageRow = (name, s) => ({ name, used: s.used, total: s.total, pct: pct(s.used, s.total), sub: fmtPair(s.used, s.total), source: 'pbs' });
 const removable = (s) => s['mount-status'] != null && s['mount-status'] !== 'nonremovable';
 
-/** Row and alert for a removable store; remembers when it was last seen attached (survives restarts). */
+/**
+ * Row and alert for a removable store; remembers when it was last seen attached (survives restarts).
+ * @returns {{ row: StorageRow, alert?: Alert | null }}
+ */
 function removableStatus(s, now, maxDays, kv) {
   const key = `pbs.attached.${s.store}`;
   const stored = kv.get(key);
@@ -25,6 +30,11 @@ function removableStatus(s, now, maxDays, kv) {
   };
 }
 
+/**
+ * @param {Widget} w
+ * @param {Context} ctx
+ * @returns {Promise<WidgetResult>}
+ */
 export async function collect(w, ctx) {
   const base = trimUrl(w.url) + '/api2/json';
   const opts = { headers: { Authorization: `PBSAPIToken=${w.username}:${w.password}` }, insecure: ctx.insecure };
@@ -34,7 +44,9 @@ export async function collect(w, ctx) {
   // freshness and the widget's stats are about the regular stores
   const stores = selected.filter((s) => !removable(s) && s.total > 0);
   const now = ctx.now;
+  /** @type {Alert[]} */
   const alerts = [];
+  /** @type {StorageRow[]} */
   const storage = stores.map((s) => usageRow(`${s.store} · backups`, s));
   for (const s of selected.filter(removable)) {
     const { row, alert } = removableStatus(s, now, ctx.settings.thresholds.offsiteMaxDetachedDays, ctx.kv);
@@ -44,6 +56,7 @@ export async function collect(w, ctx) {
   for (const s of selected.filter((x) => x.total > 0)) ctx.metric(`storage.pbs.${s.store}`, pct(s.used, s.total));
 
   const maxAge = ctx.settings.thresholds.backupMaxAgeHours * 3600_000;
+  /** @type {WidgetEvent[]} */
   const events = [];
   let groups = [];
   let freshnessError = null;

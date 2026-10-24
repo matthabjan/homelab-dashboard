@@ -10,21 +10,29 @@ import { DEMO, SCENARIO, demoProbe, demoCert, demoTemps, seedHistory } from './d
 import { FIXTURES, fixtureTransport } from './demo/index.js';
 import { buildSnapshot } from './snapshot.js';
 import { INTEGRATIONS, ORDER, createContext } from './integrations/index.js';
+/** @import { Config, Discovered, ServiceState, Shared, Snapshot, Temps } from '$lib/types' */
 
 const kv = { get: kvGet, set: kvSet };
 
 const withTimeout = (p, ms, label) =>
   Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(`${label} timed out`)), ms))]);
 
-class Engine extends EventEmitter {
+export class Engine extends EventEmitter {
+  /** @type {Config} */
   cfg = null;
+  /** @type {Config} */
   base = null; // services.yaml only; cfg adds the services discovered from container labels
+  /** @type {Discovered[]} */
   discovered = [];
   discoveredBy = new Map(); // widget service id → its last successful discovery
+  /** @type {Map<string, ServiceState>} */
   rt = new Map();
+  /** @type {Shared} */
   shared = {};
+  /** @type {Temps | null} */
   temps = null;
   timers = [];
+  /** @type {Snapshot | null} */
   snapshot = null;
   started = false;
 
@@ -61,6 +69,7 @@ class Engine extends EventEmitter {
     this.publish();
   }
 
+  /** @returns {ServiceState} */
   state(id) {
     if (!this.rt.has(id)) this.rt.set(id, { probe: { fails: 0, down: false, since: null, reason: null, ms: null, checked: null }, widget: null, wstate: {}, cert: null });
     return this.rt.get(id);
@@ -174,6 +183,7 @@ class Engine extends EventEmitter {
   }
 }
 
+/** @returns {Engine} */
 export function getEngine() {
   globalThis.__homelabEngine ??= new Engine();
   return globalThis.__homelabEngine;

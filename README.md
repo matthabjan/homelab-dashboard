@@ -239,6 +239,7 @@ Work happens on `development` (published as `:dev`) and reaches `main` through p
 npm ci
 CONFIG_DIR=config.example DEMO=1 npm run dev    # http://localhost:5173 (this machine only)
 npm test                                        # every integration against the demo fixtures
+npm run check                                   # type-check the JS and Svelte (shapes in src/lib/types.d.ts)
 ```
 
 In demo mode the widgets run the real integrations: their HTTP calls are answered from the API fixtures in `src/lib/server/demo/` (one file per widget type). A new integration or API field gets its fixture there, and the demo and the tests pick it up. See [CONTEXT.md](CONTEXT.md) for the terms.

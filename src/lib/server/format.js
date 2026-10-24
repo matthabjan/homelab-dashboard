@@ -12,6 +12,7 @@ export function fmtBytes(b, digits = 1) {
 
 /** "41.2 / 64 GiB" — both values in the unit of the total */
 export function fmtPair(used, total) {
+  /** @type {[string, number][]} */
   const units = [['TiB', TiB], ['GiB', GiB], ['MiB', 1024 ** 2]];
   const [u, f] = units.find(([, f]) => total >= f) || units[2];
   const a = used / f, t = total / f;

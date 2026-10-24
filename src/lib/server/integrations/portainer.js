@@ -2,6 +2,7 @@
 // Containers with label `dashboard.ignore=true` are skipped.
 // Containers with gethomepage labels (`homepage.group`, `homepage.name`, `homepage.href`, …) become services.
 import { trimUrl } from '../http.js';
+/** @import { Alert, Context, Widget, WidgetResult } from '$lib/types' */
 
 /** `homepage.widget.type=x` → { widget: { type: 'x' } }. Values stay literal: no ${SECRET} substitution from labels. */
 function fromLabels(labels) {
@@ -19,6 +20,11 @@ function fromLabels(labels) {
   return { group: String(group), name: String(name), weight: Number(weight) || 0, def: rest };
 }
 
+/**
+ * @param {Widget} w
+ * @param {Context} ctx
+ * @returns {Promise<WidgetResult>}
+ */
 export async function collect(w, ctx) {
   const base = `${trimUrl(w.url)}/api/endpoints/${w.env}/docker`;
   const opts = { headers: { 'X-API-Key': w.key }, insecure: ctx.insecure };
@@ -30,6 +36,7 @@ export async function collect(w, ctx) {
   const unhealthy = running.filter((c) => /\(unhealthy\)/.test(c.Status));
   const failed = exited.filter((c) => !/Exited \(0\)/.test(c.Status)); // exit code 0 = finished one-shot job
 
+  /** @type {Alert[]} */
   const alerts = [];
   const name = (c) => (c.Names?.[0] || c.Id.slice(0, 12)).replace(/^\//, '');
   const restartsOf = async (c) => {

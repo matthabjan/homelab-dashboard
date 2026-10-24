@@ -2,6 +2,7 @@
 // Reads services, SMART status and mounted file systems in one go.
 import { trimUrl } from '../http.js';
 import { fmtPair, pct } from '../format.js';
+/** @import { Alert, StorageRow, Context, Widget, WidgetResult } from '$lib/types' */
 
 async function rpc(ctx, url, body) {
   const st = ctx.state;
@@ -27,7 +28,7 @@ async function call(w, ctx, service, method, params) {
     r = await rpc(ctx, url, { service, method, params });
   }
   if (r.status !== 200 || r.json?.error) {
-    const err = new Error(`OMV ${service}.${method} failed (HTTP ${r.status})`);
+    const err = /** @type {Error & { body?: string }} */ (new Error(`OMV ${service}.${method} failed (HTTP ${r.status})`));
     err.body = r.json?.error?.message;
     throw err;
   }
@@ -59,6 +60,11 @@ function diskOf(f, disks) {
   return disks.find((d) => candidates.includes(d.devicefile)) ?? null;
 }
 
+/**
+ * @param {Widget} w
+ * @param {Context} ctx
+ * @returns {Promise<WidgetResult>}
+ */
 export async function collect(w, ctx) {
   const [services, smart, fs] = await Promise.all([
     call(w, ctx, 'services', 'getStatus', { limit: -1, start: 0 }).then((r) => r?.data ?? r).catch(() => null),
@@ -67,6 +73,7 @@ export async function collect(w, ctx) {
   ]);
   if (!services && !smart && !fs) throw new Error('No data from OMV RPC');
 
+  /** @type {Alert[]} */
   const alerts = [];
   const enabled = (services || []).filter((s) => s.enabled !== false);
   const svcRunning = enabled.filter((s) => s.running).length;
@@ -78,6 +85,7 @@ export async function collect(w, ctx) {
     alerts.push({ sev: 'crit', title: `SMART warning on ${d.devicefile || d.model}`, detail: `Status ${d.overallstatus}` });
   }
 
+  /** @type {StorageRow[]} */
   const storage = (Array.isArray(fs) ? fs : [])
     .filter((f) => Number(f.size) > 0 && f.mountpoint !== '/')
     .map((f) => {

@@ -1,7 +1,13 @@
 // AdGuard Home — basic auth.
 import { trimUrl, basicAuth } from '../http.js';
 import { fmtNum } from '../format.js';
+/** @import { Alert, Context, Widget, WidgetResult } from '$lib/types' */
 
+/**
+ * @param {Widget} w
+ * @param {Context} ctx
+ * @returns {Promise<WidgetResult>}
+ */
 export async function collect(w, ctx) {
   const base = trimUrl(w.url) + '/control';
   const opts = { headers: { Authorization: basicAuth(w.username, w.password) }, insecure: ctx.insecure };
@@ -10,6 +16,7 @@ export async function collect(w, ctx) {
   const blocked = stats.num_blocked_filtering ?? 0;
   const blockedPct = q ? (blocked / q) * 100 : 0;
   const avgMs = (stats.avg_processing_time ?? 0) * 1000;
+  /** @type {Alert[]} */
   const alerts = [];
   if (status && status.protection_enabled === false) alerts.push({ sev: 'warn', title: 'DNS protection is paused', detail: 'AdGuard Home filtering is disabled' });
   if (status && status.running === false) alerts.push({ sev: 'crit', title: 'AdGuard DNS not running', detail: 'DNS server reports not running' });

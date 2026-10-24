@@ -1,6 +1,8 @@
 // FRITZ!Box — TR-064/UPnP on port 49000 (no login needed; "Statusinformationen über UPnP übertragen" must be enabled).
 import { fmtDuration } from '../format.js';
+/** @import { Alert, Context, Widget, WidgetResult } from '$lib/types' */
 
+/** @returns {Promise<Record<string, string>>} */
 async function soap(ctx, base, service, action) {
   const path = service === 'WANIPConnection' ? 'WANIPConn1' : 'WANCommonIFC1';
   const res = await ctx.request(`${base}/igdupnp/control/${path}`, {
@@ -14,18 +16,24 @@ async function soap(ctx, base, service, action) {
   });
   if (res.status !== 200) throw new Error(`HTTP ${res.status} on ${action}`);
   const xml = await res.text();
+  /** @type {Record<string, string>} */
   const out = {};
   for (const m of xml.matchAll(/<(New[\w]+)>([^<]*)<\/\1>/g)) out[m[1]] = m[2];
   return out;
 }
 
+/**
+ * @param {Widget} w
+ * @param {Context} ctx
+ * @returns {Promise<WidgetResult>}
+ */
 export async function collect(w, ctx) {
   const u = new URL(w.url);
   const base = `${u.protocol}//${u.hostname}:${u.protocol === 'https:' ? 49443 : 49000}`;
   const [status, link, addon] = await Promise.all([
     soap(ctx, base, 'WANIPConnection', 'GetStatusInfo'),
     soap(ctx, base, 'WANCommonInterfaceConfig', 'GetCommonLinkProperties'),
-    soap(ctx, base, 'WANCommonInterfaceConfig', 'GetAddonInfos').catch(() => ({}))
+    soap(ctx, base, 'WANCommonInterfaceConfig', 'GetAddonInfos').catch(() => /** @type {Record<string, string>} */ ({}))
   ]);
   const connected = status.NewConnectionStatus === 'Connected';
   const maxDown = Number(link.NewLayer1DownstreamMaxBitRate || 0) / 1e6;
@@ -34,6 +42,7 @@ export async function collect(w, ctx) {
   const up = addon.NewByteSendRate != null ? (Number(addon.NewByteSendRate) * 8) / 1e6 : null;
   if (down != null) { ctx.metric('fritz.down', down); ctx.metric('fritz.up', up); }
 
+  /** @type {Alert[]} */
   const alerts = connected ? [] : [{ sev: 'crit', title: 'Internet connection down', detail: `FRITZ!Box reports ${status.NewConnectionStatus || 'unknown'}` }];
   return {
     stats: [

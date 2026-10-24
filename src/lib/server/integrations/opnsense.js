@@ -1,6 +1,12 @@
 // OPNsense — API key/secret as basic auth (homepage: username = key, password = secret).
 import { trimUrl, basicAuth } from '../http.js';
+/** @import { Context, Widget, WidgetResult } from '$lib/types' */
 
+/**
+ * @param {Widget} w
+ * @param {Context} ctx
+ * @returns {Promise<WidgetResult>}
+ */
 export async function collect(w, ctx) {
   const base = trimUrl(w.url) + '/api';
   const opts = { headers: { Authorization: basicAuth(w.username ?? w.key, w.password ?? w.secret) }, insecure: ctx.insecure };

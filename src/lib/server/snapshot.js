@@ -3,6 +3,8 @@ import { resolveIcon, assetUrl } from './config.js';
 import { probeStats, uptimeSince, probeBuckets, series, recentEvents, openCounts } from './db.js';
 import { fmtPair, fmtDuration as fmtAge } from './format.js';
 import { DEMO } from './demo.js';
+/** @import { AttentionItem, Fact, Gauge, Level, Snapshot, Tile } from '$lib/types' */
+/** @import { Engine } from './engine.js' */
 
 const RANK = { crit: 3, warn: 2, info: 1, ok: 0 };
 const H = 3600_000;
@@ -22,9 +24,13 @@ function stats(sid, now) {
 // remembers when each alert first appeared, so the feed shows "since" instead of "last polled"
 const firstSeen = new Map();
 
+/** @returns {Level | 'none'} */
 const level = (v, warn, crit) => (v == null ? 'none' : v >= crit ? 'crit' : v >= warn ? 'warn' : 'ok');
 
-/** Status of a label-discovered container without a siteMonitor. The Portainer widget raises its alerts. */
+/**
+ * Status of a label-discovered container without a siteMonitor. The Portainer widget raises its alerts.
+ * @returns {{ lvl: Level, status: string, line: string | null }}
+ */
 function containerStatus({ state, health, exitCode }) {
   if (state === 'running' && health === 'unhealthy') return { lvl: 'warn', status: 'Unhealthy', line: 'Container unhealthy' };
   if (state === 'running') return { lvl: 'ok', status: 'Up', line: null };
@@ -32,12 +38,18 @@ function containerStatus({ state, health, exitCode }) {
   return { lvl: 'crit', status: 'Down', line: `Container ${state}${exitCode ? ` · exit ${exitCode}` : ''}` };
 }
 
+/**
+ * @param {Engine} engine
+ * @returns {Snapshot}
+ */
 export function buildSnapshot(engine) {
   const { settings, groups, bookmarks } = engine.cfg;
   const th = settings.thresholds;
   const now = Date.now();
+  /** @type {AttentionItem[]} */
   const attention = [];
   const opens = openCounts();
+  /** @type {Map<string, Tile>} */
   const tiles = new Map();
 
   for (const g of groups) {
@@ -47,9 +59,11 @@ export function buildSnapshot(engine) {
       const w = st.widget;
       const ps = s.probe ? stats(s.id, now) : null;
       const host = (() => { try { return new URL(s.href || s.probe).host; } catch { return ''; } })();
+      /** @type {Tile['level']} */
       let lvl = s.probe ? (p.checked ? 'ok' : 'unknown') : w ? 'ok' : 'unknown';
       let status = lvl === 'ok' ? 'Up' : 'Checking';
       let line = w?.line || s.description || '';
+      /** @type {Tile['lineLevel']} */
       let lineLevel = null;
       const ct = !s.probe && s.container ? containerStatus(s.container) : null;
       if (ct) {
@@ -136,6 +150,7 @@ export function buildSnapshot(engine) {
   let host = null;
   if (hw || engine.temps) {
     const temps = engine.temps;
+    /** @type {Gauge[]} */
     const gauges = [];
     if (hw) {
       gauges.push({ key: 'cpu', label: 'CPU', val: Math.round(hw.cpu), unit: '%', pct: hw.cpu, level: level(hw.cpu, 75, 90), sub: `${hw.cpus} threads`, series: spark('host.cpu'), max: 100 });
@@ -159,12 +174,14 @@ export function buildSnapshot(engine) {
   }
 
   // ---- storage ----
+  /** @type {Snapshot['storage']} */
   const storage = [];
   for (const s of engine.cfg.services) {
     const w = engine.state(s.id).widget;
     for (const x of w?.storage || []) {
       // unavailable or detached: shown muted without a bar, the widget raises any alert itself
       if (x.offline) { storage.push({ name: x.name, pct: null, level: 'off', sub: x.sub, href: s.href }); continue; }
+      /** @type {Level} */
       const lv = x.pct >= th.storageWarnPct ? 'crit' : x.pct >= th.storageAmberPct ? 'warn' : 'ok';
       storage.push({ name: x.name, pct: x.pct, level: lv, sub: x.sub ?? fmtPair(x.used, x.total), href: s.href });
       if (x.pct >= th.storageWarnPct) attention.push({ sev: 'warn', title: `${x.name} is ${Math.round(x.pct)}% full`, detail: x.sub, href: s.href, ts: now });
@@ -198,10 +215,12 @@ export function buildSnapshot(engine) {
   // ---- fleet availability strip (48 × 30 min) ----
   const B = 30 * 60_000;
   const start = now - 48 * B;
+  /** @type {Snapshot['fleet']} */
   const buckets = Array.from({ length: 48 }, () => 'none');
   for (const r of probeBuckets(start, B)) {
     const i = Math.max(0, Math.min(47, Math.floor(Number(r.b))));
     const ratio = r.fails / r.n;
+    /** @type {Level} */
     const lv = ratio >= 0.5 ? 'crit' : ratio >= 0.1 || r.maxms > th.latencyWarnMs * 2 ? 'warn' : 'ok';
     if (buckets[i] === 'none' || RANK[lv] > RANK[buckets[i]]) buckets[i] = lv;
   }
@@ -227,18 +246,20 @@ export function buildSnapshot(engine) {
   if (backups?.known) subParts.push(backups.overdue ? `${backups.overdue} backup${backups.overdue > 1 ? 's' : ''} overdue` : 'backups current');
   subParts.push(certWarn ? `${certWarn} certificate${certWarn > 1 ? 's' : ''} expiring` : 'no certs expiring soon');
   const top = attention[0];
+  /** @type {Snapshot['verdict']} */
   const verdict = needCount
-    ? { level: top.sev, tag: `${needCount} ${needCount === 1 ? 'needs' : 'need'} attention`, title: `${top.title}.`, sub: subParts.join(' · ') }
+    // needCount > 0: the top item is crit or warn, never info
+    ? { level: /** @type {Level} */ (top.sev), tag: `${needCount} ${needCount === 1 ? 'needs' : 'need'} attention`, title: `${top.title}.`, sub: subParts.join(' · ') }
     : { level: 'ok', tag: 'All systems normal', title: 'Everything is running.', sub: subParts.join(' · ') };
 
   const containers = engine.shared.containers;
   const nextCert = all.filter((t) => t.cert && !t.cert.selfSigned).sort((a, b) => a.cert.days - b.cert.days)[0];
-  const facts = [
+  const facts = /** @type {(Fact | false | undefined)[]} */ ([
     { k: 'services up', v: `${up} / ${probed.length}`, level: up < probed.length ? 'crit' : null },
     containers && { k: 'containers running', v: `${containers.running} / ${containers.total}`, level: containers.failed ? 'warn' : null },
     backups?.oldestAge != null && { k: 'oldest backup', v: fmtAge(backups.oldestAge), level: backups.overdue ? 'warn' : null },
     nextCert && { k: 'next cert expiry', v: `${nextCert.cert.days} d`, level: nextCert.cert.days < th.certWarnDays ? 'warn' : null }
-  ].filter(Boolean);
+  ]).filter((f) => typeof f === 'object');
 
   const events = recentEvents(now - 24 * H, 5).map((e) => ({ ...e, href: tiles.get(e.sid)?.href ?? null }));
 
