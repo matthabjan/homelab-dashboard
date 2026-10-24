@@ -7,6 +7,7 @@
     { id: 'dark', label: 'Dark theme', d: 'M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z' }
   ];
   let current = $state('system');
+  const opt = $derived(OPTIONS.find((o) => o.id === current) ?? OPTIONS[0]);
 
   onMount(() => {
     current = document.documentElement.dataset.theme || 'system';
@@ -19,13 +20,17 @@
   }
 </script>
 
-<div class="toggle" role="radiogroup" aria-label="Theme">
+<div class="toggle only-desktop" role="radiogroup" aria-label="Theme">
   {#each OPTIONS as o}
     <button role="radio" aria-checked={current === o.id} aria-label={o.label} title={o.label} class:on={current === o.id} onclick={() => pick(o.id)}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={o.d} /></svg>
     </button>
   {/each}
 </div>
+<!-- phones: one button cycling system → light → dark -->
+<button class="cycle only-phone" aria-label="{opt.label}, tap to change" title={opt.label} onclick={() => pick(OPTIONS[(OPTIONS.indexOf(opt) + 1) % OPTIONS.length].id)}>
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={opt.d} /></svg>
+</button>
 
 <style>
   .toggle { display: flex; gap: 2px; padding: 3px; border-radius: 12px; background: var(--surface-2); }
@@ -34,5 +39,6 @@
     display: flex; align-items: center; justify-content: center; cursor: pointer;
   }
   button:hover { color: var(--text); }
+  .cycle { width: 44px; height: 44px; border-radius: 14px; background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
   button.on { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
 </style>
