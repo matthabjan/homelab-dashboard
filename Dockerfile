@@ -3,12 +3,21 @@
 ARG NODE_IMAGE=node:24-alpine@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53
 
 # ---- build ----
-FROM ${NODE_IMAGE} AS build
+# The bundle is plain JS, so it is built once on the build machine's own platform,
+# not again under emulation for every target platform.
+FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci --no-audit --no-fund
+RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
 COPY . .
-RUN npm run build && npm prune --omit=dev
+RUN npm run build
+
+# ---- production dependencies, installed for the target platform ----
+# so that a native module would get its binary for that platform, not the build machine's
+FROM ${NODE_IMAGE} AS deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev --no-audit --no-fund
 
 # ---- runtime ----
 FROM ${NODE_IMAGE}
@@ -20,7 +29,7 @@ ENV NODE_ENV=production \
     NODE_OPTIONS=--disable-warning=ExperimentalWarning
 WORKDIR /app
 COPY --from=build /app/build ./build
-COPY --from=build /app/node_modules ./node_modules
+COPY --from=deps /app/node_modules ./node_modules
 COPY package.json ./
 # example config, used when no /config volume is mounted
 COPY config.example /config
