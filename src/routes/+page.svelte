@@ -124,17 +124,20 @@
 </script>
 
 {#snippet traffic(t, what, downWord, upWord, height)}
-  <!-- one traffic reading: current rates, a 24 h chart, and where it comes from -->
+  <!-- one traffic reading: where it comes from and the current rates on one line, then the recent chart -->
+  {@const down = (t.seriesDown ?? []).filter((v) => v != null)}
   <div class="traffic">
-    <div class="rates">
-      <div><div class="mono big" style:color="var(--acc)">{fmtRate(t.down)}</div><div class="muted small">Mbit/s {downWord}</div></div>
-      <div><div class="mono big" style:color="var(--acc-2)">{fmtRate(t.up)}</div><div class="muted small">Mbit/s {upWord}</div></div>
+    <div class="net-row">
+      <span class="net-src"><span class="net-what">{what}</span><span class="muted">{t.source}{down.length > 1 ? ` · ${t.spanH ?? 24} h` : ''}</span></span>
+      <span class="net-vals mono"><span style:color="var(--acc)">{fmtRate(t.down)}</span> <span class="muted">{downWord}</span> <span style:color="var(--acc-2)">{fmtRate(t.up)}</span> <span class="muted">{upWord} Mbit/s</span></span>
     </div>
-    <div class="netchart" style:height="{height}px">
-      <div class="layer"><Sparkline values={t.seriesDown} color="var(--acc)" area {height} min={0} label="{what} {downWord}, last {t.spanH ?? 24} hours" /></div>
-      <div class="layer"><Sparkline values={t.seriesUp} color="var(--acc-2)" {height} min={0} max={Math.max(1, ...(t.seriesDown ?? []).filter((v) => v != null)) * 1.1} /></div>
-    </div>
-    <span class="muted small caption">{t.source} · {what} · {t.spanH ?? 24} h</span>
+    <!-- a fresh metric has fewer than two points: no chart, so no blank space either -->
+    {#if down.length > 1}
+      <div class="netchart" style:height="{height}px">
+        <div class="layer"><Sparkline values={t.seriesDown} color="var(--acc)" area {height} min={0} label="{what} {downWord}, last {t.spanH ?? 24} hours" /></div>
+        <div class="layer"><Sparkline values={t.seriesUp} color="var(--acc-2)" {height} min={0} max={Math.max(1, ...down) * 1.1} /></div>
+      </div>
+    {/if}
   </div>
 {/snippet}
 
@@ -276,16 +279,13 @@
         {#if snap.network}
           <div class="card network">
             <h2>Network</h2>
-            {#if snap.network.source}{@render traffic(snap.network, 'WAN', 'down', 'up', 60)}{/if}
-            {#if snap.network.lan}{@render traffic(snap.network.lan, 'LAN', 'in', 'out', 40)}{/if}
+            {#if snap.network.source}{@render traffic(snap.network, 'WAN', 'down', 'up', 48)}{/if}
+            {#if snap.network.lan}{@render traffic(snap.network.lan, 'LAN', 'in', 'out', 32)}{/if}
             {#if snap.network.dns}
-              <div class="dns">
-                <div class="chips">
-                  <a class="chip" href={snap.network.dns.href} target={target} rel="noopener"><span class="mono">{fmtNum(snap.network.dns.queries)}</span><span class="muted">DNS queries</span></a>
-                  <a class="chip" href={snap.network.dns.href} target={target} rel="noopener"><span class="mono">{snap.network.dns.blockedPct.toFixed(1)}%</span><span class="muted">blocked</span></a>
-                </div>
-                <span class="muted small">{snap.network.dns.name}{snap.network.dns.period ? ` · ${snap.network.dns.period}` : ''}</span>
-              </div>
+              <a class="net-row dns" href={snap.network.dns.href} target={target} rel="noopener">
+                <span class="net-src"><span class="net-what">DNS</span><span class="muted">{snap.network.dns.name}{snap.network.dns.period ? ` · ${snap.network.dns.period}` : ''}</span></span>
+                <span class="net-vals mono">{fmtNum(snap.network.dns.queries)} <span class="muted">queries</span> {snap.network.dns.blockedPct.toFixed(1)}% <span class="muted">blocked</span></span>
+              </a>
             {/if}
           </div>
         {/if}
@@ -458,15 +458,15 @@
   .tabs button:focus-visible { outline: 2px solid var(--acc); outline-offset: 3px; border-radius: 4px; }
   .track { height: 6px; border-radius: 4px; background: var(--track); overflow: hidden; }
   .fill { height: 100%; border-radius: 4px; background: var(--fill); transition: width 0.6s cubic-bezier(0.2, 0.8, 0.2, 1); }
-  .rates { display: flex; gap: 22px; }
-  .big { font-size: 22px; font-weight: 500; }
-  .traffic { display: flex; flex-direction: column; gap: 10px; }
+  .traffic { display: flex; flex-direction: column; gap: 8px; }
+  .net-row { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; }
+  .net-src { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+  .net-what { font-weight: 600; }
+  .net-vals { white-space: nowrap; }
+  .net-vals > :not(.muted) { font-size: 15px; font-weight: 500; }
   .netchart { position: relative; }
   .layer { position: absolute; inset: 0; }
-  .dns { display: flex; flex-direction: column; gap: 8px; margin-top: auto; }
-  .chips { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-  .chip { display: flex; flex-direction: column; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); font-size: 12px; }
-  .chip .mono { font-size: 15px; }
+  .dns { color: inherit; text-decoration: none; margin-top: auto; padding-top: 12px; border-top: 1px solid var(--track); }
 
   /* pinned */
   .block { display: flex; flex-direction: column; gap: 12px; }
@@ -557,7 +557,7 @@
     /* host, storage and network stay together as one section */
     .vitals { gap: 12px; }
     .storage, .network { padding: 20px; }
-    .netchart, .traffic .caption { display: none; }
+    .netchart { display: none; }
 
     /* pinned: icon, name, one status line */
     .pins { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
