@@ -24,6 +24,14 @@ const firstSeen = new Map();
 
 const level = (v, warn, crit) => (v == null ? 'none' : v >= crit ? 'crit' : v >= warn ? 'warn' : 'ok');
 
+/** Status of a label-discovered container without a siteMonitor. The Portainer widget raises its alerts. */
+function containerStatus({ state, health, exitCode }) {
+  if (state === 'running' && health === 'unhealthy') return { lvl: 'warn', status: 'Unhealthy', line: 'Container unhealthy' };
+  if (state === 'running') return { lvl: 'ok', status: 'Up', line: null };
+  if (state === 'restarting') return { lvl: 'crit', status: 'Down', line: 'Container restarting' };
+  return { lvl: 'crit', status: 'Down', line: `Container ${state}${exitCode ? ` · exit ${exitCode}` : ''}` };
+}
+
 export function buildSnapshot(engine) {
   const { settings, groups, bookmarks } = engine.cfg;
   const th = settings.thresholds;
@@ -43,6 +51,11 @@ export function buildSnapshot(engine) {
       let status = lvl === 'ok' ? 'Up' : 'Checking';
       let line = w?.line || s.description || '';
       let lineLevel = null;
+      const ct = !s.probe && s.container ? containerStatus(s.container) : null;
+      if (ct) {
+        ({ lvl, status } = ct);
+        if (ct.line) { line = ct.line; lineLevel = lvl; }
+      }
 
       const push = (a) => attention.push({ ...a, sid: s.id, service: s.name, href: s.href, ts: a.ts ?? w?.ts ?? now });
 

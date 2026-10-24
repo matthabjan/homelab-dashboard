@@ -133,7 +133,7 @@ export function withDiscovered(cfg, discovered) {
   const services = [...cfg.services];
   const ids = new Set(services.map((s) => s.id));
   for (const d of discovered) {
-    const svc = toService(d.group, d.name, d.def, cfg.settings);
+    const svc = { ...toService(d.group, d.name, d.def, cfg.settings), container: d.container ?? null };
     if (ids.has(svc.id)) continue;
     ids.add(svc.id);
     let group = groups.find((g) => g.name === d.group);

@@ -95,7 +95,8 @@ export async function demoCollect(type, w, ctx) {
         line: bad ? '24 / 25 running · 1 failed' : '25 / 25 running',
         alerts: bad ? [{ sev: 'warn', key: 'ct-music-assistant', title: 'Container music-assistant stopped', detail: 'Exited (1) 1 hour ago · 5 restarts' }] : [],
         containers: ctx.shared.containers,
-        discovered: [{ group: 'Management', name: 'Traefik', def: { icon: 'traefik', href: 'https://traefik.home.arpa', description: 'Reverse proxy · from container labels', siteMonitor: 'https://traefik.home.arpa' } }]
+        discovered: [{ group: 'Management', name: 'Traefik', def: { icon: 'traefik', href: 'https://traefik.home.arpa', description: 'Reverse proxy · from container labels', siteMonitor: 'https://traefik.home.arpa' }, container: { state: 'running', health: null, exitCode: 0 } },
+          { group: 'Management', name: 'What\'s Up Docker', def: { icon: 'whats-up-docker', href: 'https://wud.home.arpa', description: 'Image updates · container state only' }, container: { state: 'running', health: 'healthy', exitCode: 0 } }]
       };
     }
     case 'openmediavault':

@@ -42,7 +42,14 @@ export async function collect(w, ctx) {
   }
   for (const c of unhealthy) alerts.push({ sev: 'warn', key: `ct-${name(c)}`, title: `Container ${name(c)} unhealthy`, detail: c.Status });
 
-  const discovered = list.map((c) => fromLabels(c.Labels)).filter(Boolean)
+  // Container state is the health check for discovered services without a siteMonitor.
+  // Only stable fields: the Status text ("Up 3 hours") changes every poll.
+  const containerOf = (c) => ({
+    state: c.State,
+    health: c.Status?.match(/\((healthy|unhealthy|health: starting)\)/)?.[1] ?? null,
+    exitCode: Number(c.Status?.match(/^Exited \((-?\d+)\)/)?.[1] ?? 0)
+  });
+  const discovered = list.map((c) => { const d = fromLabels(c.Labels); return d && { ...d, container: containerOf(c) }; }).filter(Boolean)
     .sort((a, b) => a.weight - b.weight || a.name.localeCompare(b.name))
     .map(({ weight, ...d }) => d);
 
