@@ -163,9 +163,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PRERELEASE: ${{ contains(github.ref_name, '-') }}
+        # a release drafted in the GitHub UI creates the tag too, and so already exists: keep it
         run: |
-          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes \
-            $([ "$PRERELEASE" = true ] && echo --prerelease)
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $GITHUB_REF_NAME already exists, leaving it as is"
+          else
+            gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes \
+              $([ "$PRERELEASE" = true ] && echo --prerelease)
+          fi
 
   hub-description:
     if: startsWith(github.ref, 'refs/tags/v')
