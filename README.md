@@ -25,43 +25,102 @@ DEMO=1 CONFIG_DIR=config.example npm start                        # http://local
 DEMO=1 DEMO_SCENARIO=calm CONFIG_DIR=config.example npm start     # everything healthy
 ```
 
-## Deploy (Docker Compose behind Traefik)
+## Deploy (Portainer stack behind Traefik)
 
-The included [compose.yaml](compose.yaml) assumes an existing Traefik that has:
-- an external Docker network (default `proxy`)
-- an HTTPS entrypoint
-- a certificate resolver that can use the DNS challenge (for the wildcard certificate)
+The image is published on Docker Hub as [`matthabjan/homelab-dashboard`](https://hub.docker.com/r/matthabjan/homelab-dashboard) for `linux/amd64` and `linux/arm64`. It contains only the example config. Your own `config/` folder is mounted over it at runtime, so you don't need to build anything to use your own services, icons and settings.
 
-The image is published at `ghcr.io/matthabjan/homelab-dashboard` for `linux/amd64` and `linux/arm64`. It contains only the example config. Your own `config/` folder is mounted over it at runtime, so you don't need to build anything to use your own services, icons and settings.
+**Image tags:** `0.0.1` / `0.0` / `0` and `latest` are releases, `edge` follows `main`, `dev` follows `development`. Pin a version (e.g. `:0.0.1`) to update only when you choose to.
 
-```bash
-mkdir -p /opt/docker/dashboard && cd /opt/docker/dashboard
-curl -fsSLO https://raw.githubusercontent.com/matthabjan/homelab-dashboard/main/compose.yaml
-curl -fsSL https://raw.githubusercontent.com/matthabjan/homelab-dashboard/main/.env.example -o .env && chmod 600 .env
-# your services, settings and icons: start from config.example/ in this repo
-git clone --depth 1 https://github.com/matthabjan/homelab-dashboard.git /tmp/hd && cp -r /tmp/hd/config.example config
-nano .env                       # host name, LAN ranges, login, secrets
-nano config/services.yaml
-docker compose up -d
-docker compose logs -f          # each integration logs an error line if credentials are wrong
+Deploy it as a custom stack in Portainer (**Stacks → Add stack → Web editor**). The example below assumes an existing Traefik that has an external Docker network (default `proxy`), an HTTPS entrypoint, a certificate resolver that can use the DNS challenge (for the wildcard certificate), and an `admin-only@file` IP allowlist middleware.
+
+```yaml
+services:
+  dashboard:
+    image: matthabjan/homelab-dashboard:0.0.1
+    container_name: dashboard
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-UTC}
+      CONFIG_DIR: /config
+      DATA_DIR: /data
+      # Traefik terminates TLS; tell the app its public origin and the real client address
+      PROTOCOL_HEADER: x-forwarded-proto
+      HOST_HEADER: x-forwarded-host
+      ADDRESS_HEADER: x-forwarded-for
+      XFF_DEPTH: 1
+      # NODE_EXTRA_CA_CERTS: /certs/ca.pem   # trust your own CA for widget APIs
+    # Credentials arrive as files in /run/secrets, so they don't show up in `docker inspect`
+    secrets: [pve_token_secret, pbs_token_secret, opnsense_key, opnsense_secret, omv_password, adguard_password, portainer_key]
+    volumes:
+      - /opt/docker/dashboard/config:/config:ro   # services/settings/bookmarks + icons; reloads automatically
+      - data:/data                                # uptime history (SQLite)
+      # - /opt/docker/dashboard/ca.pem:/certs/ca.pem:ro
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 200
+    mem_limit: 512m
+    # dns: 192.168.1.53   # optional: your AdGuard / Pi-hole when the host resolves elsewhere
+    networks: [proxy]
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=proxy
+      - traefik.http.routers.dashboard.rule=Host(`${DASHBOARD_HOST}`)
+      - traefik.http.routers.dashboard.entrypoints=websecure
+      - traefik.http.routers.dashboard.tls=true
+      - traefik.http.routers.dashboard.tls.certresolver=letsencrypt
+      - traefik.http.routers.dashboard.tls.domains[0].main=${TLS_DOMAIN}
+      - traefik.http.routers.dashboard.tls.domains[0].sans=*.${TLS_DOMAIN}
+      - traefik.http.routers.dashboard.middlewares=admin-only@file,dashboard-auth@docker,dashboard-headers@docker
+      - traefik.http.middlewares.dashboard-auth.basicauth.users=${DASHBOARD_AUTH_USERS}
+      - traefik.http.middlewares.dashboard-auth.basicauth.realm=Homelab Dashboard
+      - traefik.http.middlewares.dashboard-auth.basicauth.removeheader=true
+      # security headers (the Content-Security-Policy comes from the app itself, it needs per-request nonces)
+      - traefik.http.middlewares.dashboard-headers.headers.stsSeconds=31536000
+      - traefik.http.middlewares.dashboard-headers.headers.frameDeny=true
+      - traefik.http.middlewares.dashboard-headers.headers.contentTypeNosniff=true
+      - traefik.http.middlewares.dashboard-headers.headers.referrerPolicy=no-referrer
+      - traefik.http.middlewares.dashboard-headers.headers.permissionsPolicy=camera=(), microphone=(), geolocation=(), payment=(), usb=()
+      - traefik.http.middlewares.dashboard-headers.headers.customResponseHeaders.X-Robots-Tag=noindex, nofollow
+      # manifest, icons and service worker without login, so phones can install the app (see Security model)
+      - traefik.http.routers.dashboard-icons.rule=Host(`${DASHBOARD_HOST}`) && (Path(`/manifest.webmanifest`) || Path(`/service-worker.js`) || PathPrefix(`/assets/images/`))
+      - traefik.http.routers.dashboard-icons.priority=1000
+      - traefik.http.routers.dashboard-icons.entrypoints=websecure
+      - traefik.http.routers.dashboard-icons.tls=true
+      - traefik.http.routers.dashboard-icons.middlewares=admin-only@file,dashboard-headers@docker
+      - traefik.http.routers.dashboard-icons.service=dashboard
+      - traefik.http.routers.dashboard.service=dashboard
+      - traefik.http.services.dashboard.loadbalancer.server.port=3000
+
+# Each secret is read from the stack variable of the same name; leave it empty for integrations you don't use.
+secrets:
+  pve_token_secret: { environment: PVE_TOKEN_SECRET }
+  pbs_token_secret: { environment: PBS_TOKEN_SECRET }
+  opnsense_key: { environment: OPNSENSE_KEY }
+  opnsense_secret: { environment: OPNSENSE_SECRET }
+  omv_password: { environment: OMV_PASSWORD }
+  adguard_password: { environment: ADGUARD_PASSWORD }
+  portainer_key: { environment: PORTAINER_KEY }
+
+volumes:
+  data:
+
+networks:
+  proxy:
+    external: true
 ```
 
-**Image tags:** `latest` follows the `main` branch and `development` the development branch. `1.2.3` / `1.2` are releases. Set `IMAGE=ghcr.io/matthabjan/homelab-dashboard:1.2` in `.env` to update only when you choose to. To update, run `docker compose pull && docker compose up -d`.
+1. Add the variables from [.env.example](.env.example) under **Environment variables**. For integrations you don't use, add the name with an empty value.
+2. Put your config in the mounted folder on the Docker host; start from [config.example/](config.example).
+3. In `DASHBOARD_AUTH_USERS` (output of `htpasswd -nbB <user> <password>`), write every `$` of the hash as `$$`.
+4. To update, change the image tag and redeploy the stack with **Re-pull image**.
 
-**Build it yourself** from a checkout instead: `docker compose -f compose.yaml -f compose.build.yaml up -d --build`.
+The secrets use Compose secrets with an `environment:` source, which needs a recent Docker Compose (tested with v5.6). Each integration logs an error line if its credentials are wrong.
 
 Then point the host name at Traefik in your local DNS (e.g. an AdGuard / Pi-hole DNS rewrite). It doesn't need a public DNS record. Traefik gets a `*.<TLS_DOMAIN>` wildcard certificate, so public Certificate Transparency logs show only the wildcard, not the dashboard's name.
 
-### Deploy as a Portainer stack
+**Widgets report "Host not found".** The container uses the Docker host's DNS server. If your local names (e.g. `pve.home.arpa`) only exist in AdGuard or Pi-hole and the host asks a different server, set `dns:` to the AdGuard / Pi-hole IP.
 
-1. **Stacks → Add stack → Repository** with `https://github.com/matthabjan/homelab-dashboard` and compose path `compose.yaml`, or paste [compose.yaml](compose.yaml) into the **Web editor**. Either way the pre-built image is pulled; nothing is built on your host.
-2. Add every variable from [.env.example](.env.example) under **Environment variables**. For integrations you don't use, add the name with an empty value.
-3. Set `CONFIG_PATH` to an absolute path on the Docker host, e.g. `/opt/docker/dashboard/config`, and put your config there. Portainer's clone of the repo has no `config/` folder.
-4. In `DASHBOARD_AUTH_USERS`, write every `$` of the hash as `$$`.
-
-The secrets are passed as Compose secrets with an `environment:` source. That requires a recent Docker Compose; it is tested with Docker Compose v5.6. If your Portainer version rejects the `secrets:` block, check that it uses Compose v2 or newer.
-
-**Widgets report "Host not found".** The container uses the Docker host's DNS server. If your local names (e.g. `pve.home.arpa`) only exist in AdGuard or Pi-hole and the host asks a different server, set `DNS_SERVER` to the AdGuard / Pi-hole IP.
+**Build it yourself** from a checkout: `docker build -t homelab-dashboard:local .`
 
 ### Without Traefik
 
@@ -91,7 +150,7 @@ Any container on the same Docker network as Traefik can reach the dashboard's po
 `tlsVerify: true` (the default in `settings.yaml`) rejects invalid certificates when the dashboard talks to your services' APIs. A service with a self-signed certificate has three options:
 
 1. **Best:** route it through your reverse proxy under a name covered by a real certificate (e.g. `https://pve.example.com`).
-2. **Good:** trust your own CA. Mount it into the container and set `NODE_EXTRA_CA_CERTS=/certs/ca.pem` (both lines are commented out in `compose.yaml`). The certificate must match the host name in `url:`.
+2. **Good:** trust your own CA. Mount it into the container and set `NODE_EXTRA_CA_CERTS=/certs/ca.pem` (both lines are commented out in the example stack). The certificate must match the host name in `url:`.
 3. **Fallback:** add `tlsVerify: false` to that service in `services.yaml`. The connection is still encrypted, but a machine on your LAN could intercept the credentials.
 
 Prefer `https://` URLs for every widget. Over `http://`, passwords and API keys cross the network in plain text.
@@ -121,7 +180,7 @@ Set `iconDark:` for a variant shown in dark mode. If no icon is set, or one fail
 2. the file named in `NAME_FILE`
 3. the Docker secret `/run/secrets/name` (lowercase)
 
-To add a secret for a new service, add it to both the `secrets:` lists in `compose.yaml`.
+To add a secret for a new service, add it to both `secrets:` lists in your stack.
 
 **Containers from labels.** Like homepage, the dashboard lists containers that carry `homepage.*` labels. It reads them through the Portainer widget, so at least one `portainer` widget must be configured. `homepage.group` and `homepage.name` are required. The other labels map to the YAML keys: `homepage.href`, `homepage.icon`, `homepage.description`, `homepage.siteMonitor`, `homepage.pinned`, `homepage.weight` (sort order), `homepage.widget.type`, and so on. A container joins the `services.yaml` group with the same name, or gets a new group. An entry in `services.yaml` with the same group and name takes precedence. Label values are used literally: `${NAME}` secrets are **not** filled in, so a container image can't read your secrets. Define services whose widgets need credentials in `services.yaml`.
 
@@ -172,7 +231,7 @@ proxmox-backup-manager acl update /datastore/<store> DatastoreAudit --auth-id 'd
 
 ## Releases
 
-Work happens on `development` (published as `:development`) and reaches `main` through pull requests. Pushing to `main` publishes `:latest`. To publish a version, run `git tag v1.0.0 && git push --tags`. The [Image workflow](.github/workflows/image.yml) builds both architectures and attaches build provenance and an SBOM. Pull requests are built but not published.
+Work happens on `development` (published as `:dev`) and reaches `main` through pull requests (`:edge`). To publish a version, bump `version` in `package.json`, merge to `main`, then `git tag v0.0.2 && git push --tags`. The [Image workflow](.github/workflows/image.yml) checks the tag against `package.json`, builds both architectures with build provenance and an SBOM, pushes to Docker Hub, and creates the GitHub Release. Pull requests are built but not published.
 
 ## Development
 
