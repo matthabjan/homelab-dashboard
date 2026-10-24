@@ -38,6 +38,9 @@ services:
     security_opt: [no-new-privileges:true]
     pids_limit: 200
     mem_limit: 512m
+    # Optional DNS server for the container, e.g. your AdGuard / Pi-hole when the Docker host resolves elsewhere.
+    # Unset = Docker's default (the host's resolver).
+    dns: ${DNS_SERVER:-}
     networks:
       - proxy
     labels:

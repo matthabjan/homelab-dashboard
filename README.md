@@ -61,6 +61,8 @@ Then point the host name at Traefik in your local DNS (e.g. an AdGuard / Pi-hole
 
 The secrets are passed as Compose secrets with an `environment:` source. That requires a recent Docker Compose; it is tested with Docker Compose v5.6. If your Portainer version rejects the `secrets:` block, check that it uses Compose v2 or newer.
 
+**Widgets report "Host not found".** The container uses the Docker host's DNS server. If your local names (e.g. `pve.home.arpa`) only exist in AdGuard or Pi-hole and the host asks a different server, set `DNS_SERVER` to the AdGuard / Pi-hole IP.
+
 ### Without Traefik
 
 The app listens on port 3000 and has no login of its own. Put it behind any reverse proxy that handles TLS and authentication. Don't publish port 3000 directly.
