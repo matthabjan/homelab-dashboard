@@ -73,7 +73,7 @@ The dashboard holds API credentials for your infrastructure, and it shows your n
 
 | Layer | What it does |
 |---|---|
-| **Traefik IP allowlist** | Only clients from `LAN_CIDRS` get through. Keep guest and IoT networks out of this list. |
+| **Traefik IP allowlist** | The `admin-only@file` middleware (an `ipAllowList` in Traefik's file-provider config) lets only admin clients through. Keep guest and IoT networks out of it. |
 | **Traefik basic auth** | Login required (`DASHBOARD_AUTH_USERS`). Create it with `htpasswd -nbB admin 'password'` (from `apache2-utils`). |
 | **Security headers** | HSTS, `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy: no-referrer`, a restrictive `Permissions-Policy` (Traefik), and a nonce-based Content-Security-Policy (the app). |
 | **Secrets as files** | Credentials go into the container as `/run/secrets/*`, not as environment variables, so `docker inspect` doesn't show them. They are never sent to the browser. |
@@ -84,7 +84,7 @@ The dashboard holds API credentials for your infrastructure, and it shows your n
 
 Any container on the same Docker network as Traefik can reach the dashboard's port 3000 directly, without the allowlist or the login. Keep that network for trusted containers.
 
-**Basic auth and installed apps.** Phones fetch the web manifest and app icons without the login when installing, so `/manifest.webmanifest` and `/assets/images/` are served without basic auth, though still only to `LAN_CIDRS`. They contain the title and the app icons, nothing else. iOS home-screen apps may ask for the login again after a while.
+**Basic auth and installed apps.** Phones fetch the web manifest and app icons without the login when installing, so `/manifest.webmanifest` and `/assets/images/` are served without basic auth, though still only through `admin-only`. They contain the title and the app icons, nothing else. iOS home-screen apps may ask for the login again after a while.
 
 ### TLS for widget APIs
 

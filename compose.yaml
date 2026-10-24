@@ -53,9 +53,8 @@ services:
       # wildcard certificate (DNS challenge): public CT logs show *.example.com instead of every service name
       - traefik.http.routers.dashboard.tls.domains[0].main=${TLS_DOMAIN:?set TLS_DOMAIN, e.g. example.com}
       - traefik.http.routers.dashboard.tls.domains[0].sans=*.${TLS_DOMAIN}
-      - traefik.http.routers.dashboard.middlewares=dashboard-lan@docker,dashboard-auth@docker,dashboard-headers@docker
-      # 1. LAN only
-      - traefik.http.middlewares.dashboard-lan.ipallowlist.sourcerange=${LAN_CIDRS:?set LAN_CIDRS, e.g. 192.168.1.0/24}
+      # 1. admin-only@file: IP allowlist defined in Traefik's file provider (dynamic config), not here
+      - traefik.http.routers.dashboard.middlewares=admin-only@file,dashboard-auth@docker,dashboard-headers@docker
       # 2. login. Value from `htpasswd -nbB <user> <password>`; see README for escaping the $ signs
       - traefik.http.middlewares.dashboard-auth.basicauth.users=${DASHBOARD_AUTH_USERS:?set DASHBOARD_AUTH_USERS (htpasswd -nbB user password)}
       - traefik.http.middlewares.dashboard-auth.basicauth.realm=Homelab Dashboard
@@ -68,12 +67,12 @@ services:
       - traefik.http.middlewares.dashboard-headers.headers.permissionsPolicy=camera=(), microphone=(), geolocation=(), payment=(), usb=()
       - traefik.http.middlewares.dashboard-headers.headers.customResponseHeaders.X-Robots-Tag=noindex, nofollow
       # App manifest and icons without login: phones fetch them for "Install app" / the home-screen icon
-      # without the basic-auth credentials. Still LAN only; these files hold nothing sensitive.
+      # without the basic-auth credentials. Still behind admin-only; these files hold nothing sensitive.
       - traefik.http.routers.dashboard-icons.rule=Host(`${DASHBOARD_HOST}`) && (Path(`/manifest.webmanifest`) || PathPrefix(`/assets/images/`))
       - traefik.http.routers.dashboard-icons.priority=1000
       - traefik.http.routers.dashboard-icons.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}
       - traefik.http.routers.dashboard-icons.tls=true
-      - traefik.http.routers.dashboard-icons.middlewares=dashboard-lan@docker,dashboard-headers@docker
+      - traefik.http.routers.dashboard-icons.middlewares=admin-only@file,dashboard-headers@docker
       - traefik.http.routers.dashboard-icons.service=dashboard
       - traefik.http.routers.dashboard.service=dashboard
       - traefik.http.services.dashboard.loadbalancer.server.port=3000
