@@ -4,6 +4,7 @@
 #   iconDark:    optional variant used in dark mode
 #   siteMonitor: URL that is checked every 30 s (uptime, latency, TLS certificate)
 #   pinned:      true → shown in the "Pinned" row, ordered by how often you open it
+#   latencyWarnMs: per-service "slow" limit in ms (default: settings.yaml → thresholds.latencyWarnMs)
 #   tlsVerify:   false → accept a self-signed certificate for this service's widget API
 #                (better: trust your CA with NODE_EXTRA_CA_CERTS, see README)
 # Secrets: ${NAME} or {{HOMEPAGE_VAR_NAME}} — read from the environment or from /run/secrets/<name> (see README).

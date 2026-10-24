@@ -11,6 +11,8 @@ export async function collect(w, ctx) {
   const nodes = res.filter((r) => r.type === 'node');
   const node = nodes.find((n) => n.node === (w.node || ctx.settings.host.node)) || nodes.find((n) => n.status === 'online') || nodes[0];
   if (!node) throw new Error('No node found in cluster/resources');
+  // a token without Sys.Audit still sees the node, just without its stats
+  if (node.maxmem == null) throw new Error('Token cannot read node stats: give it PVEAuditor on / (on the token too if it is privilege-separated)');
   const onNode = (r) => (w.node || ctx.settings.host.node ? r.node === node.node : true);
 
   const guests = res
