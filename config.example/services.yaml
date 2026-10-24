@@ -1,0 +1,97 @@
+# Same format as gethomepage's services.yaml.
+#   icon:        file name in config/icons/ (e.g. proxmox.png), a dashboard-icons name (fetched from the CDN),
+#                "sh-<name>" for selfh.st icons, or a full URL. Missing icon → generated monogram.
+#   iconDark:    optional variant used in dark mode
+#   siteMonitor: URL that is checked every 30 s (uptime, latency, TLS certificate)
+#   pinned:      true → shown in the "Pinned" row, ordered by how often you open it
+#   tlsVerify:   false → accept a self-signed certificate for this service's widget API
+#                (better: trust your CA with NODE_EXTRA_CA_CERTS, see README)
+# Secrets: ${NAME} or {{HOMEPAGE_VAR_NAME}} — read from the environment or from /run/secrets/<name> (see README).
+
+- Infrastructure:
+    - Proxmox VE:
+        icon: proxmox
+        href: https://pve.home.arpa:8006
+        description: Virtualization
+        siteMonitor: https://pve.home.arpa:8006
+        pinned: true
+        tlsVerify: false
+        widget:
+          type: proxmox
+          url: https://pve.home.arpa:8006
+          username: dashboard@pve!dashboard
+          password: ${PVE_TOKEN_SECRET}
+    - Proxmox Backup Server:
+        icon: proxmox-backup-server
+        href: https://pbs.home.arpa:8007
+        description: Backups
+        siteMonitor: https://pbs.home.arpa:8007
+        tlsVerify: false
+        widget:
+          type: proxmoxbackupserver
+          url: https://pbs.home.arpa:8007
+          username: dashboard@pbs!dashboard
+          password: ${PBS_TOKEN_SECRET}
+          datastore: main
+    - OPNsense:
+        icon: opnsense
+        href: https://opnsense.home.arpa
+        description: Firewall
+        siteMonitor: https://opnsense.home.arpa
+        pinned: true
+        tlsVerify: false
+        widget:
+          type: opnsense
+          url: https://opnsense.home.arpa
+          username: ${OPNSENSE_KEY}
+          password: ${OPNSENSE_SECRET}
+          # wan: wan          # interface name if not "wan"
+    - OpenMediaVault:
+        icon: openmediavault
+        href: https://nas.home.arpa
+        description: Network storage
+        siteMonitor: https://nas.home.arpa
+        widget:
+          type: openmediavault
+          url: https://nas.home.arpa
+          username: admin
+          password: ${OMV_PASSWORD}
+
+- Network:
+    - FRITZ!Box:
+        icon: avm-fritzbox
+        href: http://192.168.178.1
+        description: Router
+        siteMonitor: http://192.168.178.1
+        widget:
+          type: fritzbox
+          url: http://192.168.178.1
+    - AdGuard Home:
+        icon: adguard-home
+        href: https://adguard.home.arpa
+        description: DNS and ad blocking
+        siteMonitor: https://adguard.home.arpa
+        pinned: true
+        widget:
+          type: adguard
+          url: https://adguard.home.arpa
+          username: admin
+          password: ${ADGUARD_PASSWORD}
+
+- Apps:
+    - Portainer:
+        icon: portainer
+        href: https://portainer.home.arpa
+        description: Containers
+        siteMonitor: https://portainer.home.arpa
+        pinned: true
+        widget:
+          type: portainer
+          url: https://portainer.home.arpa
+          env: 1
+          key: ${PORTAINER_KEY}
+    - Home Assistant:
+        icon: home-assistant
+        href: https://ha.home.arpa
+        description: Home automation
+        siteMonitor: https://ha.home.arpa

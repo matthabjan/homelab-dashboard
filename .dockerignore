@@ -1,0 +1,13 @@
+# never send local config, secrets or history into the image
+.git
+.github
+node_modules
+build
+.svelte-kit
+config
+data
+.env
+.env.*
+!.env.example
+secrets
+*.log

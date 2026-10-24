@@ -1,0 +1,48 @@
+title: Homelab
+
+# Default theme for new visitors (system | light | dark). Everyone can switch in the header; the choice is remembered per device.
+theme: system
+accent: "#4F8DF7"
+
+# Where service links open: _blank (new tab) or _self
+linkTarget: _blank
+
+# Verify TLS certificates of widget APIs (recommended). Turn off per service with `tlsVerify: false`.
+tlsVerify: true
+
+# Button in the header for deep metrics
+# deepLink:
+#   name: Pulse
+#   href: https://pulse.home.arpa
+
+# App icon / logo — files in config/images, replace them to change the icon
+pwa:
+  name: Homelab
+  shortName: Homelab
+  logo: images/android-chrome-192x192.png
+  icon192: images/android-chrome-192x192.png
+  icon512: images/android-chrome-512x512.png
+  appleTouchIcon: images/apple-touch-icon.png
+  favicon: images/favicon.ico
+  background: "#0A0D12"
+
+host:
+  service: Proxmox VE      # which service provides CPU / RAM / storage for the host card
+  temperature: true        # CPU + NVMe temperatures from the kernel
+  # storages: [local-zfs]  # limit the PVE storages shown (default: all active)
+
+intervals:                 # seconds
+  probe: 30
+  widgets: 60
+  cert: 21600
+
+thresholds:
+  backupMaxAgeHours: 26
+  certWarnDays: 14
+  latencyWarnMs: 250
+  storageAmberPct: 70
+  storageWarnPct: 85
+  tempMinC: 30
+  tempWarnC: 75
+
+retentionDays: 30

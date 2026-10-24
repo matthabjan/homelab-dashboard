@@ -1,0 +1,27 @@
+# dependencies / build output
+node_modules
+build
+.svelte-kit
+
+# your own setup — copy config.example/ to config/ and .env.example to .env
+config/
+.env
+.env.*
+!.env.example
+secrets/
+
+# runtime data (SQLite history)
+data/
+*.db
+*.db-shm
+*.db-wal
+
+# logs, OS and editor files
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+*:Zone.Identifier
+.vscode/
+.idea/
+*.code-workspace
