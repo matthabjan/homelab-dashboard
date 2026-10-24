@@ -96,3 +96,10 @@
         href: https://ha.home.arpa
         description: Home automation
         siteMonitor: https://ha.home.arpa
+
+- Entertainment:
+    - MusicAssistant:
+        icon: music-assistant
+        href: https://music.home.arpa
+        description: Music library and players
+        siteMonitor: https://music.home.arpa
