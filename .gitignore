@@ -25,3 +25,6 @@ Thumbs.db
 .vscode/
 .idea/
 *.code-workspace
+
+# local Portainer stack; the README has an example
+compose.yaml
