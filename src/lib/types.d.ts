@@ -420,7 +420,19 @@ export interface Snapshot {
   host: { name: string; href: string | null; detail: string; gauges: Gauge[] } | null;
   storage: { name: string; pct: number | null; level: Level | 'off'; sub: string; href: string | null }[];
   /** the storage card's second view; empty when no widget reports drives */
-  drives: { name: string; meta: string; detail: string; status: string; level: Level; href: string | null }[];
+  drives: {
+    name: string;
+    meta: string;
+    /** every SMART detail as one line, for the tooltip */
+    detail: string;
+    status: string;
+    level: Level;
+    /** % of rated endurance left, drawn as a bar; null when the drive doesn't report it */
+    life: number | null;
+    lifeLevel: Level;
+    facts: Fact[];
+    href: string | null;
+  }[];
   network: (Traffic & {
     /** the Proxmox host NIC, shown under WAN on its own scale */
     lan: Traffic | null;

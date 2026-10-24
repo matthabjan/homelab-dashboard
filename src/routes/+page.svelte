@@ -253,11 +253,18 @@
             {/if}
             {#if storageView === 'drives' && snap.drives.length}
               {#each snap.drives as d}
-                <!-- a drive: model and SMART verdict, then what it is and where, then the SMART details -->
-                <div class="bar drive lv-{d.level}" title="{d.name} · {d.meta} · {d.detail}">
-                  <div class="bar-head"><span class="name">{d.name}</span><span class="mono pct">{d.status}</span></div>
+                <!-- a drive: model and SMART verdict, what it is and where, its life left as a bar, then the other SMART readings as chips -->
+                <div class="bar drive lv-{d.lifeLevel}" title="{d.name} · {d.meta} · {d.detail}">
+                  <div class="bar-head"><span class="name">{d.name}</span><span class="verdict lv-{d.level}">{d.status}</span></div>
                   <span class="mono muted off-sub">{d.meta}</span>
-                  <span class="mono muted off-sub">{d.detail}</span>
+                  {#if d.life != null}
+                    <div class="life"><div class="track"><div class="fill" style:width="{Math.max(0, Math.min(100, d.life))}%"></div></div><span class="mono pct">{d.life}%</span></div>
+                  {/if}
+                  {#if d.facts.length}
+                    <div class="dfacts">
+                      {#each d.facts as f}<span class="dfact mono" class:lv-warn={f.level === 'warn'}>{f.v}{#if f.k}<span class="muted"> {f.k}</span>{/if}</span>{/each}
+                    </div>
+                  {/if}
                 </div>
               {/each}
             {:else}
@@ -450,8 +457,15 @@
   .bar.lv-off .name, .bar.lv-off .pct { color: var(--muted); }
   .bar.lv-off .name { flex: 1 1 auto; max-width: none; }
   .off-sub { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .drive { gap: 3px; }
+  .drive { gap: 6px; }
+  .drive + .drive { padding-top: 12px; border-top: 1px solid var(--track); }
   .drive .name { flex: 1 1 auto; max-width: none; }
+  .verdict { flex: none; font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 999px; color: var(--lv); background: var(--lv-soft); }
+  .life { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+  .life .track { flex: 1 1 auto; }
+  .dfacts { display: flex; flex-wrap: wrap; gap: 6px; }
+  .dfact { font-size: 11px; padding: 2px 7px; border-radius: 6px; background: var(--surface-2); }
+  .dfact.lv-warn { color: var(--lv); background: var(--lv-soft); }
   .tabs { display: flex; gap: 16px; }
   .tabs button { all: unset; cursor: pointer; font-size: 14px; font-weight: 600; color: var(--muted); }
   .tabs button[aria-selected='true'] { color: var(--text); }
