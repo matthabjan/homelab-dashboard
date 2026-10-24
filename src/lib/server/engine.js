@@ -3,21 +3,15 @@
 import fs from 'node:fs';
 import { EventEmitter } from 'node:events';
 import { CONFIG_DIR, loadConfig, withDiscovered } from './config.js';
-import { openDb, insertProbe, insertMetric, insertEvent, prune } from './db.js';
+import { openDb, insertProbe, insertMetric, insertEvent, prune, kvGet, kvSet } from './db.js';
 import { probe, certInfo, reasonText } from './http.js';
 import { readTemps } from './integrations/host.js';
-import { DEMO, demoProbe, demoCert, demoCollect, demoTemps, seedHistory } from './demo.js';
+import { DEMO, SCENARIO, demoProbe, demoCert, demoTemps, seedHistory } from './demo.js';
+import { FIXTURES, fixtureTransport } from './demo/index.js';
 import { buildSnapshot } from './snapshot.js';
-import * as proxmox from './integrations/proxmox.js';
-import * as pbs from './integrations/pbs.js';
-import * as opnsense from './integrations/opnsense.js';
-import * as fritzbox from './integrations/fritzbox.js';
-import * as adguard from './integrations/adguard.js';
-import * as portainer from './integrations/portainer.js';
-import * as openmediavault from './integrations/openmediavault.js';
+import { INTEGRATIONS, ORDER, createContext } from './integrations/index.js';
 
-const INTEGRATIONS = { proxmox, proxmoxbackupserver: pbs, opnsense, fritzbox, adguard, portainer, openmediavault };
-const ORDER = ['proxmox']; // runs first: provides guest ids for backup freshness
+const kv = { get: kvGet, set: kvSet };
 
 const withTimeout = (p, ms, label) =>
   Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(`${label} timed out`)), ms))]);
@@ -104,18 +98,18 @@ class Engine extends EventEmitter {
     const list = this.cfg.services.filter((s) => s.widget?.type && INTEGRATIONS[s.widget.type]);
     const run = async (s) => {
       const st = this.state(s.id);
-      const ctx = {
+      const ctx = createContext({
+        transport: DEMO ? fixtureTransport(FIXTURES[s.widget.type], { scenario: SCENARIO }) : undefined,
+        kv,
         settings,
         now,
         insecure: s.insecure,
         shared: this.shared,
         state: st.wstate,
         metric: (key, v) => insertMetric(key, now, v)
-      };
+      });
       try {
-        const res = DEMO
-          ? await demoCollect(s.widget.type, s.widget, ctx)
-          : await withTimeout(INTEGRATIONS[s.widget.type].collect(s.widget, ctx), 25_000, s.widget.type);
+        const res = await withTimeout(INTEGRATIONS[s.widget.type].collect(s.widget, ctx), 25_000, s.widget.type);
         for (const e of res.events || []) insertEvent(now, e.sev, s.id, e.title, e.detail);
         st.widget = { ok: true, ts: now, ...res };
       } catch (e) {

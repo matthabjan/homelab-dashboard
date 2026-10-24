@@ -1,10 +1,9 @@
 // FRITZ!Box — TR-064/UPnP on port 49000 (no login needed; "Statusinformationen über UPnP übertragen" must be enabled).
-import { request } from '../http.js';
 import { fmtDuration } from '../format.js';
 
-async function soap(base, service, action) {
+async function soap(ctx, base, service, action) {
   const path = service === 'WANIPConnection' ? 'WANIPConn1' : 'WANCommonIFC1';
-  const res = await request(`${base}/igdupnp/control/${path}`, {
+  const res = await ctx.request(`${base}/igdupnp/control/${path}`, {
     method: 'POST',
     headers: { 'Content-Type': "text/xml; charset='utf-8'", SoapAction: `urn:schemas-upnp-org:service:${service}:1#${action}` },
     body:
@@ -24,9 +23,9 @@ export async function collect(w, ctx) {
   const u = new URL(w.url);
   const base = `${u.protocol}//${u.hostname}:${u.protocol === 'https:' ? 49443 : 49000}`;
   const [status, link, addon] = await Promise.all([
-    soap(base, 'WANIPConnection', 'GetStatusInfo'),
-    soap(base, 'WANCommonInterfaceConfig', 'GetCommonLinkProperties'),
-    soap(base, 'WANCommonInterfaceConfig', 'GetAddonInfos').catch(() => ({}))
+    soap(ctx, base, 'WANIPConnection', 'GetStatusInfo'),
+    soap(ctx, base, 'WANCommonInterfaceConfig', 'GetCommonLinkProperties'),
+    soap(ctx, base, 'WANCommonInterfaceConfig', 'GetAddonInfos').catch(() => ({}))
   ]);
   const connected = status.NewConnectionStatus === 'Connected';
   const maxDown = Number(link.NewLayer1DownstreamMaxBitRate || 0) / 1e6;

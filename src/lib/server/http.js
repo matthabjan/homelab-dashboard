@@ -19,8 +19,9 @@ export async function request(url, { method = 'GET', headers = {}, body, insecur
   });
 }
 
-export async function getJson(url, opts = {}) {
-  const res = await request(url, opts);
+/** JSON from any transport with request()'s shape (integrations get theirs bound as ctx.getJson). */
+export async function getJson(url, opts = {}, transport = request) {
+  const res = await transport(url, opts);
   if (!res.ok) {
     // the response body goes to the server log only — the message is shown to every viewer
     const err = new Error(`HTTP ${res.status}`);

@@ -1,6 +1,6 @@
 // Proxmox VE — API token auth, same fields as homepage (username = USER@REALM!TOKENID, password = secret).
 // Token needs PVEAuditor on "/" (read-only).
-import { getJson, trimUrl } from '../http.js';
+import { trimUrl } from '../http.js';
 import { fmtPair, fmtDuration, pct } from '../format.js';
 
 /**
@@ -27,7 +27,7 @@ function nodeStorages(res, nodeName, { storages: wanted, storage: pinned }) {
 export async function collect(w, ctx) {
   const base = trimUrl(w.url) + '/api2/json';
   const opts = { headers: { Authorization: `PVEAPIToken=${w.username}=${w.password}` }, insecure: ctx.insecure };
-  const { data: res } = await getJson(`${base}/cluster/resources`, opts);
+  const { data: res } = await ctx.getJson(`${base}/cluster/resources`, opts);
 
   const nodes = res.filter((r) => r.type === 'node');
   const node = nodes.find((n) => n.node === (w.node || ctx.settings.host.node)) || nodes.find((n) => n.status === 'online') || nodes[0];
@@ -44,9 +44,9 @@ export async function collect(w, ctx) {
   const { storages, down, main, missing } = nodeStorages(res, node.node, ctx.settings.host);
 
   let status = null;
-  try { status = (await getJson(`${base}/nodes/${node.node}/status`, opts)).data; } catch { /* optional */ }
+  try { status = (await ctx.getJson(`${base}/nodes/${node.node}/status`, opts)).data; } catch { /* optional */ }
   let updates = null;
-  try { updates = (await getJson(`${base}/nodes/${node.node}/apt/update`, opts)).data?.length ?? null; } catch { /* needs Sys.Audit */ }
+  try { updates = (await ctx.getJson(`${base}/nodes/${node.node}/apt/update`, opts)).data?.length ?? null; } catch { /* needs Sys.Audit */ }
 
   const cpu = (node.cpu ?? 0) * 100;
   const memPct = pct(node.mem, node.maxmem);

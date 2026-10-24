@@ -1,14 +1,15 @@
 // OpenMediaVault — JSON-RPC with session login (same credentials as homepage).
 // Reads services, SMART status and mounted file systems in one go.
-import { request, trimUrl } from '../http.js';
+import { trimUrl } from '../http.js';
 import { fmtPair, pct } from '../format.js';
 
-async function rpc(url, body, st, insecure) {
-  const res = await request(url, {
+async function rpc(ctx, url, body) {
+  const st = ctx.state;
+  const res = await ctx.request(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...(st.cookie ? { Cookie: st.cookie } : {}) },
     body: JSON.stringify(body),
-    insecure
+    insecure: ctx.insecure
   });
   const setCookie = res.headers.getSetCookie?.() ?? [];
   if (setCookie.length) st.cookie = setCookie.map((c) => c.split(';')[0]).join('; ');
@@ -16,14 +17,14 @@ async function rpc(url, body, st, insecure) {
   return { status: res.status, json: text ? JSON.parse(text) : null };
 }
 
-async function call(w, st, service, method, params, insecure) {
+async function call(w, ctx, service, method, params) {
   const url = trimUrl(w.url) + '/rpc.php';
-  let r = await rpc(url, { service, method, params }, st, insecure);
+  let r = await rpc(ctx, url, { service, method, params });
   if (r.status === 401 || r.json?.error?.code === 5001) {
-    const login = await rpc(url, { service: 'session', method: 'login', params: { username: String(w.username), password: String(w.password) } }, st, insecure);
+    const login = await rpc(ctx, url, { service: 'session', method: 'login', params: { username: String(w.username), password: String(w.password) } });
     const ok = login.json?.response?.authenticated === true || login.json?.response?.status === 'authenticated';
     if (!ok) throw new Error('OMV login failed');
-    r = await rpc(url, { service, method, params }, st, insecure);
+    r = await rpc(ctx, url, { service, method, params });
   }
   if (r.status !== 200 || r.json?.error) {
     const err = new Error(`OMV ${service}.${method} failed (HTTP ${r.status})`);
@@ -33,11 +34,11 @@ async function call(w, st, service, method, params, insecure) {
   return r.json.response;
 }
 
-async function callBg(w, st, service, method, insecure) {
-  const filename = await call(w, st, service, method, { limit: -1, start: 0 }, insecure);
+async function callBg(w, ctx, service, method) {
+  const filename = await call(w, ctx, service, method, { limit: -1, start: 0 });
   let pos = 0;
   for (let i = 0; i < 40; i++) {
-    const out = await call(w, st, 'exec', 'getOutput', { pos, filename }, insecure);
+    const out = await call(w, ctx, 'exec', 'getOutput', { pos, filename });
     if (out.running === true || out.outputPending) {
       pos = out.pos;
       await new Promise((r) => setTimeout(r, 500));
@@ -59,12 +60,10 @@ function diskOf(f, disks) {
 }
 
 export async function collect(w, ctx) {
-  const st = ctx.state;
-  const ins = ctx.insecure;
   const [services, smart, fs] = await Promise.all([
-    call(w, st, 'services', 'getStatus', { limit: -1, start: 0 }, ins).then((r) => r?.data ?? r).catch(() => null),
-    callBg(w, st, 'smart', 'getListBg', ins).then((r) => r?.data ?? null).catch(() => null),
-    call(w, st, 'filesystemmgmt', 'enumerateMountedFilesystems', { includeroot: false }, ins).catch(() => null)
+    call(w, ctx, 'services', 'getStatus', { limit: -1, start: 0 }).then((r) => r?.data ?? r).catch(() => null),
+    callBg(w, ctx, 'smart', 'getListBg').then((r) => r?.data ?? null).catch(() => null),
+    call(w, ctx, 'filesystemmgmt', 'enumerateMountedFilesystems', { includeroot: false }).catch(() => null)
   ]);
   if (!services && !smart && !fs) throw new Error('No data from OMV RPC');
 

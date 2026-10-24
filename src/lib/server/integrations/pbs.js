@@ -2,23 +2,22 @@
 // Backup freshness needs Datastore.Audit on the datastore; usage works with homepage's permissions.
 // Removable datastores (PBS 3.3+, mount-status other than "nonremovable") are an offsite disk that is plugged
 // in now and then: detached is normal, they only alert after offsiteMaxDetachedDays, and backup freshness skips them.
-import { getJson, trimUrl } from '../http.js';
-import { kvGet, kvSet } from '../db.js';
+import { trimUrl } from '../http.js';
 import { fmtPair, fmtDuration, pct } from '../format.js';
 
 const usageRow = (name, s) => ({ name, used: s.used, total: s.total, pct: pct(s.used, s.total), sub: fmtPair(s.used, s.total), source: 'pbs' });
 const removable = (s) => s['mount-status'] != null && s['mount-status'] !== 'nonremovable';
 
 /** Row and alert for a removable store; remembers when it was last seen attached (survives restarts). */
-function removableStatus(s, now, maxDays) {
+function removableStatus(s, now, maxDays, kv) {
   const key = `pbs.attached.${s.store}`;
-  const stored = kvGet(key);
+  const stored = kv.get(key);
   const seen = stored ?? { first: now, last: null };
   if (s.total > 0) {
-    kvSet(key, { ...seen, last: now });
+    kv.set(key, { ...seen, last: now });
     return { row: usageRow(`${s.store} · removable`, s) };
   }
-  if (!stored) kvSet(key, seen);
+  if (!stored) kv.set(key, seen);
   const age = now - (seen.last ?? seen.first);
   return {
     row: { name: `${s.store} · removable`, offline: true, sub: seen.last ? `detached · last attached ${fmtDuration(age)} ago` : 'detached · never seen attached', source: 'pbs' },
@@ -29,7 +28,7 @@ function removableStatus(s, now, maxDays) {
 export async function collect(w, ctx) {
   const base = trimUrl(w.url) + '/api2/json';
   const opts = { headers: { Authorization: `PBSAPIToken=${w.username}:${w.password}` }, insecure: ctx.insecure };
-  const { data: usage } = await getJson(`${base}/status/datastore-usage`, opts);
+  const { data: usage } = await ctx.getJson(`${base}/status/datastore-usage`, opts);
   const wanted = w.datastore == null ? null : [].concat(w.datastore);
   const selected = usage.filter((s) => (wanted ? wanted.includes(s.store) : true));
   // freshness and the widget's stats are about the regular stores
@@ -38,7 +37,7 @@ export async function collect(w, ctx) {
   const alerts = [];
   const storage = stores.map((s) => usageRow(`${s.store} · backups`, s));
   for (const s of selected.filter(removable)) {
-    const { row, alert } = removableStatus(s, now, ctx.settings.thresholds.offsiteMaxDetachedDays);
+    const { row, alert } = removableStatus(s, now, ctx.settings.thresholds.offsiteMaxDetachedDays, ctx.kv);
     storage.push(row);
     if (alert) alerts.push(alert);
   }
@@ -50,7 +49,7 @@ export async function collect(w, ctx) {
   let freshnessError = null;
   for (const s of stores) {
     try {
-      const { data } = await getJson(`${base}/admin/datastore/${encodeURIComponent(s.store)}/groups`, opts);
+      const { data } = await ctx.getJson(`${base}/admin/datastore/${encodeURIComponent(s.store)}/groups`, opts);
       groups.push(...data.map((g) => ({ ...g, store: s.store })));
     } catch (e) {
       freshnessError = e.status === 403 ? 'Token needs Datastore.Audit for backup freshness' : e.message;

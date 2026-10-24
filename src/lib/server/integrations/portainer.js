@@ -1,7 +1,7 @@
 // Portainer — X-API-Key, environment id in `env` (same as homepage).
 // Containers with label `dashboard.ignore=true` are skipped.
 // Containers with gethomepage labels (`homepage.group`, `homepage.name`, `homepage.href`, …) become services.
-import { getJson, trimUrl } from '../http.js';
+import { trimUrl } from '../http.js';
 
 /** `homepage.widget.type=x` → { widget: { type: 'x' } }. Values stay literal: no ${SECRET} substitution from labels. */
 function fromLabels(labels) {
@@ -22,7 +22,7 @@ function fromLabels(labels) {
 export async function collect(w, ctx) {
   const base = `${trimUrl(w.url)}/api/endpoints/${w.env}/docker`;
   const opts = { headers: { 'X-API-Key': w.key }, insecure: ctx.insecure };
-  const list = (await getJson(`${base}/containers/json?all=1`, opts)).filter((c) => c.Labels?.['dashboard.ignore'] !== 'true');
+  const list = (await ctx.getJson(`${base}/containers/json?all=1`, opts)).filter((c) => c.Labels?.['dashboard.ignore'] !== 'true');
 
   const running = list.filter((c) => c.State === 'running');
   const exited = list.filter((c) => c.State === 'exited');
@@ -33,7 +33,7 @@ export async function collect(w, ctx) {
   const alerts = [];
   const name = (c) => (c.Names?.[0] || c.Id.slice(0, 12)).replace(/^\//, '');
   const restartsOf = async (c) => {
-    try { return (await getJson(`${base}/containers/${c.Id}/json`, opts)).RestartCount ?? 0; } catch { return null; }
+    try { return (await ctx.getJson(`${base}/containers/${c.Id}/json`, opts)).RestartCount ?? 0; } catch { return null; }
   };
   for (const c of restarting) alerts.push({ sev: 'crit', key: `ct-${name(c)}`, title: `Container ${name(c)} is restarting`, detail: c.Status });
   for (const c of failed) {
