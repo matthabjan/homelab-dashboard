@@ -4,11 +4,12 @@
 #   push to main        → :edge (+ :sha-<commit>)
 #   tag vX.Y.Z          → :X.Y.Z, :X.Y, :X, :latest (+ GitHub Release, Docker Hub description)
 #   pull request        → all checks and both architectures built, nothing is pushed
+#                         (skipped for development → main: the push run already checked that tree)
 # Published images carry buildx provenance and an SBOM, plus a GitHub artifact attestation:
 #   gh attestation verify oci://docker.io/matthabjan/homelab-dashboard:<tag> --repo matthabjan/homelab-dashboard
 # Requires repository secrets DOCKERHUB_USERNAME and DOCKERHUB_TOKEN (Docker Hub access token, Read & Write).
 # Actions are pinned to commit SHAs; Dependabot (.github/dependabot.yml) keeps them current.
-name: Image
+name: CI
 
 on:
   push:
@@ -24,11 +25,13 @@ env:
   IMAGE: matthabjan/homelab-dashboard
 
 concurrency:
-  group: image-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   check:
+    # the image job needs this one, so it is skipped along with it
+    if: github.event_name != 'pull_request' || github.head_ref != 'development'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -53,7 +56,9 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ steps.node.outputs.major }}
-          # no npm cache: this workflow publishes, and a restored cache is a poisoning path (zizmor)
+          # no npm cache: this workflow publishes, and a restored cache is a poisoning path (zizmor).
+          # The buildx cache (type=gha) is kept deliberately: it saves the rebuilds, and tag and main
+          # runs only restore caches written on main, which takes push access to main to poison.
 
       - run: npm ci --ignore-scripts
       - name: Type check
@@ -123,7 +128,6 @@ jobs:
             type=raw,value=dev,enable=${{ github.ref == 'refs/heads/development' }}
             type=raw,value=edge,enable=${{ github.ref == 'refs/heads/main' }}
             type=sha,prefix=sha-,enable=${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') }}
-            type=ref,event=pr
 
       - name: Build and push
         id: build
@@ -155,10 +159,13 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
-        with:
-          generate_release_notes: true
-          prerelease: ${{ contains(github.ref_name, '-') }}
+      - name: GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRERELEASE: ${{ contains(github.ref_name, '-') }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes \
+            $([ "$PRERELEASE" = true ] && echo --prerelease)
 
   hub-description:
     if: startsWith(github.ref, 'refs/tags/v')

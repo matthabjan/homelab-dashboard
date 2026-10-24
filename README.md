@@ -1,6 +1,6 @@
 # Homelab Dashboard
 
-[![Image](https://github.com/matthabjan/homelab-dashboard/actions/workflows/image.yml/badge.svg)](https://github.com/matthabjan/homelab-dashboard/actions/workflows/image.yml)
+[![CI](https://github.com/matthabjan/homelab-dashboard/actions/workflows/ci.yml/badge.svg)](https://github.com/matthabjan/homelab-dashboard/actions/workflows/ci.yml)
 [![Docker Hub](https://img.shields.io/docker/v/matthabjan/homelab-dashboard?sort=semver&label=docker%20hub)](https://hub.docker.com/r/matthabjan/homelab-dashboard)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 

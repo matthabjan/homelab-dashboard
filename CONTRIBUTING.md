@@ -70,6 +70,6 @@ Guidelines: match gethomepage's widget fields where an equivalent exists. Never 
 
 1. Bump `version` in `package.json` on `development`, and merge to `main` through a pull request.
 2. Tag `main`: `git tag vX.Y.Z && git push origin vX.Y.Z`.
-3. The [Image workflow](.github/workflows/image.yml) checks that the tag matches `package.json`, builds `linux/amd64` and `linux/arm64` with provenance, an SBOM and a GitHub artifact attestation, pushes `X.Y.Z`, `X.Y`, `X` and `latest` to Docker Hub, creates the GitHub Release with generated notes, and syncs this README to Docker Hub.
+3. The [CI workflow](.github/workflows/ci.yml) checks that the tag matches `package.json`, builds `linux/amd64` and `linux/arm64` with provenance, an SBOM and a GitHub artifact attestation, pushes `X.Y.Z`, `X.Y`, `X` and `latest` to Docker Hub, creates the GitHub Release with generated notes, and syncs this README to Docker Hub.
 
 Dependabot targets `development` weekly and waits 7 days after a release before proposing it. Major versions are upgraded by hand.
