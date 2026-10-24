@@ -5,11 +5,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import YAML from 'yaml';
+/** @import { Config, Discovered, Service, Settings } from '$lib/types' */
 
 export const CONFIG_DIR = path.resolve(process.env.CONFIG_DIR || 'config');
 export const DATA_DIR = path.resolve(process.env.DATA_DIR || 'data');
 const SECRETS_DIR = process.env.SECRETS_DIR || '/run/secrets';
 
+/** @type {Settings} */
 export const DEFAULT_SETTINGS = {
   title: 'Homelab',
   theme: 'system', // default for new visitors: system | light | dark (each viewer can switch)
@@ -31,7 +33,8 @@ export const DEFAULT_SETTINGS = {
     service: null, // name of the Proxmox service whose node is shown as "host" (default: first proxmox widget)
     node: null,
     temperature: true, // read CPU/NVMe temps from the kernel (works because the LXC shares the host kernel)
-    storages: null // list of PVE storage names to show; null = all active
+    storages: null, // list of PVE storage names in the storage card; null = all
+    storage: null // PVE storage on the host gauge; null = the largest local one holding guest disks, else root
   },
   network: {
     service: null // service whose widget provides WAN traffic (default: OPNsense, else FRITZ!Box)
@@ -39,6 +42,7 @@ export const DEFAULT_SETTINGS = {
   intervals: { probe: 30, widgets: 60, cert: 21600 },
   thresholds: {
     backupMaxAgeHours: 26,
+    offsiteMaxDetachedDays: 135, // removable PBS datastore not seen attached for this long → reminder
     certWarnDays: 14,
     latencyWarnMs: 250,
     storageAmberPct: 70,
@@ -105,6 +109,7 @@ function deepMerge(base, over) {
 
 export const slug = (s) => s.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
+/** @returns {Service} */
 function toService(gname, name, def, settings) {
   return {
     id: slug(gname + '-' + name),
@@ -126,6 +131,9 @@ function toService(gname, name, def, settings) {
  * Add services discovered from container labels ({ group, name, def }) to a loaded config.
  * They join the services.yaml group of the same name (or a new group at the end);
  * a service already defined in services.yaml under the same group and name wins.
+ * @param {Config} cfg
+ * @param {Discovered[]} discovered
+ * @returns {Config}
  */
 export function withDiscovered(cfg, discovered) {
   if (!discovered?.length) return cfg;
@@ -137,13 +145,14 @@ export function withDiscovered(cfg, discovered) {
     if (ids.has(svc.id)) continue;
     ids.add(svc.id);
     let group = groups.find((g) => g.name === d.group);
-    if (!group) groups.push((group = { name: d.group, services: [] }));
+    if (!group) groups.push((group = { name: d.group, services: /** @type {Service[]} */ ([]) }));
     group.services.push(svc);
     services.push(svc);
   }
   return { ...cfg, groups, services };
 }
 
+/** @returns {Config} */
 export function loadConfig() {
   const settings = deepMerge(DEFAULT_SETTINGS, readYaml('settings.yaml', {}));
   const raw = readYaml('services.yaml', []) || [];
@@ -152,7 +161,7 @@ export function loadConfig() {
   for (const g of raw) {
     if (!g || typeof g !== 'object') continue;
     const [gname, items] = Object.entries(g)[0];
-    const group = { name: gname, services: [] };
+    const group = { name: gname, services: /** @type {Service[]} */ ([]) };
     for (const it of items || []) {
       if (!it || typeof it !== 'object') continue;
       const [name, def] = Object.entries(it)[0];

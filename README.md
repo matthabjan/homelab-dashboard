@@ -3,7 +3,7 @@
 A launcher and status overview for a Proxmox-based homelab. It answers "is everything OK?" at a glance and gets you to your services fast. For deep metrics, link out to something like [Pulse](https://github.com/rcourtman/Pulse).
 
 - **Status first.** The top line gives one verdict ("Everything is running." or the most important problem). Below it, a "Needs attention" list is ordered by severity. When nothing needs attention, the list shows recent activity instead.
-- **Host vitals.** CPU, RAM, storage and temperature for the Proxmox node, each with a 24 h trend. Storage also covers PVE, PBS and the NAS. Network shows WAN traffic (OPNsense or FRITZ!Box) and AdGuard stats.
+- **Host vitals.** CPU, RAM, storage and temperature for the Proxmox node, each with a 24 h trend. The host's storage is the PVE storage holding the guest disks; a separate storage card lists PVE, PBS and the NAS, including storages that are unavailable. Network shows WAN traffic (OPNsense or FRITZ!Box) and AdGuard stats.
 - **Launcher.** Pinned services are ordered by how often you open them, followed by all services in their groups. Press `/` or `⌘K`/`Ctrl K` to open the command palette.
 - **Checks:**
   - every service is checked every 30 s, giving uptime (24 h / 7 d) and p95 latency
@@ -200,7 +200,7 @@ Give the dashboard its own read-only account wherever the product allows it. Don
 | Service | What to create |
 |---|---|
 | **Proxmox VE** | A privilege-separated token with `PVEAuditor` (see below). It's read-only, and `Sys.Audit` in that role also covers the update count. |
-| **Proxmox Backup Server** | A token with `DatastoreAudit` on the datastore (see below). Without it you get usage but no backup freshness. |
+| **Proxmox Backup Server** | A token with `DatastoreAudit` on the datastore (see below). Without it you get usage but no backup freshness. `datastore:` takes one name, a list, or nothing for all. A removable datastore (an offsite disk) shows as detached while unplugged, is left out of backup freshness, and raises a reminder after `thresholds.offsiteMaxDetachedDays` (135) without being attached. |
 | **OPNsense** | A dedicated user without the admin group. Grant only the privileges for **Diagnostics: Activity** and the **traffic** API (check *Effective Privileges*), then create the API key for that user. |
 | **OpenMediaVault** | Needs an admin login; OMV's RPC has no read-only role. Treat this password as highly sensitive and use `https://`. |
 | **AdGuard Home** | Needs the AdGuard login; AdGuard has no read-only role. Use `https://`. |
@@ -238,7 +238,11 @@ Work happens on `development` (published as `:dev`) and reaches `main` through p
 ```bash
 npm ci
 CONFIG_DIR=config.example DEMO=1 npm run dev    # http://localhost:5173 (this machine only)
+npm test                                        # every integration against the demo fixtures
+npm run check                                   # type-check the JS and Svelte (shapes in src/lib/types.d.ts)
 ```
+
+In demo mode the widgets run the real integrations: their HTTP calls are answered from the API fixtures in `src/lib/server/demo/` (one file per widget type). A new integration or API field gets its fixture there, and the demo and the tests pick it up. See [CONTEXT.md](CONTEXT.md) for the terms.
 
 ## Tech
 

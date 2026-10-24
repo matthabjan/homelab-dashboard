@@ -29,7 +29,8 @@ pwa:
 host:
   service: Proxmox VE      # which service provides CPU / RAM / storage for the host card
   temperature: true        # CPU + NVMe temperatures from the kernel
-  # storages: [local-zfs]  # limit the PVE storages shown (default: all active)
+  # storage: local-zfs     # PVE storage on the host gauge (default: the largest local one holding guest disks, else root)
+  # storages: [local-zfs]  # limit the PVE storages in the storage card (default: all)
 
 network:
   # service: FRITZ!Box     # which widget provides WAN traffic (default: OPNsense, else FRITZ!Box)
@@ -41,6 +42,7 @@ intervals:                 # seconds
 
 thresholds:
   backupMaxAgeHours: 26
+  offsiteMaxDetachedDays: 135  # removable PBS datastore (offsite disk) not attached for this long
   certWarnDays: 14
   latencyWarnMs: 250
   storageAmberPct: 70

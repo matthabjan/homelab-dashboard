@@ -1,6 +1,7 @@
 <script>
   import '../app.css';
   import { onMount } from 'svelte';
+  /** @type {import('./$types').LayoutProps} */
   let { data, children } = $props();
 
   onMount(() => {

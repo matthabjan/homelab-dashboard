@@ -1,8 +1,10 @@
 // Turns engine state + history into the JSON the browser renders.
 import { resolveIcon, assetUrl } from './config.js';
 import { probeStats, uptimeSince, probeBuckets, series, recentEvents, openCounts } from './db.js';
-import { fmtPair, fmtDuration as fmtAge } from './format.js';
+import { fmtClock, fmtDuration as fmtAge } from './format.js';
 import { DEMO } from './demo.js';
+/** @import { AttentionItem, Fact, Gauge, Level, Snapshot, Tile } from '$lib/types' */
+/** @import { Engine } from './engine.js' */
 
 const RANK = { crit: 3, warn: 2, info: 1, ok: 0 };
 const H = 3600_000;
@@ -22,9 +24,13 @@ function stats(sid, now) {
 // remembers when each alert first appeared, so the feed shows "since" instead of "last polled"
 const firstSeen = new Map();
 
+/** @returns {Level | 'none'} */
 const level = (v, warn, crit) => (v == null ? 'none' : v >= crit ? 'crit' : v >= warn ? 'warn' : 'ok');
 
-/** Status of a label-discovered container without a siteMonitor. The Portainer widget raises its alerts. */
+/**
+ * Status of a label-discovered container without a siteMonitor. The Portainer widget raises its alerts.
+ * @returns {{ lvl: Level, status: string, line: string | null }}
+ */
 function containerStatus({ state, health, exitCode }) {
   if (state === 'running' && health === 'unhealthy') return { lvl: 'warn', status: 'Unhealthy', line: 'Container unhealthy' };
   if (state === 'running') return { lvl: 'ok', status: 'Up', line: null };
@@ -32,12 +38,18 @@ function containerStatus({ state, health, exitCode }) {
   return { lvl: 'crit', status: 'Down', line: `Container ${state}${exitCode ? ` · exit ${exitCode}` : ''}` };
 }
 
+/**
+ * @param {Engine} engine
+ * @returns {Snapshot}
+ */
 export function buildSnapshot(engine) {
   const { settings, groups, bookmarks } = engine.cfg;
   const th = settings.thresholds;
   const now = Date.now();
+  /** @type {AttentionItem[]} */
   const attention = [];
   const opens = openCounts();
+  /** @type {Map<string, Tile>} */
   const tiles = new Map();
 
   for (const g of groups) {
@@ -46,10 +58,12 @@ export function buildSnapshot(engine) {
       const p = st.probe;
       const w = st.widget;
       const ps = s.probe ? stats(s.id, now) : null;
-      const host = (() => { try { return new URL(s.href || s.probe).host; } catch { return ''; } })();
+      const host = (() => { try { return new URL(s.href || s.probe || '').host; } catch { return ''; } })();
+      /** @type {Tile['level']} */
       let lvl = s.probe ? (p.checked ? 'ok' : 'unknown') : w ? 'ok' : 'unknown';
       let status = lvl === 'ok' ? 'Up' : 'Checking';
       let line = w?.line || s.description || '';
+      /** @type {Tile['lineLevel']} */
       let lineLevel = null;
       const ct = !s.probe && s.container ? containerStatus(s.container) : null;
       if (ct) {
@@ -63,9 +77,9 @@ export function buildSnapshot(engine) {
       if (p.down) {
         lvl = 'crit';
         status = 'Down';
-        line = `Down since ${new Date(p.since).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} · ${p.reason}`;
+        line = `Down since ${fmtClock(p.since)} · ${p.reason}`;
         lineLevel = 'crit';
-        push({ sev: 'crit', title: `${s.name} is down`, detail: `${p.reason} · since ${new Date(p.since).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`, ts: p.since });
+        push({ sev: 'crit', title: `${s.name} is down`, detail: `${p.reason} · since ${fmtClock(p.since)}`, ts: p.since });
       } else if (ps?.p95h != null && ps.n1 >= MIN_SLOW_SAMPLES && ps.p95h > slowMs) {
         lvl = 'warn';
         status = 'Slow';
@@ -136,11 +150,12 @@ export function buildSnapshot(engine) {
   let host = null;
   if (hw || engine.temps) {
     const temps = engine.temps;
+    /** @type {Gauge[]} */
     const gauges = [];
     if (hw) {
       gauges.push({ key: 'cpu', label: 'CPU', val: Math.round(hw.cpu), unit: '%', pct: hw.cpu, level: level(hw.cpu, 75, 90), sub: `${hw.cpus} threads`, series: spark('host.cpu'), max: 100 });
       gauges.push({ key: 'mem', label: 'Memory', val: (hw.mem / 1024 ** 3).toFixed(1), unit: `of ${Math.round(hw.maxmem / 1024 ** 3)} GiB`, pct: hw.memPct, level: level(hw.memPct, 80, 92), sub: `${Math.round(hw.memPct)}% used`, series: spark('host.mem'), max: 100 });
-      gauges.push({ key: 'disk', label: 'Storage', val: Math.round(hw.disk.pct), unit: '%', pct: hw.disk.pct, level: level(hw.disk.pct, th.storageAmberPct, th.storageWarnPct), sub: hw.disk.name, series: null });
+      gauges.push({ key: 'disk', label: 'Storage', val: Math.round(hw.disk.pct ?? 0), unit: '%', pct: hw.disk.pct, level: level(hw.disk.pct, th.storageAmberPct, th.storageWarnPct), sub: hw.disk.name, series: null });
     }
     if (temps?.cpu != null) {
       const span = th.tempWarnC + 15 - th.tempMinC;
@@ -159,47 +174,58 @@ export function buildSnapshot(engine) {
   }
 
   // ---- storage ----
+  /** @type {Snapshot['storage']} */
   const storage = [];
   for (const s of engine.cfg.services) {
     const w = engine.state(s.id).widget;
     for (const x of w?.storage || []) {
+      // unavailable, detached or of unknown size: shown muted without a bar, the widget raises any alert itself
+      if (x.offline || x.pct == null) { storage.push({ name: x.name, pct: null, level: 'off', sub: x.sub, href: s.href }); continue; }
+      /** @type {Level} */
       const lv = x.pct >= th.storageWarnPct ? 'crit' : x.pct >= th.storageAmberPct ? 'warn' : 'ok';
-      storage.push({ name: x.name, pct: x.pct, level: lv, sub: x.sub ?? fmtPair(x.used, x.total), href: s.href });
+      storage.push({ name: x.name, pct: x.pct, level: lv, sub: x.sub, href: s.href });
       if (x.pct >= th.storageWarnPct) attention.push({ sev: 'warn', title: `${x.name} is ${Math.round(x.pct)}% full`, detail: x.sub, href: s.href, ts: now });
     }
   }
 
   // ---- network ----
+  /** @type {Snapshot['network']} */
   let network = null;
-  const widgets = engine.cfg.services.map((s) => ({ s, w: engine.state(s.id).widget })).filter((x) => x.w);
+  const widgets = engine.cfg.services.flatMap((s) => {
+    const w = engine.state(s.id).widget;
+    return w ? [{ s, w }] : [];
+  });
   const netPick = settings.network?.service;
   const net = netPick
     ? widgets.find((x) => x.s.name === netPick && x.w.network)
     : widgets.find((x) => x.w.network && !x.w.network.fallback) || widgets.find((x) => x.w.network);
   const dns = widgets.find((x) => x.w.dns);
+  const nw = net?.w.network;
   if (net || dns) {
-    const key = net?.w.network.fallback ? 'fritz' : 'net';
+    const key = nw?.fallback ? 'fritz' : 'net';
     const sDown = net ? series(`${key}.down`, since24, now, 72) : null;
     const sUp = net ? series(`${key}.up`, since24, now, 72) : null;
     network = {
-      source: net?.w.network.source ?? null,
+      source: nw?.source ?? null,
       href: net?.s.href ?? null,
-      down: net?.w.network.down ?? null,
-      up: net?.w.network.up ?? null,
+      down: nw?.down ?? null,
+      up: nw?.up ?? null,
       seriesDown: sDown?.values ?? null,
       seriesUp: sUp?.values ?? null,
       spanH: sDown ? Math.max(1, Math.round((now - sDown.from) / H)) : null,
-      dns: dns ? { ...dns.w.dns, href: dns.s.href } : null
+      dns: dns?.w.dns ? { ...dns.w.dns, href: dns.s.href } : null
     };
   }
 
   // ---- fleet availability strip (48 × 30 min) ----
   const B = 30 * 60_000;
   const start = now - 48 * B;
+  /** @type {Snapshot['fleet']} */
   const buckets = Array.from({ length: 48 }, () => 'none');
   for (const r of probeBuckets(start, B)) {
     const i = Math.max(0, Math.min(47, Math.floor(Number(r.b))));
     const ratio = r.fails / r.n;
+    /** @type {Level} */
     const lv = ratio >= 0.5 ? 'crit' : ratio >= 0.1 || r.maxms > th.latencyWarnMs * 2 ? 'warn' : 'ok';
     if (buckets[i] === 'none' || RANK[lv] > RANK[buckets[i]]) buckets[i] = lv;
   }
@@ -225,18 +251,20 @@ export function buildSnapshot(engine) {
   if (backups?.known) subParts.push(backups.overdue ? `${backups.overdue} backup${backups.overdue > 1 ? 's' : ''} overdue` : 'backups current');
   subParts.push(certWarn ? `${certWarn} certificate${certWarn > 1 ? 's' : ''} expiring` : 'no certs expiring soon');
   const top = attention[0];
+  /** @type {Snapshot['verdict']} */
   const verdict = needCount
-    ? { level: top.sev, tag: `${needCount} ${needCount === 1 ? 'needs' : 'need'} attention`, title: `${top.title}.`, sub: subParts.join(' · ') }
+    // needCount > 0: the top item is crit or warn, never info
+    ? { level: /** @type {Level} */ (top.sev), tag: `${needCount} ${needCount === 1 ? 'needs' : 'need'} attention`, title: `${top.title}.`, sub: subParts.join(' · ') }
     : { level: 'ok', tag: 'All systems normal', title: 'Everything is running.', sub: subParts.join(' · ') };
 
   const containers = engine.shared.containers;
-  const nextCert = all.filter((t) => t.cert && !t.cert.selfSigned).sort((a, b) => a.cert.days - b.cert.days)[0];
-  const facts = [
+  const nextCert = all.map((t) => t.cert).filter((c) => c !== null).filter((c) => !c.selfSigned).sort((a, b) => a.days - b.days)[0];
+  const facts = /** @type {(Fact | false | undefined)[]} */ ([
     { k: 'services up', v: `${up} / ${probed.length}`, level: up < probed.length ? 'crit' : null },
     containers && { k: 'containers running', v: `${containers.running} / ${containers.total}`, level: containers.failed ? 'warn' : null },
     backups?.oldestAge != null && { k: 'oldest backup', v: fmtAge(backups.oldestAge), level: backups.overdue ? 'warn' : null },
-    nextCert && { k: 'next cert expiry', v: `${nextCert.cert.days} d`, level: nextCert.cert.days < th.certWarnDays ? 'warn' : null }
-  ].filter(Boolean);
+    nextCert && { k: 'next cert expiry', v: `${nextCert.days} d`, level: nextCert.days < th.certWarnDays ? 'warn' : null }
+  ]).filter(/** @returns {f is Fact} */ (f) => !!f);
 
   const events = recentEvents(now - 24 * H, 5).map((e) => ({ ...e, href: tiles.get(e.sid)?.href ?? null }));
 
@@ -266,7 +294,7 @@ export function buildSnapshot(engine) {
     network,
     pinned,
     groups: groups.map((g) => {
-      const ts = g.services.map((s) => tiles.get(s.id));
+      const ts = g.services.map((s) => /** @type {Tile} */ (tiles.get(s.id))); // every service got a tile above
       const known = ts.filter((t) => t.level !== 'unknown');
       return { name: g.name, summary: `${known.filter((t) => t.status !== 'Down').length} / ${known.length} up`, services: ts };
     }),

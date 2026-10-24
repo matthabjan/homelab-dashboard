@@ -1,6 +1,7 @@
 import { Agent, fetch, interceptors } from 'undici';
 import tls from 'node:tls';
 import net from 'node:net';
+/** @import { RequestOptions, Transport } from '$lib/types' */
 
 // Cache DNS answers: without it every probe and widget call resolves its host again, and the
 // burst every 30 s can trip the DNS server's rate limit (AdGuard: 20 queries/s per client).
@@ -8,6 +9,7 @@ const dnsCache = () => interceptors.dns({ maxTTL: 300_000 });
 const insecureAgent = new Agent({ connect: { rejectUnauthorized: false }, keepAliveTimeout: 10_000 }).compose(dnsCache());
 const secureAgent = new Agent({ keepAliveTimeout: 10_000 }).compose(dnsCache());
 
+/** @type {Transport} */
 export async function request(url, { method = 'GET', headers = {}, body, insecure = true, timeout = 10_000, redirect = 'follow' } = {}) {
   return fetch(url, {
     method,
@@ -19,11 +21,17 @@ export async function request(url, { method = 'GET', headers = {}, body, insecur
   });
 }
 
-export async function getJson(url, opts = {}) {
-  const res = await request(url, opts);
+/**
+ * JSON from any transport with request()'s shape (integrations get theirs bound as ctx.getJson).
+ * @param {string} url
+ * @param {RequestOptions} [opts]
+ * @param {Transport} [transport]
+ */
+export async function getJson(url, opts = {}, transport = request) {
+  const res = await transport(url, opts);
   if (!res.ok) {
     // the response body goes to the server log only — the message is shown to every viewer
-    const err = new Error(`HTTP ${res.status}`);
+    const err = /** @type {Error & { status?: number, body?: string }} */ (new Error(`HTTP ${res.status}`));
     err.status = res.status;
     err.body = (await res.text().catch(() => '')).slice(0, 300);
     throw err;

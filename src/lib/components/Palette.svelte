@@ -3,11 +3,15 @@
   import Icon from './Icon.svelte';
 
   /** Command palette: fuzzy search over services and bookmarks. */
+  /** @import { Bookmark, Tile } from '$lib/types' */
+  /** @type {{ open?: boolean, services?: Tile[], bookmarks?: Bookmark[], pinned?: Tile[], target?: string, onopen?: (id: string) => void }} */
   let { open = $bindable(false), services = [], bookmarks = [], pinned = [], target = '_blank', onopen } = $props();
 
   let q = $state('');
   let active = $state(0);
+  /** @type {HTMLInputElement | undefined} */
   let input = $state();
+  /** @type {HTMLElement | undefined} */
   let list = $state();
 
   const items = $derived([
@@ -29,7 +33,7 @@
   const results = $derived.by(() => {
     const query = q.trim().toLowerCase();
     if (!query) {
-      const pins = pinned.map((p) => items.find((i) => i.id === p.id)).filter(Boolean);
+      const pins = pinned.map((p) => items.find((i) => i.id === p.id)).filter((i) => i !== undefined);
       const rest = items.filter((i) => i.kind === 'service' && !pins.includes(i));
       return [...pins, ...rest].slice(0, 9);
     }

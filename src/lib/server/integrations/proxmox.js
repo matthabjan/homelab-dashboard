@@ -1,12 +1,39 @@
 // Proxmox VE — API token auth, same fields as homepage (username = USER@REALM!TOKENID, password = secret).
 // Token needs PVEAuditor on "/" (read-only).
-import { getJson, trimUrl } from '../http.js';
+import { trimUrl } from '../http.js';
 import { fmtPair, fmtDuration, pct } from '../format.js';
+/** @import { Alert, Context, Widget, WidgetResult } from '$lib/types' */
 
+/**
+ * The node's storages for the storage card (filtered by host.storages, unavailable ones kept as `down`)
+ * and `main`, the one on the host gauge: host.storage if set, else where the guest disks live
+ * (local-zfs / local-lvm), not whatever storage is largest.
+ */
+function nodeStorages(res, nodeName, { storages: wanted, storage: pinned }) {
+  // PBS datastores attached to PVE are reported by the PBS widget, and they aren't host disks
+  const onNode = res.filter((r) => r.type === 'storage' && r.node === nodeName && r.plugintype !== 'pbs');
+  const up = onNode.filter((r) => r.status === 'available' && r.maxdisk > 0);
+  const shown = (r) => (wanted ? wanted.includes(r.storage) : true);
+  const chosen = pinned ? up.find((r) => r.storage === pinned) : null;
+  const guestDisks = up.filter((r) => !r.shared && /\b(images|rootdir)\b/.test(r.content ?? '')).sort((a, b) => b.maxdisk - a.maxdisk)[0];
+  return {
+    storages: up.filter(shown).map((s) => ({ name: s.storage, used: s.disk, total: s.maxdisk, pct: pct(s.disk, s.maxdisk), sub: fmtPair(s.disk, s.maxdisk), source: 'pve' })),
+    // e.g. a mount that is gone: keep it visible, a backup target that silently disappears is worse
+    down: onNode.filter((r) => r.status !== 'available' && shown(r)),
+    main: chosen ?? guestDisks,
+    missing: pinned && !chosen ? pinned : null
+  };
+}
+
+/**
+ * @param {Widget} w
+ * @param {Context} ctx
+ * @returns {Promise<WidgetResult>}
+ */
 export async function collect(w, ctx) {
   const base = trimUrl(w.url) + '/api2/json';
   const opts = { headers: { Authorization: `PVEAPIToken=${w.username}=${w.password}` }, insecure: ctx.insecure };
-  const { data: res } = await getJson(`${base}/cluster/resources`, opts);
+  const { data: res } = await ctx.getJson(`${base}/cluster/resources`, opts);
 
   const nodes = res.filter((r) => r.type === 'node');
   const node = nodes.find((n) => n.node === (w.node || ctx.settings.host.node)) || nodes.find((n) => n.status === 'online') || nodes[0];
@@ -20,20 +47,15 @@ export async function collect(w, ctx) {
     .map((g) => ({ id: g.vmid, name: g.name, type: g.type === 'qemu' ? 'VM' : 'LXC', status: g.status }));
   const running = guests.filter((g) => g.status === 'running').length;
 
-  const wanted = ctx.settings.host.storages;
-  const storages = res
-    // PBS datastores attached to PVE are reported by the PBS widget, and they aren't host disks
-    .filter((r) => r.type === 'storage' && r.node === node.node && r.status === 'available' && r.maxdisk > 0 && r.plugintype !== 'pbs')
-    .filter((r) => (wanted ? wanted.includes(r.storage) : true))
-    .map((s) => ({ name: s.storage, used: s.disk, total: s.maxdisk, pct: pct(s.disk, s.maxdisk), sub: fmtPair(s.disk, s.maxdisk), source: 'pve' }));
+  const { storages, down, main, missing } = nodeStorages(res, node.node, ctx.settings.host);
 
   let status = null;
-  try { status = (await getJson(`${base}/nodes/${node.node}/status`, opts)).data; } catch { /* optional */ }
+  try { status = (await ctx.getJson(`${base}/nodes/${node.node}/status`, opts)).data; } catch { /* optional */ }
   let updates = null;
-  try { updates = (await getJson(`${base}/nodes/${node.node}/apt/update`, opts)).data?.length ?? null; } catch { /* needs Sys.Audit */ }
+  try { updates = (await ctx.getJson(`${base}/nodes/${node.node}/apt/update`, opts)).data?.length ?? null; } catch { /* needs Sys.Audit */ }
 
   const cpu = (node.cpu ?? 0) * 100;
-  const memPct = pct(node.mem, node.maxmem);
+  const memPct = pct(node.mem, node.maxmem) ?? 0;
   ctx.metric('host.cpu', cpu);
   ctx.metric('host.mem', memPct);
   const rootPct = pct(node.disk, node.maxdisk);
@@ -42,12 +64,12 @@ export async function collect(w, ctx) {
   ctx.shared.guestIds = new Set(guests.map((g) => String(g.id)));
   ctx.shared.guestNames = Object.fromEntries(guests.map((g) => [String(g.id), g.name]));
 
+  /** @type {Alert[]} */
   const alerts = [];
   if (node.status !== 'online') alerts.push({ sev: 'crit', title: `Node ${node.node} is offline`, detail: 'Proxmox reports the node as ' + node.status });
   if (updates) alerts.push({ sev: 'info', key: 'updates', title: `${updates} updates available on ${node.node}`, detail: 'apt packages pending' });
-
-  // the largest PVE storage is what the host gauge shows (usually local-zfs / local-lvm)
-  const main = [...storages].sort((a, b) => b.total - a.total)[0];
+  for (const s of down) alerts.push({ sev: 'warn', key: `storage-${s.storage}`, title: `${s.storage} is unavailable on ${node.node}`, detail: `Proxmox reports the storage as ${s.status ?? 'unknown'}` });
+  if (missing) alerts.push({ sev: 'warn', key: 'host-storage', title: `host.storage "${missing}" not found on ${node.node}`, detail: 'The host gauge falls back to the guest-disk storage' });
 
   return {
     stats: [
@@ -57,7 +79,7 @@ export async function collect(w, ctx) {
     ],
     line: `CPU ${Math.round(cpu)}% · RAM ${fmtPair(node.mem, node.maxmem)}`,
     alerts,
-    storage: storages,
+    storage: [...storages, ...down.map((s) => ({ name: s.storage, offline: true, sub: 'unavailable', source: 'pve' }))],
     host: {
       node: node.node,
       cpu,
@@ -65,7 +87,9 @@ export async function collect(w, ctx) {
       mem: node.mem,
       maxmem: node.maxmem,
       memPct,
-      disk: main ? { name: main.name, pct: main.pct, sub: main.sub } : { name: 'root', pct: rootPct, sub: fmtPair(node.disk, node.maxdisk) },
+      disk: main
+        ? { name: main.storage, pct: pct(main.disk, main.maxdisk), sub: fmtPair(main.disk, main.maxdisk) }
+        : { name: 'root', pct: rootPct, sub: fmtPair(node.disk, node.maxdisk) },
       load: status?.loadavg?.map(Number) ?? null,
       uptime: node.uptime ? fmtDuration(node.uptime * 1000) : null,
       guestsRunning: running,

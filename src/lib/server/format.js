@@ -12,6 +12,7 @@ export function fmtBytes(b, digits = 1) {
 
 /** "41.2 / 64 GiB" — both values in the unit of the total */
 export function fmtPair(used, total) {
+  /** @type {[string, number][]} */
   const units = [['TiB', TiB], ['GiB', GiB], ['MiB', 1024 ** 2]];
   const [u, f] = units.find(([, f]) => total >= f) || units[2];
   const a = used / f, t = total / f;
@@ -36,6 +37,12 @@ export function fmtDuration(ms) {
   if (h < 48) return `${h} h${m % 60 && h < 10 ? ` ${String(m % 60).padStart(2, '0')} m` : ''}`;
   return `${Math.floor(h / 24)} d`;
 }
+
+/** "14:05" for a timestamp, in local time */
+export const fmtClock = (ts) => (ts == null ? '—' : new Date(ts).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }));
+
+/** "42%", or "—" when the size is unknown */
+export const fmtPct = (p) => (p == null ? '—' : `${Math.round(p)}%`);
 
 export const pct = (a, b) => (b > 0 ? (a / b) * 100 : null);
 export const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
