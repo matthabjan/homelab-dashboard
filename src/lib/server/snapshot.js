@@ -178,7 +178,9 @@ export function buildSnapshot(engine) {
   const storage = [];
   for (const s of engine.cfg.services) {
     const w = engine.state(s.id).widget;
-    for (const x of w?.storage || []) {
+    // sources follow services.yaml; within one, by name: APIs (cluster/resources) don't keep a stable order,
+    // and an offline row keeps its place instead of jumping to the end
+    for (const x of [...(w?.storage || [])].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))) {
       // unavailable, detached or of unknown size: shown muted without a bar, the widget raises any alert itself
       if (x.offline || x.pct == null) { storage.push({ name: x.name, pct: null, level: 'off', sub: x.sub, href: s.href }); continue; }
       /** @type {Level} */
