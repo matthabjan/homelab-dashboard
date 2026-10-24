@@ -26,5 +26,16 @@ Thumbs.db
 .idea/
 *.code-workspace
 
-# local Portainer stack; the README has an example
-compose.yaml
+# local stacks and overrides; docs/deployment.md has an example
+compose*.y*ml
+docker-compose*.y*ml
+
+# certificates, keys and logins (NODE_EXTRA_CA_CERTS, htpasswd)
+certs/
+*.pem
+*.key
+*.htpasswd
+.htpasswd
+
+# Vite temp files
+vite.config.js.timestamp-*
