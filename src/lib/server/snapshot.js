@@ -159,7 +159,10 @@ export function buildSnapshot(engine) {
   // ---- network ----
   let network = null;
   const widgets = engine.cfg.services.map((s) => ({ s, w: engine.state(s.id).widget })).filter((x) => x.w);
-  const net = widgets.find((x) => x.w.network && !x.w.network.fallback) || widgets.find((x) => x.w.network);
+  const netPick = settings.network?.service;
+  const net = netPick
+    ? widgets.find((x) => x.s.name === netPick && x.w.network)
+    : widgets.find((x) => x.w.network && !x.w.network.fallback) || widgets.find((x) => x.w.network);
   const dns = widgets.find((x) => x.w.dns);
   if (net || dns) {
     const key = net?.w.network.fallback ? 'fritz' : 'net';

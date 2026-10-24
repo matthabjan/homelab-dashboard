@@ -31,6 +31,9 @@ host:
   temperature: true        # CPU + NVMe temperatures from the kernel
   # storages: [local-zfs]  # limit the PVE storages shown (default: all active)
 
+network:
+  # service: FRITZ!Box     # which widget provides WAN traffic (default: OPNsense, else FRITZ!Box)
+
 intervals:                 # seconds
   probe: 30
   widgets: 60

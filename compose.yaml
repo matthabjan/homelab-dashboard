@@ -67,6 +67,15 @@ services:
       - traefik.http.middlewares.dashboard-headers.headers.referrerPolicy=no-referrer
       - traefik.http.middlewares.dashboard-headers.headers.permissionsPolicy=camera=(), microphone=(), geolocation=(), payment=(), usb=()
       - traefik.http.middlewares.dashboard-headers.headers.customResponseHeaders.X-Robots-Tag=noindex, nofollow
+      # App manifest and icons without login: phones fetch them for "Install app" / the home-screen icon
+      # without the basic-auth credentials. Still LAN only; these files hold nothing sensitive.
+      - traefik.http.routers.dashboard-icons.rule=Host(`${DASHBOARD_HOST}`) && (Path(`/manifest.webmanifest`) || PathPrefix(`/assets/images/`))
+      - traefik.http.routers.dashboard-icons.priority=1000
+      - traefik.http.routers.dashboard-icons.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}
+      - traefik.http.routers.dashboard-icons.tls=true
+      - traefik.http.routers.dashboard-icons.middlewares=dashboard-lan@docker,dashboard-headers@docker
+      - traefik.http.routers.dashboard-icons.service=dashboard
+      - traefik.http.routers.dashboard.service=dashboard
       - traefik.http.services.dashboard.loadbalancer.server.port=3000
 
 # Each secret is read from the variable of the same name (in .env or in Portainer's stack variables).

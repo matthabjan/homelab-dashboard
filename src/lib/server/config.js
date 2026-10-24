@@ -33,6 +33,9 @@ export const DEFAULT_SETTINGS = {
     temperature: true, // read CPU/NVMe temps from the kernel (works because the LXC shares the host kernel)
     storages: null // list of PVE storage names to show; null = all active
   },
+  network: {
+    service: null // service whose widget provides WAN traffic (default: OPNsense, else FRITZ!Box)
+  },
   intervals: { probe: 30, widgets: 60, cert: 21600 },
   thresholds: {
     backupMaxAgeHours: 26,

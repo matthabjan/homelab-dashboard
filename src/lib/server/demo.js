@@ -72,8 +72,12 @@ export async function demoCollect(type, w, ctx) {
         network: { down, up, source: 'OPNsense' }
       };
     }
-    case 'fritzbox':
-      return { stats: [{ k: 'internet', v: 'online', level: 'ok' }, { k: 'max ↓ Mbit/s', v: '250' }, { k: 'max ↑ Mbit/s', v: '40' }], line: 'Online · 250 / 40 Mbit/s · up 12 d', alerts: [] };
+    case 'fritzbox': {
+      const down = 30 + Math.random() * 80, up = 4 + Math.random() * 12;
+      ctx.metric('fritz.down', down);
+      ctx.metric('fritz.up', up);
+      return { stats: [{ k: 'internet', v: 'online', level: 'ok' }, { k: 'max ↓ Mbit/s', v: '250' }, { k: 'max ↑ Mbit/s', v: '40' }], line: 'Online · 250 / 40 Mbit/s · up 12 d', alerts: [], network: { down, up, source: 'FRITZ!Box', fallback: true } };
+    }
     case 'adguard': {
       const series = Array.from({ length: 24 }, (_, i) => 1400 + Math.round(Math.sin((i - 6) / 3.8) * 900 + 900));
       return {

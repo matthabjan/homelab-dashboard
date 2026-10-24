@@ -84,7 +84,7 @@ The dashboard holds API credentials for your infrastructure, and it shows your n
 
 Any container on the same Docker network as Traefik can reach the dashboard's port 3000 directly, without the allowlist or the login. Keep that network for trusted containers.
 
-**Basic auth and installed apps.** The web manifest is requested with credentials, so installing works. iOS home-screen apps may ask for the login again after a while.
+**Basic auth and installed apps.** Phones fetch the web manifest and app icons without the login when installing, so `/manifest.webmanifest` and `/assets/images/` are served without basic auth, though still only to `LAN_CIDRS`. They contain the title and the app icons, nothing else. iOS home-screen apps may ask for the login again after a while.
 
 ### TLS for widget APIs
 
