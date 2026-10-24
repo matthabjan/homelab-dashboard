@@ -1,9 +1,9 @@
 // Turns engine state + history into the JSON the browser renders.
 import { resolveIcon, assetUrl } from './config.js';
 import { probeStats, uptimeSince, probeBuckets, series, recentEvents, openCounts } from './db.js';
-import { fmtClock, fmtDuration as fmtAge } from './format.js';
+import { fmtClock, fmtDuration as fmtAge, fmtHours, fmtSize } from './format.js';
 import { DEMO } from './demo.js';
-/** @import { AttentionItem, Fact, Gauge, Level, Snapshot, Tile } from '$lib/types' */
+/** @import { AttentionItem, Drive, Fact, Gauge, Level, NetworkReading, Settings, Snapshot, Tile, Traffic } from '$lib/types' */
 /** @import { Engine } from './engine.js' */
 
 const RANK = { crit: 3, warn: 2, info: 1, ok: 0 };
@@ -36,6 +36,39 @@ function containerStatus({ state, health, exitCode }) {
   if (state === 'running') return { lvl: 'ok', status: 'Up', line: null };
   if (state === 'restarting') return { lvl: 'crit', status: 'Down', line: 'Container restarting' };
   return { lvl: 'crit', status: 'Down', line: `Container ${state}${exitCode ? ` · exit ${exitCode}` : ''}` };
+}
+
+/**
+ * A drive's row in the Drives view, and what is wrong with it (each problem becomes an alert).
+ * @param {Drive} d @param {string} where @param {Settings['thresholds']} th
+ */
+function driveStatus(d, where, th) {
+  /** @type {['crit' | 'warn', string, string][]} severity, alert text, alert key */
+  const problems = [];
+  if (d.health === 'failing') problems.push(['crit', 'SMART reports failing', 'health']);
+  if (d.lifeLeft != null && d.lifeLeft <= th.driveLifeWarnPct) problems.push(['warn', `${d.lifeLeft}% life left`, 'life']);
+  if (d.errors) problems.push(['warn', `${d.errors} media errors or bad sectors`, 'errors']);
+  if (d.tempC != null && d.tempC >= th.driveTempWarnC) problems.push(['warn', `${d.tempC} °C`, 'temp']);
+  /** @type {Level} */
+  const level = problems.some((p) => p[0] === 'crit') ? 'crit' : problems.length ? 'warn' : 'ok';
+  const detail = [
+    d.lifeLeft != null && `${d.lifeLeft}% life left`,
+    d.tempC != null && `${d.tempC} °C`,
+    d.hours != null && `${fmtHours(d.hours)} powered on`,
+    d.written != null && `${fmtSize(d.written)} written`,
+    d.errors ? `${d.errors} errors` : null
+  ].filter(Boolean).join(' · ');
+  const status = d.health === 'failing' ? 'failing' : level === 'warn' ? 'check' : d.health === 'unknown' ? '—' : 'ok';
+  /** @type {Fact[]} shown next to the model; power-on time and data written stay in `detail` (the tooltip) */
+  const facts = [];
+  if (d.tempC != null) facts.push({ k: '', v: `${d.tempC} °C`, level: d.tempC >= th.driveTempWarnC ? 'warn' : null });
+  if (d.errors) facts.push({ k: 'errors', v: String(d.errors), level: 'warn' });
+  /** @type {Level} */
+  const lifeLevel = d.lifeLeft != null && d.lifeLeft <= th.driveLifeWarnPct ? 'warn' : 'ok';
+  return {
+    row: { name: d.model, meta: [d.kind, fmtSize(d.size), where].join(' · '), detail: detail || 'no SMART details', status, level, life: d.lifeLeft, lifeLevel, facts },
+    problems
+  };
 }
 
 /**
@@ -160,7 +193,7 @@ export function buildSnapshot(engine) {
     if (temps?.cpu != null) {
       const span = th.tempWarnC + 15 - th.tempMinC;
       const tp = Math.max(0, Math.min(100, ((temps.cpu - th.tempMinC) / span) * 100));
-      gauges.push({ key: 'temp', label: 'CPU temp', val: Math.round(temps.cpu), unit: '°C', pct: tp, level: level(temps.cpu, th.tempWarnC, th.tempWarnC + 10), sub: temps.nvme.length ? `NVMe ${Math.round(Math.max(...temps.nvme))} °C` : temps.cpuLabel, series: spark('host.temp'), max: null });
+      gauges.push({ key: 'temp', label: 'CPU temp', val: Math.round(temps.cpu), unit: '°C', pct: tp, level: level(temps.cpu, th.tempWarnC, th.tempWarnC + 10), sub: `warn at ${th.tempWarnC} °C`, series: spark('host.temp'), max: null });
       if (temps.cpu >= th.tempWarnC) attention.push({ sev: temps.cpu >= th.tempWarnC + 10 ? 'crit' : 'warn', title: `CPU at ${Math.round(temps.cpu)} °C`, detail: `limit ${th.tempWarnC} °C`, href: hostSvc?.href, ts: now });
       for (const n of temps.nvme) if (n >= 70) attention.push({ sev: 'warn', title: `NVMe at ${Math.round(n)} °C`, detail: 'drive is running hot', href: hostSvc?.href, ts: now });
     }
@@ -168,7 +201,6 @@ export function buildSnapshot(engine) {
       name: hw?.node ?? 'host',
       href: hostSvc?.href ?? null,
       detail: hw ? [`up ${hw.uptime}`, `${hw.guestsRunning} of ${hw.guestsTotal} guests running`].join(' · ') : '',
-      load: hw?.load ? hw.load.map((l) => l.toFixed(2)).join(' · ') : null,
       gauges
     };
   }
@@ -178,13 +210,31 @@ export function buildSnapshot(engine) {
   const storage = [];
   for (const s of engine.cfg.services) {
     const w = engine.state(s.id).widget;
-    for (const x of w?.storage || []) {
-      // unavailable, detached or of unknown size: shown muted without a bar, the widget raises any alert itself
-      if (x.offline || x.pct == null) { storage.push({ name: x.name, pct: null, level: 'off', sub: x.sub, href: s.href }); continue; }
+    // sources follow services.yaml; within one, by name: APIs (cluster/resources) don't keep a stable order,
+    // and an offline row keeps its place instead of jumping to the end
+    for (const x of [...(w?.storage || [])].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))) {
+      // unavailable, detached or of unknown size: a grey bar (last known fill, if any), the widget raises any alert itself
+      if (x.offline || x.pct == null) { storage.push({ name: x.name, pct: x.pct ?? null, level: 'off', sub: x.sub, href: s.href }); continue; }
       /** @type {Level} */
       const lv = x.pct >= th.storageWarnPct ? 'crit' : x.pct >= th.storageAmberPct ? 'warn' : 'ok';
       storage.push({ name: x.name, pct: x.pct, level: lv, sub: x.sub, href: s.href });
       if (x.pct >= th.storageWarnPct) attention.push({ sev: 'warn', title: `${x.name} is ${Math.round(x.pct)}% full`, detail: x.sub, href: s.href, ts: now });
+    }
+  }
+
+  // ---- drives ----
+  /** @type {Snapshot['drives']} */
+  const drives = [];
+  const seenSerials = new Set();
+  for (const s of engine.cfg.services) {
+    const w = engine.state(s.id).widget;
+    for (const d of [...(w?.drives || [])].sort((a, b) => a.model.localeCompare(b.model, undefined, { numeric: true }))) {
+      // a disk passed through whole is reported by the host and by the VM
+      if (d.serial && seenSerials.has(d.serial)) continue;
+      if (d.serial) seenSerials.add(d.serial);
+      const { row, problems } = driveStatus(d, d.where ?? s.name, th);
+      for (const [sev, text, key] of problems) attention.push({ sev, key: `drive-${d.serial ?? d.model}-${key}`, title: `${d.model}: ${text}`, detail: row.meta, href: s.href, ts: now });
+      drives.push({ ...row, href: s.href });
     }
   }
 
@@ -200,20 +250,23 @@ export function buildSnapshot(engine) {
     ? widgets.find((x) => x.s.name === netPick && x.w.network)
     : widgets.find((x) => x.w.network && !x.w.network.fallback) || widgets.find((x) => x.w.network);
   const dns = widgets.find((x) => x.w.dns);
-  const nw = net?.w.network;
-  if (net || dns) {
-    const key = nw?.fallback ? 'fritz' : 'net';
-    const sDown = net ? series(`${key}.down`, since24, now, 72) : null;
-    const sUp = net ? series(`${key}.up`, since24, now, 72) : null;
+  const lan = widgets.find((x) => x.w.lan);
+  /**
+   * Rates plus 24 h series for one reading, from the metrics `<key>.down` / `<key>.up`.
+   * @param {string} key @param {NetworkReading} reading @param {string | null} href
+   * @returns {Traffic}
+   */
+  const traffic = (key, reading, href) => {
+    const sDown = series(`${key}.down`, since24, now, 72);
+    const sUp = series(`${key}.up`, since24, now, 72);
+    return { source: reading.source, href, down: reading.down, up: reading.up, seriesDown: sDown.values, seriesUp: sUp.values, spanH: Math.max(1, Math.round((now - sDown.from) / H)) };
+  };
+  if (net || dns || lan?.w.lan) {
+    const nw = net?.w.network;
     network = {
-      source: nw?.source ?? null,
-      href: net?.s.href ?? null,
-      down: nw?.down ?? null,
-      up: nw?.up ?? null,
-      seriesDown: sDown?.values ?? null,
-      seriesUp: sUp?.values ?? null,
-      spanH: sDown ? Math.max(1, Math.round((now - sDown.from) / H)) : null,
-      dns: dns?.w.dns ? { ...dns.w.dns, href: dns.s.href } : null
+      ...(nw ? traffic(nw.fallback ? 'fritz' : 'net', nw, net.s.href) : { source: null, href: null, down: null, up: null, seriesDown: null, seriesUp: null, spanH: null }),
+      lan: lan?.w.lan ? traffic('lan', lan.w.lan, lan.s.href) : null,
+      dns: dns?.w.dns ? { ...dns.w.dns, href: dns.s.href, name: dns.s.name } : null
     };
   }
 
@@ -291,6 +344,7 @@ export function buildSnapshot(engine) {
     fleetAvail,
     host,
     storage,
+    drives,
     network,
     pinned,
     groups: groups.map((g) => {

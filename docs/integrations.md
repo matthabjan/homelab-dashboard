@@ -23,7 +23,7 @@ A widget adds live data to a service: tile stats, cards on the page and alerts. 
 
 ## Proxmox VE
 
-Provides the **Host** card (CPU, memory, storage, load, uptime, guests), the PVE rows in **Storage**, and guest ids that the PBS widget uses to judge backup age.
+Provides the **Host** card (CPU, memory, storage, uptime, guests), the PVE rows in **Storage**, the host NIC traffic (LAN in and out) in **Network**, the host's physical disks in [**Drives**](#drives), and guest ids that the PBS widget uses to judge backup age.
 
 ```yaml
 widget:
@@ -34,7 +34,7 @@ widget:
   # node: pve2                          # cluster: which node to show (default: settings host.node, else first online)
 ```
 
-**Account.** Create a privilege-separated token with the `PVEAuditor` role on a PVE node. The role is read-only, and its `Sys.Audit` privilege also covers the update count.
+**Account.** Create a privilege-separated token with the `PVEAuditor` role on a PVE node. The role is read-only, and its `Sys.Audit` privilege also covers the update count and the disk list with SMART data.
 
 ```bash
 pveum user add dashboard@pve --comment "homelab dashboard (read-only)"
@@ -60,7 +60,7 @@ PBS storages attached to PVE are left out here; the PBS widget reports them.
 
 ## Proxmox Backup Server
 
-Provides the PBS rows in **Storage**, **backup age** for each guest, and a *Backups completed* event when new backups arrive.
+Provides the PBS rows in **Storage**, **backup age** for each guest, a *Backups completed* event when new backups arrive, and disks passed into the PBS VM (such as a removable offsite disk while it's plugged in) in [**Drives**](#drives).
 
 ```yaml
 widget:
@@ -82,9 +82,16 @@ proxmox-backup-manager acl update /datastore/<store> DatastoreAudit --auth-id 'd
 
 Without `DatastoreAudit` you still see usage, but not backup age. An info alert tells you which privilege is missing.
 
+For **Drives**, the token also needs `Sys.Audit` on `/system/disks` (the `Audit` role on `/` includes it):
+
+```bash
+proxmox-backup-manager acl update /system/disks Audit --auth-id dashboard@pbs
+proxmox-backup-manager acl update /system/disks Audit --auth-id 'dashboard@pbs!dashboard'
+```
+
 **Which backups are checked.** If a Proxmox VE widget is configured, the guests that currently exist in PVE are checked, along with every `host` backup. Without PVE, any backup group that had a backup in the last 14 days is checked. Deleted guests therefore don't cause permanent alerts.
 
-**Removable datastores** (PBS 3.3 and later, such as an offsite USB disk) are expected to be detached most of the time. They show as *detached · last attached … ago*, are left out of the backup-age checks, and raise an info reminder after `thresholds.offsiteMaxDetachedDays`. The last time the disk was attached is stored in the database, so it survives restarts.
+**Removable datastores** (PBS 3.3 and later, such as an offsite USB disk) are expected to be detached most of the time. They show greyed out as *detached …* (time since last attached), with the bar at how full the disk was then, are left out of the backup-age checks, and raise an info reminder after `thresholds.offsiteMaxDetachedDays`. The last time the disk was attached is stored in the database, so it survives restarts.
 
 **Alerts**
 
@@ -119,7 +126,7 @@ Traffic rates come from the difference between two polls, so the first value app
 
 ## OpenMediaVault
 
-Provides the NAS rows in **Storage** (with each disk's SMART result), plus SMART status and service status on the tile.
+Provides the NAS rows in **Storage** (with each disk's SMART result), the disks with SMART monitoring in [**Drives**](#drives), plus SMART status and service status on the tile.
 
 ```yaml
 widget:
@@ -212,6 +219,29 @@ The widget talks TR-064 to port **49000**, or **49443** if `url` is `https://`, 
 | Severity | When |
 |---|---|
 | critical | The internet connection isn't `Connected`. |
+
+---
+
+## Drives
+
+The storage card switches between **Storage** (how full each storage is) and **Drives** (how healthy the physical disks are). The switch appears as soon as a widget reports drives, and each browser remembers the last choice.
+
+| Source | Drives |
+|---|---|
+| Proxmox VE | The node's physical disks (`/nodes/<node>/disks`), including disks or partitions passed to VMs. |
+| OpenMediaVault | Disks with SMART monitoring enabled in OMV, such as a USB disk passed into the VM. |
+| Proxmox Backup Server | Disks passed into the PBS VM, such as a removable datastore's disk while it's plugged in. |
+
+Virtual disks (QEMU, virtio) are skipped, since the host reports the real drive. A disk seen by two sources (passed through whole) is shown once. Each row shows model, type (NVMe, SSD, HDD, USB), size and where it sits, then life left, temperature, power-on time and data written as far as the drive reports them. SATA SSDs that PVE lists as `hdd` with `rpm 0` are shown as SSD. SMART details are read every 10 minutes, since they change slowly and reading them wakes the disks.
+
+**Alerts**
+
+| Severity | When |
+|---|---|
+| critical | SMART reports the drive as failing (or an NVMe critical warning is set). |
+| warning | Life left is at or below `thresholds.driveLifeWarnPct`. |
+| warning | The drive reports media errors, or reallocated, pending or uncorrectable sectors. |
+| warning | The drive is at or above `thresholds.driveTempWarnC`. |
 
 ---
 

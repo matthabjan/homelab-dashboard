@@ -46,3 +46,9 @@ export const fmtPct = (p) => (p == null ? '—' : `${Math.round(p)}%`);
 
 export const pct = (a, b) => (b > 0 ? (a / b) * 100 : null);
 export const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+/** "2 TB", "512 GB": decimal units, the way drives are sold and SMART counts bytes written */
+export const fmtSize = (b) => (b == null ? '—' : b >= 1e12 ? `${Math.round(b / 1e11) / 10} TB` : `${Math.round(b / 1e9)} GB`);
+
+/** Power-on time: "36 h", "317 d", "3.3 y" */
+export const fmtHours = (h) => (h == null ? '—' : h < 48 ? `${h} h` : h < 8766 ? `${Math.round(h / 24)} d` : `${(h / 8766).toFixed(1)} y`);

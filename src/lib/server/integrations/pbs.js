@@ -4,7 +4,8 @@
 // in now and then: detached is normal, they only alert after offsiteMaxDetachedDays, and backup freshness skips them.
 import { trimUrl } from '../http.js';
 import { fmtPair, fmtDuration, fmtPct, pct } from '../format.js';
-/** @import { Alert, StorageRow, UsageRow, WidgetEvent, Context, Widget, WidgetResult } from '$lib/types' */
+import { fromAttributes, isVirtual, kindOf, slowly, toDrive } from './smart.js';
+/** @import { Alert, Drive, StorageRow, UsageRow, WidgetEvent, Context, Widget, WidgetResult } from '$lib/types' */
 
 /** @returns {UsageRow} */
 const usageRow = (name, s) => ({ name, used: s.used, total: s.total, pct: pct(s.used, s.total), sub: fmtPair(s.used, s.total), source: 'pbs' });
@@ -19,15 +20,32 @@ function removableStatus(s, now, maxDays, kv) {
   const stored = kv.get(key);
   const seen = stored ?? { first: now, last: null };
   if (s.total > 0) {
-    kv.set(key, { ...seen, last: now });
+    kv.set(key, { ...seen, last: now, pct: pct(s.used, s.total) });
     return { row: usageRow(`${s.store} · removable`, s) };
   }
   if (!stored) kv.set(key, seen);
   const age = now - (seen.last ?? seen.first);
   return {
-    row: { name: `${s.store} · removable`, offline: true, sub: seen.last ? `detached · last attached ${fmtDuration(age)} ago` : 'detached · never seen attached', source: 'pbs' },
+    // short enough to share the line with the name; the bar keeps how full the disk was when last attached
+    row: { name: `${s.store} · removable`, offline: true, sub: seen.last ? `detached ${fmtDuration(age)}` : 'never attached', pct: seen.pct ?? null, source: 'pbs' },
     alert: age > maxDays * 86_400_000 ? { sev: 'info', key: `detached-${s.store}`, title: `${s.store} detached for ${fmtDuration(age)}`, detail: 'Plug in the offsite disk to refresh its copy' } : null
   };
+}
+
+/**
+ * Disks passed into the PBS VM, e.g. the removable offsite disk while it is plugged in; its own virtual disks are skipped.
+ * Needs Sys.Audit (in the Audit role on /). PBS reports NVMe SMART as named attributes, which fromAttributes reads too.
+ * @param {Context} ctx @param {string} base @param {object} opts
+ * @returns {Promise<Drive[]>}
+ */
+async function pbsDrives(ctx, base, opts) {
+  const url = `${base}/nodes/localhost/disks`;
+  const list = (await ctx.getJson(`${url}/list`, opts)).data ?? [];
+  return Promise.all(list.filter((d) => !isVirtual(d)).map(async (d) => {
+    let reading = null;
+    try { reading = fromAttributes((await ctx.getJson(`${url}/smart?disk=${encodeURIComponent(d.name)}`, opts)).data?.attributes ?? []); } catch { /* status and wearout from the list still show */ }
+    return toDrive({ model: d.model ?? d.name, serial: d.serial, kind: kindOf(d['disk-type'], d.rpm), size: d.size, status: d.status, wearout: d.wearout, smart: reading });
+  }));
 }
 
 /**
@@ -109,6 +127,7 @@ export async function collect(w, ctx) {
     alerts,
     events,
     storage,
+    drives: (await slowly(ctx, 'drives', () => pbsDrives(ctx, base, opts))) ?? [],
     backups: { overdue, oldestAge: oldest?.age ?? null, known: relevant.length > 0 }
   };
 }

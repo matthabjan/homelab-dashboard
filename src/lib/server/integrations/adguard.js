@@ -16,6 +16,8 @@ export async function collect(w, ctx) {
   const blocked = stats.num_blocked_filtering ?? 0;
   const blockedPct = q ? (blocked / q) * 100 : 0;
   const avgMs = (stats.avg_processing_time ?? 0) * 1000;
+  // one point per hour or day, covering AdGuard's statistics interval
+  const series = Array.isArray(stats.dns_queries) ? stats.dns_queries : null;
   /** @type {Alert[]} */
   const alerts = [];
   if (status && status.protection_enabled === false) alerts.push({ sev: 'warn', title: 'DNS protection is paused', detail: 'AdGuard Home filtering is disabled' });
@@ -28,6 +30,6 @@ export async function collect(w, ctx) {
     ],
     line: `${fmtNum(q)} queries · ${blockedPct.toFixed(1)}% blocked`,
     alerts,
-    dns: { queries: q, blockedPct, avgMs, series: Array.isArray(stats.dns_queries) ? stats.dns_queries : null }
+    dns: { queries: q, blockedPct, avgMs, series, period: series ? `${series.length} ${stats.time_units === 'days' ? 'd' : 'h'}` : null }
   };
 }

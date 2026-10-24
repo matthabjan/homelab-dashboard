@@ -39,6 +39,8 @@ export interface Settings {
     storageWarnPct: number;
     tempMinC: number;
     tempWarnC: number;
+    driveLifeWarnPct: number;
+    driveTempWarnC: number;
   };
   retentionDays: number;
 }
@@ -188,6 +190,8 @@ export interface OfflineRow {
   sub: string;
   source: 'pve' | 'pbs' | 'omv';
   offline: true;
+  /** how full it was when last seen, drawn as a grey bar */
+  pct?: number | null;
 }
 
 /** The Proxmox node shown as "host". */
@@ -199,14 +203,13 @@ export interface HostVitals {
   maxmem: number;
   memPct: number;
   disk: { name: string; pct: number | null; sub: string };
-  load: number[] | null;
   uptime: string | null;
   guestsRunning: number;
   guestsTotal: number;
   updates: number | null;
 }
 
-/** WAN traffic in Mbit/s. `fallback`: from the FRITZ!Box, used only when no router reports it. */
+/** Traffic in Mbit/s: WAN from a router (`fallback`: from the FRITZ!Box, used only when no router reports it), or LAN from the Proxmox host NIC (down = into the host). */
 export interface NetworkReading {
   down: number | null;
   up: number | null;
@@ -214,11 +217,49 @@ export interface NetworkReading {
   fallback?: boolean;
 }
 
+/** What SMART says about one drive, whichever format it came in (NVMe log text, ATA attributes, PBS names). */
+export interface SmartReading {
+  tempC: number | null;
+  hours: number | null;
+  /** bytes written over the drive's life */
+  written: number | null;
+  /** % of rated endurance left (100 − NVMe "Percentage Used", or the ATA wear attribute) */
+  lifeLeft: number | null;
+  /** media errors, reallocated, pending and uncorrectable sectors added up */
+  errors: number | null;
+  /** NVMe critical warning set, or an ATA attribute below its threshold */
+  failing: boolean;
+}
+
+/** One physical drive: PVE host disks, and disks passed into the OMV and PBS VMs (virtual disks are skipped). */
+export interface Drive extends Omit<SmartReading, 'failing'> {
+  model: string;
+  serial: string | null;
+  kind: 'NVMe' | 'SSD' | 'HDD' | 'USB';
+  size: number;
+  /** which system sees it: the PVE node; unset means the widget's own service (the snapshot fills in its name) */
+  where?: string;
+  health: 'ok' | 'failing' | 'unknown';
+}
+
+/** Current rates plus their 24 h series, as the network card draws them. */
+export interface Traffic {
+  source: string | null;
+  href: string | null;
+  down: number | null;
+  up: number | null;
+  seriesDown: (number | null)[] | null;
+  seriesUp: (number | null)[] | null;
+  spanH: number | null;
+}
+
 export interface DnsStats {
   queries: number;
   blockedPct: number;
   avgMs: number;
   series: number[] | null;
+  /** what the counts cover, e.g. "24 h" (AdGuard's statistics interval) */
+  period: string | null;
 }
 
 export interface BackupStatus {
@@ -251,6 +292,8 @@ export interface WidgetResult {
   storage?: StorageRow[];
   host?: HostVitals;
   network?: NetworkReading | null;
+  lan?: NetworkReading | null;
+  drives?: Drive[];
   dns?: DnsStats;
   backups?: BackupStatus;
   containers?: ContainerCounts;
@@ -291,7 +334,6 @@ export interface ServiceState {
 
 export interface Temps {
   cpu: number | null;
-  cpuLabel: string | null;
   nvme: number[];
   drives: number[];
 }
@@ -377,18 +419,28 @@ export interface Snapshot {
   /** 48 half-hour buckets, oldest first */
   fleet: (Level | 'none')[];
   fleetAvail: number | null;
-  host: { name: string; href: string | null; detail: string; load: string | null; gauges: Gauge[] } | null;
+  host: { name: string; href: string | null; detail: string; gauges: Gauge[] } | null;
+  /** `off` rows (unavailable, detached, size unknown) draw `pct` as a grey bar: the last known fill, or empty */
   storage: { name: string; pct: number | null; level: Level | 'off'; sub: string; href: string | null }[];
-  network: {
-    source: string | null;
+  /** the storage card's second view; empty when no widget reports drives */
+  drives: {
+    name: string;
+    meta: string;
+    /** every SMART detail as one line, for the tooltip */
+    detail: string;
+    status: string;
+    level: Level;
+    /** % of rated endurance left, drawn as a bar; null when the drive doesn't report it */
+    life: number | null;
+    lifeLevel: Level;
+    facts: Fact[];
     href: string | null;
-    down: number | null;
-    up: number | null;
-    seriesDown: (number | null)[] | null;
-    seriesUp: (number | null)[] | null;
-    spanH: number | null;
-    dns: (DnsStats & { href: string | null }) | null;
-  } | null;
+  }[];
+  network: (Traffic & {
+    /** the Proxmox host NIC, shown under WAN on its own scale */
+    lan: Traffic | null;
+    dns: (DnsStats & { href: string | null; name: string }) | null;
+  }) | null;
   pinned: Tile[];
   groups: { name: string; summary: string; services: Tile[] }[];
   bookmarks: Bookmark[];
