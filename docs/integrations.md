@@ -91,7 +91,7 @@ proxmox-backup-manager acl update /system/disks Audit --auth-id 'dashboard@pbs!d
 
 **Which backups are checked.** If a Proxmox VE widget is configured, the guests that currently exist in PVE are checked, along with every `host` backup. Without PVE, any backup group that had a backup in the last 14 days is checked. Deleted guests therefore don't cause permanent alerts.
 
-**Removable datastores** (PBS 3.3 and later, such as an offsite USB disk) are expected to be detached most of the time. They show as *detached · last attached … ago*, are left out of the backup-age checks, and raise an info reminder after `thresholds.offsiteMaxDetachedDays`. The last time the disk was attached is stored in the database, so it survives restarts.
+**Removable datastores** (PBS 3.3 and later, such as an offsite USB disk) are expected to be detached most of the time. They show greyed out as *detached …* (time since last attached), with the bar at how full the disk was then, are left out of the backup-age checks, and raise an info reminder after `thresholds.offsiteMaxDetachedDays`. The last time the disk was attached is stored in the database, so it survives restarts.
 
 **Alerts**
 

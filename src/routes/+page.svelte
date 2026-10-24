@@ -269,15 +269,10 @@
               {/each}
             {:else}
             {#each snap.storage as s}
+              <!-- an off row (unavailable, detached) is grey: its reason in the sub column, the bar at the last known fill -->
               <div class="bar lv-{s.level}" title="{s.name} · {s.sub}">
-                {#if s.pct != null}
-                  <div class="bar-head"><span class="name">{s.name}</span><span class="mono muted sub">{s.sub}</span><span class="mono pct">{Math.round(s.pct)}%</span></div>
-                  <div class="track"><div class="fill" style:width="{Math.min(100, s.pct)}%"></div></div>
-                {:else}
-                  <!-- unavailable or detached: no bar, so the reason gets its own line instead of a truncated column -->
-                  <div class="bar-head"><span class="name">{s.name}</span><span class="mono pct">—</span></div>
-                  <span class="mono muted off-sub">{s.sub}</span>
-                {/if}
+                <div class="bar-head"><span class="name">{s.name}</span><span class="mono muted sub">{s.sub}</span><span class="mono pct">{s.pct != null ? `${Math.round(s.pct)}%` : '—'}</span></div>
+                <div class="track"><div class="fill" style:width="{Math.min(100, s.pct ?? 0)}%"></div></div>
               </div>
             {/each}
             {/if}
@@ -454,8 +449,8 @@
   .bar-head .sub { flex: 1 1 auto; min-width: 0; text-align: right; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .bar-head .pct { flex: none; }
   .bar.lv-warn .pct, .bar.lv-crit .pct { color: var(--lv); }
+  .bar.lv-off { --fill: color-mix(in srgb, var(--muted) 50%, transparent); }
   .bar.lv-off .name, .bar.lv-off .pct { color: var(--muted); }
-  .bar.lv-off .name { flex: 1 1 auto; max-width: none; }
   .off-sub { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .drive { gap: 6px; }
   .drive + .drive { padding-top: 12px; border-top: 1px solid var(--track); }

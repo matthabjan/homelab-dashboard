@@ -20,13 +20,14 @@ function removableStatus(s, now, maxDays, kv) {
   const stored = kv.get(key);
   const seen = stored ?? { first: now, last: null };
   if (s.total > 0) {
-    kv.set(key, { ...seen, last: now });
+    kv.set(key, { ...seen, last: now, pct: pct(s.used, s.total) });
     return { row: usageRow(`${s.store} · removable`, s) };
   }
   if (!stored) kv.set(key, seen);
   const age = now - (seen.last ?? seen.first);
   return {
-    row: { name: `${s.store} · removable`, offline: true, sub: seen.last ? `detached · last attached ${fmtDuration(age)} ago` : 'detached · never seen attached', source: 'pbs' },
+    // short enough to share the line with the name; the bar keeps how full the disk was when last attached
+    row: { name: `${s.store} · removable`, offline: true, sub: seen.last ? `detached ${fmtDuration(age)}` : 'never attached', pct: seen.pct ?? null, source: 'pbs' },
     alert: age > maxDays * 86_400_000 ? { sev: 'info', key: `detached-${s.store}`, title: `${s.store} detached for ${fmtDuration(age)}`, detail: 'Plug in the offsite disk to refresh its copy' } : null
   };
 }

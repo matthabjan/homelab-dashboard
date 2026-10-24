@@ -215,8 +215,8 @@ export function buildSnapshot(engine) {
     // sources follow services.yaml; within one, by name: APIs (cluster/resources) don't keep a stable order,
     // and an offline row keeps its place instead of jumping to the end
     for (const x of [...(w?.storage || [])].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))) {
-      // unavailable, detached or of unknown size: shown muted without a bar, the widget raises any alert itself
-      if (x.offline || x.pct == null) { storage.push({ name: x.name, pct: null, level: 'off', sub: x.sub, href: s.href }); continue; }
+      // unavailable, detached or of unknown size: a grey bar (last known fill, if any), the widget raises any alert itself
+      if (x.offline || x.pct == null) { storage.push({ name: x.name, pct: x.pct ?? null, level: 'off', sub: x.sub, href: s.href }); continue; }
       /** @type {Level} */
       const lv = x.pct >= th.storageWarnPct ? 'crit' : x.pct >= th.storageAmberPct ? 'warn' : 'ok';
       storage.push({ name: x.name, pct: x.pct, level: lv, sub: x.sub, href: s.href });
