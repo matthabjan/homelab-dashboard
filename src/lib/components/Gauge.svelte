@@ -21,7 +21,7 @@
   <span class="label">{g.label}</span>
   <span class="mono sub">{g.sub ?? ''}</span>
   <div class="spark">
-    {#if g.series}<Sparkline values={g.series} max={g.max} min={g.max ? 0 : null} color="var(--arc)" label="{g.label}, last 24 hours" />{/if}
+    {#if g.series}<Sparkline values={g.series} min={null} minSpan={g.max ? 10 : 4} color="var(--arc)" label="{g.label}, recent history" />{/if}
   </div>
 </div>
 

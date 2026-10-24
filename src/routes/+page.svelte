@@ -232,10 +232,10 @@
                 <div><div class="mono big" style:color="var(--acc-2)">{fmtRate(snap.network.up)}</div><div class="muted small">Mbit/s up</div></div>
               </div>
               <div class="netchart">
-                <div class="layer"><Sparkline values={snap.network.seriesDown} color="var(--acc)" area height={60} min={0} label="WAN download, last 24 hours" /></div>
+                <div class="layer"><Sparkline values={snap.network.seriesDown} color="var(--acc)" area height={60} min={0} label="WAN download, last {snap.network.spanH ?? 24} hours" /></div>
                 <div class="layer"><Sparkline values={snap.network.seriesUp} color="var(--acc-2)" height={60} min={0} max={Math.max(1, ...(snap.network.seriesDown ?? []).filter((v) => v != null)) * 1.1} /></div>
               </div>
-              <span class="muted small">{snap.network.source} · WAN · 24 h</span>
+              <span class="muted small">{snap.network.source} · WAN · {snap.network.spanH ?? 24} h</span>
             {/if}
             {#if snap.network.dns}
               <div class="dns">

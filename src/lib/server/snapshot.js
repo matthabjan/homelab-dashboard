@@ -119,7 +119,7 @@ export function buildSnapshot(engine) {
   const hostSvc = engine.cfg.services.find((s) => (settings.host.service ? s.name === settings.host.service : s.widget?.type === 'proxmox'));
   const hw = hostSvc ? engine.state(hostSvc.id).widget?.host : null;
   const since24 = now - 24 * H;
-  const spark = (key) => series(key, since24, now, 48);
+  const spark = (key) => series(key, since24, now, 48).values;
   let host = null;
   if (hw || engine.temps) {
     const temps = engine.temps;
@@ -166,13 +166,16 @@ export function buildSnapshot(engine) {
   const dns = widgets.find((x) => x.w.dns);
   if (net || dns) {
     const key = net?.w.network.fallback ? 'fritz' : 'net';
+    const sDown = net ? series(`${key}.down`, since24, now, 72) : null;
+    const sUp = net ? series(`${key}.up`, since24, now, 72) : null;
     network = {
       source: net?.w.network.source ?? null,
       href: net?.s.href ?? null,
       down: net?.w.network.down ?? null,
       up: net?.w.network.up ?? null,
-      seriesDown: net ? series(`${key}.down`, since24, now, 72) : null,
-      seriesUp: net ? series(`${key}.up`, since24, now, 72) : null,
+      seriesDown: sDown?.values ?? null,
+      seriesUp: sUp?.values ?? null,
+      spanH: sDown ? Math.max(1, Math.round((now - sDown.from) / H)) : null,
       dns: dns ? { ...dns.w.dns, href: dns.s.href } : null
     };
   }

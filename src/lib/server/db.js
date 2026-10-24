@@ -66,18 +66,24 @@ export function probeBuckets(since, bucketMs) {
   ).all(since, bucketMs, since);
 }
 
-/** Averaged series for a metric, resampled into `points` buckets (null where no data). */
+/**
+ * Averaged series for a metric, resampled into up to `points` buckets (null where no data).
+ * Starts at the oldest sample when the history is shorter than the window, so a fresh install
+ * shows a full-width line instead of a dot at the right edge. `from` is where it starts.
+ */
 export function series(key, since, until, points) {
   const rows = stmt('SELECT ts, v FROM metrics WHERE key = ? AND ts >= ? ORDER BY ts').all(key, since);
-  const span = (until - since) / points;
-  const sums = new Array(points).fill(0);
-  const counts = new Array(points).fill(0);
+  const from = rows.length ? rows[0].ts : since;
+  const n = Math.max(1, Math.min(points, Math.ceil(rows.length / 2))); // ~2 samples per bucket: no gaps from timer jitter
+  const span = (until - from) / n || 1;
+  const sums = new Array(n).fill(0);
+  const counts = new Array(n).fill(0);
   for (const r of rows) {
-    const i = Math.min(points - 1, Math.floor((r.ts - since) / span));
+    const i = Math.min(n - 1, Math.floor((r.ts - from) / span));
     sums[i] += r.v;
     counts[i]++;
   }
-  return sums.map((s, i) => (counts[i] ? s / counts[i] : null));
+  return { values: sums.map((s, i) => (counts[i] ? s / counts[i] : null)), from };
 }
 
 export function recordOpen(sid) {
