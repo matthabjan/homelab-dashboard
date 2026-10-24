@@ -11,3 +11,13 @@ data
 !.env.example
 secrets
 *.log
+compose*.yaml
+*.code-workspace
+.vscode
+.idea
+docker-compose*.y*ml
+certs
+*.pem
+*.key
+*.htpasswd
+.htpasswd

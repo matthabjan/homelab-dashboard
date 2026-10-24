@@ -1,3 +1,5 @@
+# New releases wait out a 7-day cooldown before Dependabot proposes them: most compromised
+# packages are caught and pulled within days.
 version: 2
 updates:
   - package-ecosystem: npm
@@ -5,6 +7,8 @@ updates:
     target-branch: development
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     ignore:
       # Majors (SvelteKit, Vite, Svelte …) are upgraded deliberately.
       - dependency-name: '*'
@@ -18,6 +22,8 @@ updates:
     target-branch: development
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     ignore:
       # node major bumps are upgraded deliberately.
       - dependency-name: '*'
@@ -28,6 +34,8 @@ updates:
     target-branch: development
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     ignore:
       # Action majors are only exercised by a real release run; bump them deliberately.
       - dependency-name: '*'

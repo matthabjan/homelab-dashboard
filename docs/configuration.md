@@ -1,0 +1,230 @@
+# Configuration reference
+
+All configuration lives in one folder: `CONFIG_DIR`, which is `/config` in the container and `./config` when you run from a checkout. Start from [config.example/](../config.example).
+
+```
+config/
+├── settings.yaml     # title, theme, thresholds, intervals …
+├── services.yaml     # your services, in groups (gethomepage format)
+├── bookmarks.yaml    # links in the footer and the command palette
+├── icons/            # your own service icons (optional)
+└── images/           # app icon, logo, favicon
+```
+
+**Reloading.** Saving any `*.yaml` file in the folder reloads the config within a second. You don't need to restart, and history is kept. Files in `icons/` and `images/` are read when they are requested, but browsers cache them for up to 5 minutes. A file with a YAML syntax error is logged (`[config] services.yaml: …`) and treated as empty until you fix it.
+
+---
+
+## `settings.yaml`
+
+Every key is optional. Anything you leave out keeps its default, and nested objects are merged key by key.
+
+### General
+
+| Key | Default | Description |
+|---|---|---|
+| `title` | `Homelab` | Page title and the default name of the installed app. |
+| `theme` | `system` | Default theme for new visitors: `system`, `light` or `dark`. Each viewer can switch in the header, and the choice is remembered per device. |
+| `accent` | `#4F8DF7` | Accent colour as a hex value (`#rgb` to `#rrggbbaa`). An invalid value falls back to the default. |
+| `linkTarget` | `_blank` | Where service links open: `_blank` (a new tab) or `_self`. |
+| `tlsVerify` | `true` | Verify TLS certificates when calling widget APIs. You can override it per service. See [TLS for widget APIs](deployment.md#tls-for-widget-apis). |
+| `deepLink` | none | A header button that links to a detailed-metrics tool, as `{ name, href }`. |
+| `retentionDays` | `30` | How many days of probes, metrics and events to keep. Older rows are deleted every 6 hours. |
+
+```yaml
+deepLink:
+  name: Pulse
+  href: https://pulse.home.arpa
+```
+
+### `pwa`: app icon and logo
+
+Paths are relative to the config folder (served under `/assets/`), or full `https://` URLs.
+
+| Key | Default | Description |
+|---|---|---|
+| `name` | `title` | Name of the installed app. |
+| `shortName` | `title` | Name under the icon on the home screen. |
+| `logo` | `images/android-chrome-192x192.png` | Logo in the header. |
+| `icon192` | `images/android-chrome-192x192.png` | PNG app icon, 192×192. |
+| `icon512` | `images/android-chrome-512x512.png` | PNG app icon, 512×512. It is also used as the maskable icon, so keep the important parts inside the middle 80%. |
+| `appleTouchIcon` | `images/apple-touch-icon.png` | iOS home-screen icon (180×180). |
+| `favicon` | `images/favicon.ico` | Browser tab icon. |
+| `background` | `#0A0D12` | Splash-screen and title-bar colour of the installed app. |
+
+### `host`: the Host card
+
+| Key | Default | Description |
+|---|---|---|
+| `service` | first `proxmox` widget | Name of the service (as written in `services.yaml`) whose Proxmox node is shown as the host. |
+| `node` | first online node | Proxmox node to show, for clusters. A widget's own `node:` takes precedence. |
+| `temperature` | `true` | Read CPU and NVMe temperatures from the kernel (`/sys/class/hwmon`). |
+| `storage` | automatic | PVE storage shown on the host's storage gauge. By default it is the largest local storage that holds guest disks (`images` / `rootdir` content), otherwise the root filesystem. |
+| `storages` | all | List of PVE storage names to show in the Storage card. |
+
+### `network`: the Network card
+
+| Key | Default | Description |
+|---|---|---|
+| `service` | OPNsense, else FRITZ!Box | Name of the service whose widget provides the WAN traffic. |
+
+### `intervals` (seconds)
+
+| Key | Default | Description |
+|---|---|---|
+| `probe` | `30` | Reachability check for every `siteMonitor`. |
+| `widgets` | `60` | Polling of widget APIs and host temperatures. |
+| `cert` | `21600` | TLS certificate check (every 6 h). |
+
+The page shows a "stale" notice when no update has arrived for 2.5 × the longer of `probe` and `widgets`.
+
+### `thresholds`
+
+| Key | Default | Effect |
+|---|---|---|
+| `latencyWarnMs` | `250` | A service is *Slow* when its p95 latency over the last hour is above this value. It needs at least 10 samples first. You can override it per service. |
+| `certWarnDays` | `14` | Warn when a certificate expires within this many days. Under 3 days is critical. |
+| `backupMaxAgeHours` | `26` | A guest's last backup older than this is *overdue*. |
+| `offsiteMaxDetachedDays` | `135` | Remind you when a removable PBS datastore hasn't been attached for this long. |
+| `storageAmberPct` | `70` | The storage bar turns amber. |
+| `storageWarnPct` | `85` | The storage bar turns red and raises an alert. |
+| `tempMinC` | `30` | Bottom of the temperature gauge's scale. |
+| `tempWarnC` | `75` | Warn at this CPU temperature; at +10 °C it is critical. NVMe drives warn at 70 °C. |
+
+CPU and memory gauges use fixed limits: CPU warns at 75% and is critical at 90%, memory at 80% and 92%.
+
+---
+
+## `services.yaml`
+
+A list of groups. Each group is a list of services. This is the [gethomepage format](https://gethomepage.dev/configs/services/), so existing files work as they are.
+
+```yaml
+- Infrastructure:            # group
+    - Proxmox VE:            # service name (shown on the tile)
+        icon: proxmox
+        href: https://pve.home.arpa:8006
+        description: Virtualization
+        siteMonitor: https://pve.home.arpa:8006
+        pinned: true
+        widget:
+          type: proxmox
+          url: https://pve.home.arpa:8006
+          username: dashboard@pve!dashboard
+          password: ${PVE_TOKEN_SECRET}
+```
+
+| Key | Description |
+|---|---|
+| `href` | Where the tile links to. |
+| `description` | Second line of the tile when the widget has nothing more specific to show. |
+| `icon` | See [Icons](#icons). Without one, a monogram is generated. |
+| `iconDark` | Icon used in dark mode. |
+| `siteMonitor` | URL checked every `intervals.probe` seconds, which gives up/down status, uptime and latency. Any response below 500 counts as up, including the 401 a login page returns. Two failures in a row mark the service down. `https://` URLs also get certificate-expiry checks. `probe` is accepted as an alias. |
+| `pinned` | `true` shows the service in the *Pinned* row. Pinned services are ordered by how often you open them. |
+| `latencyWarnMs` | The *Slow* limit for this service, overriding `thresholds.latencyWarnMs`. |
+| `tlsVerify` | `false` accepts a self-signed certificate on this service's **widget** API. It overrides the global `tlsVerify`. |
+| `widget` | Live data from the service's API. See [Integrations](integrations.md) for each `type`. |
+
+Service names should be unique within a group. A service's id is derived from its group and name, and the id is what uptime history and open counts are stored under, so **renaming a service or its group starts its history from scratch**.
+
+Widgets of a type this dashboard doesn't implement are ignored, and the tile still works.
+
+---
+
+## `bookmarks.yaml`
+
+Links at the bottom of the page. They can also be found in the command palette. This is the gethomepage format:
+
+```yaml
+- Links:
+    - GitHub:
+        - icon: github
+          href: https://github.com/
+```
+
+`icon` and `iconDark` work as they do for services.
+
+---
+
+## Icons
+
+`icon:` (and `iconDark:`) accepts:
+
+| Form | Example | Source |
+|---|---|---|
+| File name in `config/icons/` | `nas.png`, or `nas` (tries `.png`, `.svg`, `.webp`) | Your own file |
+| [dashboard-icons](https://github.com/homarr-labs/dashboard-icons) name | `proxmox`, `adguard-home.svg` | jsDelivr CDN (PNG unless an extension is given) |
+| `sh-<name>` | `sh-immich` | [selfh.st icons](https://selfh.st/icons/) via jsDelivr |
+| URL | `https://example.com/logo.png` | Loaded directly by the browser |
+| Path | `/icons/nas.png`, `/images/logo.png` | A file in the config folder |
+
+A local file in `config/icons/` with a matching name takes precedence over the CDN. gethomepage's `mdi-*` and `si-*` icons are not supported, and those services show a monogram instead. A monogram is also shown when an icon fails to load.
+
+Local files can be `png`, `svg`, `webp`, `jpg`, `jpeg`, `gif` or `ico`. Local SVGs are served with a restrictive Content-Security-Policy, so scripts inside them don't run.
+
+---
+
+## Secrets and variables
+
+Any string in the three YAML files can contain placeholders:
+
+| Syntax | Resolved from |
+|---|---|
+| `${NAME}` | See the order below |
+| `{{HOMEPAGE_VAR_NAME}}` | The environment variable `HOMEPAGE_VAR_NAME`, otherwise the same order as `${NAME}` |
+| `{{HOMEPAGE_FILE_NAME}}` | The contents of the file whose path is in the environment variable `HOMEPAGE_FILE_NAME` |
+
+`${NAME}` is resolved from the first of these that exists:
+
+1. the environment variable `NAME`
+2. the file whose path is in the environment variable `NAME_FILE`
+3. the file `/run/secrets/name` (the name in **lowercase**), which is where Docker and Compose secrets are mounted
+
+The container runs as UID 1000, which must be able to read the file. Surrounding whitespace in secret files is trimmed. A secret that isn't found becomes an empty string and logs `[config] NAME is not set`. Names may contain `A–Z`, `0–9` and `_`.
+
+Prefer files (option 3) over environment variables: environment variables are visible in `docker inspect`. Secrets are only used on the server and are never sent to the browser.
+
+---
+
+## Services from container labels
+
+Like gethomepage, the dashboard can create tiles from `homepage.*` labels on Docker containers. It reads the labels through the [Portainer widget](integrations.md#portainer), so at least one `portainer` widget must be configured.
+
+```yaml
+labels:
+  - homepage.group=Management
+  - homepage.name=Traefik
+  - homepage.icon=traefik
+  - homepage.href=https://traefik.home.arpa
+  - homepage.siteMonitor=https://traefik.home.arpa
+```
+
+- `homepage.group` and `homepage.name` are required. Every other `homepage.<key>` maps to the YAML key of the same name, and nested keys use dots (`homepage.widget.type=adguard`). The values `true` and `false` become booleans.
+- `homepage.weight` sets the order within the group (lowest first, then by name).
+- A labelled service joins the `services.yaml` group with the same name, or creates a new group at the end. If `services.yaml` already defines a service with the same group and name, that one is used and the label is ignored.
+- A labelled service **without** `siteMonitor` uses the container's state as its health: running, unhealthy, restarting or exited.
+- Label values are **used literally**. `${…}` placeholders are not filled in, so a container image can't extract your secrets. Define services whose widgets need credentials in `services.yaml`.
+- Add `dashboard.ignore=true` to a container to hide it from discovery and from the container counts.
+
+---
+
+## Environment variables
+
+| Variable | Default (image) | Description |
+|---|---|---|
+| `CONFIG_DIR` | `/config` | Config folder. Outside the image the default is `./config`. |
+| `DATA_DIR` | `/data` | Where `dashboard.db` (history) is stored. Outside the image the default is `./data`. |
+| `SECRETS_DIR` | `/run/secrets` | Folder searched for `${NAME}` secret files. |
+| `TZ` | `UTC` | Time zone for the times shown, such as "down since 14:02". |
+| `PORT` | `3000` | Listening port. |
+| `HOST` | `0.0.0.0` | Listening address. |
+| `ORIGIN` | none | Public URL, such as `https://dashboard.example.com`. Use it instead of `PROTOCOL_HEADER` / `HOST_HEADER` when the proxy doesn't send them. |
+| `PROTOCOL_HEADER`, `HOST_HEADER` | none | Behind a reverse proxy: the headers carrying the original scheme and host (`x-forwarded-proto`, `x-forwarded-host`). |
+| `ADDRESS_HEADER`, `XFF_DEPTH` | none | Behind a reverse proxy: the header and depth for the real client IP (`x-forwarded-for`, `1` for one proxy). They are needed for the per-client stream limit. |
+| `NODE_EXTRA_CA_CERTS` | none | PEM file of extra CAs to trust for widget APIs, such as your own CA. |
+| `DEMO` | none | `1` uses sample data instead of real APIs. |
+| `DEMO_SCENARIO` | `issues` | `issues` (several problems) or `calm` (everything healthy). |
+| `HWMON_DIR` | `/sys/class/hwmon` | Where temperatures are read from. |
+
+`PORT`, `HOST`, `ORIGIN` and the `*_HEADER` variables come from SvelteKit's Node adapter. See [its documentation](https://svelte.dev/docs/kit/adapter-node#Environment-variables) for the rest, such as `BODY_SIZE_LIMIT` and `SHUTDOWN_TIMEOUT`.
