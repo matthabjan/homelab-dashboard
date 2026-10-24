@@ -199,7 +199,6 @@ export interface HostVitals {
   maxmem: number;
   memPct: number;
   disk: { name: string; pct: number | null; sub: string };
-  load: number[] | null;
   uptime: string | null;
   guestsRunning: number;
   guestsTotal: number;
@@ -305,7 +304,6 @@ export interface ServiceState {
 
 export interface Temps {
   cpu: number | null;
-  cpuLabel: string | null;
   nvme: number[];
   drives: number[];
 }
@@ -391,7 +389,7 @@ export interface Snapshot {
   /** 48 half-hour buckets, oldest first */
   fleet: (Level | 'none')[];
   fleetAvail: number | null;
-  host: { name: string; href: string | null; detail: string; load: string | null; gauges: Gauge[] } | null;
+  host: { name: string; href: string | null; detail: string; gauges: Gauge[] } | null;
   storage: { name: string; pct: number | null; level: Level | 'off'; sub: string; href: string | null }[];
   network: (Traffic & {
     /** the Proxmox host NIC, shown under WAN on its own scale */

@@ -19,7 +19,7 @@ export async function readTemps() {
   let dirs;
   try { dirs = await fs.readdir(HWMON); } catch { return null; }
   /** @type {Temps} */
-  const out = { cpu: null, cpuLabel: null, nvme: [], drives: [] };
+  const out = { cpu: null, nvme: [], drives: [] };
   for (const d of dirs) {
     const dir = path.join(HWMON, d);
     const name = await readStr(path.join(dir, 'name'));
@@ -36,7 +36,7 @@ export async function readTemps() {
     if (CPU_DRIVERS.includes(name)) {
       const pref = temps.find((t) => /Package id 0|Tctl|Tdie/i.test(t.label)) || temps.reduce((a, b) => (b.c > a.c ? b : a));
       // prefer real CPU drivers over acpitz
-      if (out.cpu == null || name !== 'acpitz') { out.cpu = pref.c; out.cpuLabel = name; }
+      if (out.cpu == null || name !== 'acpitz') out.cpu = pref.c;
     } else if (name === 'nvme') {
       out.nvme.push((temps.find((t) => /Composite/i.test(t.label)) || temps[0]).c);
     } else if (name === 'drivetemp') {

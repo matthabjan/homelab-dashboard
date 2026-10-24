@@ -31,7 +31,7 @@ export function demoCert(s) {
 }
 
 export function demoTemps() {
-  return { cpu: 48 + Math.random() * 6, cpuLabel: 'coretemp', nvme: [44], drives: [] };
+  return { cpu: 48 + Math.random() * 6, nvme: [44], drives: [] };
 }
 
 /** Fill 24 h of history so sparklines and the availability strip have something to show. */

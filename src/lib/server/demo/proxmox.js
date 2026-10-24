@@ -18,7 +18,6 @@ export default {
         : storage('nas-backup', 'nfs', 'backup', 1.1 * TiB, 4 * TiB, { shared: 1 })
     ]
   }),
-  'GET /api2/json/nodes/:node/status': () => ({ data: { loadavg: ['1.42', '1.38', '1.21'] } }),
   // host NIC, bytes/s per minute; the newest point is still being filled, as in the real RRD
   'GET /api2/json/nodes/:node/rrddata': ({ now }) => ({
     data: Array.from({ length: 70 }, (_, i) => {

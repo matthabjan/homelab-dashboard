@@ -160,7 +160,7 @@ export function buildSnapshot(engine) {
     if (temps?.cpu != null) {
       const span = th.tempWarnC + 15 - th.tempMinC;
       const tp = Math.max(0, Math.min(100, ((temps.cpu - th.tempMinC) / span) * 100));
-      gauges.push({ key: 'temp', label: 'CPU temp', val: Math.round(temps.cpu), unit: '°C', pct: tp, level: level(temps.cpu, th.tempWarnC, th.tempWarnC + 10), sub: temps.nvme.length ? `NVMe ${Math.round(Math.max(...temps.nvme))} °C` : temps.cpuLabel, series: spark('host.temp'), max: null });
+      gauges.push({ key: 'temp', label: 'CPU temp', val: Math.round(temps.cpu), unit: '°C', pct: tp, level: level(temps.cpu, th.tempWarnC, th.tempWarnC + 10), sub: `warn at ${th.tempWarnC} °C`, series: spark('host.temp'), max: null });
       if (temps.cpu >= th.tempWarnC) attention.push({ sev: temps.cpu >= th.tempWarnC + 10 ? 'crit' : 'warn', title: `CPU at ${Math.round(temps.cpu)} °C`, detail: `limit ${th.tempWarnC} °C`, href: hostSvc?.href, ts: now });
       for (const n of temps.nvme) if (n >= 70) attention.push({ sev: 'warn', title: `NVMe at ${Math.round(n)} °C`, detail: 'drive is running hot', href: hostSvc?.href, ts: now });
     }
@@ -168,7 +168,6 @@ export function buildSnapshot(engine) {
       name: hw?.node ?? 'host',
       href: hostSvc?.href ?? null,
       detail: hw ? [`up ${hw.uptime}`, `${hw.guestsRunning} of ${hw.guestsTotal} guests running`].join(' · ') : '',
-      load: hw?.load ? hw.load.map((l) => l.toFixed(2)).join(' · ') : null,
       gauges
     };
   }

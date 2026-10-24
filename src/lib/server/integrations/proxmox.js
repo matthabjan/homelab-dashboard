@@ -49,8 +49,6 @@ export async function collect(w, ctx) {
 
   const { storages, down, main, missing } = nodeStorages(res, node.node, ctx.settings.host);
 
-  let status = null;
-  try { status = (await ctx.getJson(`${base}/nodes/${node.node}/status`, opts)).data; } catch { /* optional */ }
   let updates = null;
   try { updates = (await ctx.getJson(`${base}/nodes/${node.node}/apt/update`, opts)).data?.length ?? null; } catch { /* needs Sys.Audit */ }
   // the host NIC: LAN traffic to and from the server (NAS, backups, apps). RRD points are bytes/s averages; the newest can still be empty
@@ -100,7 +98,6 @@ export async function collect(w, ctx) {
       disk: main
         ? { name: main.storage, pct: pct(main.disk, main.maxdisk), sub: fmtPair(main.disk, main.maxdisk) }
         : { name: 'root', pct: rootPct, sub: fmtPair(node.disk, node.maxdisk) },
-      load: status?.loadavg?.map(Number) ?? null,
       uptime: node.uptime ? fmtDuration(node.uptime * 1000) : null,
       guestsRunning: running,
       guestsTotal: guests.length,

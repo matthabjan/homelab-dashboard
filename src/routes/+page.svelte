@@ -223,7 +223,6 @@
                 <h2>{#if snap.host.href}<a href={snap.host.href} target={target} rel="noopener">{snap.host.name}</a>{:else}{snap.host.name}{/if}</h2>
                 <span class="muted small">{snap.host.detail}</span>
               </div>
-              {#if snap.host.load}<span class="mono muted small">load {snap.host.load}</span>{/if}
             </div>
             <div class="gauges">
               {#each snap.host.gauges as g (g.key)}<Gauge {g} />{/each}
