@@ -24,6 +24,14 @@ const firstSeen = new Map();
 
 const level = (v, warn, crit) => (v == null ? 'none' : v >= crit ? 'crit' : v >= warn ? 'warn' : 'ok');
 
+/** Status of a label-discovered container without a siteMonitor. The Portainer widget raises its alerts. */
+function containerStatus({ state, health, exitCode }) {
+  if (state === 'running' && health === 'unhealthy') return { lvl: 'warn', status: 'Unhealthy', line: 'Container unhealthy' };
+  if (state === 'running') return { lvl: 'ok', status: 'Up', line: null };
+  if (state === 'restarting') return { lvl: 'crit', status: 'Down', line: 'Container restarting' };
+  return { lvl: 'crit', status: 'Down', line: `Container ${state}${exitCode ? ` · exit ${exitCode}` : ''}` };
+}
+
 export function buildSnapshot(engine) {
   const { settings, groups, bookmarks } = engine.cfg;
   const th = settings.thresholds;
@@ -43,6 +51,11 @@ export function buildSnapshot(engine) {
       let status = lvl === 'ok' ? 'Up' : 'Checking';
       let line = w?.line || s.description || '';
       let lineLevel = null;
+      const ct = !s.probe && s.container ? containerStatus(s.container) : null;
+      if (ct) {
+        ({ lvl, status } = ct);
+        if (ct.line) { line = ct.line; lineLevel = lvl; }
+      }
 
       const push = (a) => attention.push({ ...a, sid: s.id, service: s.name, href: s.href, ts: a.ts ?? w?.ts ?? now });
 
@@ -119,7 +132,7 @@ export function buildSnapshot(engine) {
   const hostSvc = engine.cfg.services.find((s) => (settings.host.service ? s.name === settings.host.service : s.widget?.type === 'proxmox'));
   const hw = hostSvc ? engine.state(hostSvc.id).widget?.host : null;
   const since24 = now - 24 * H;
-  const spark = (key) => series(key, since24, now, 48);
+  const spark = (key) => series(key, since24, now, 48).values;
   let host = null;
   if (hw || engine.temps) {
     const temps = engine.temps;
@@ -159,17 +172,23 @@ export function buildSnapshot(engine) {
   // ---- network ----
   let network = null;
   const widgets = engine.cfg.services.map((s) => ({ s, w: engine.state(s.id).widget })).filter((x) => x.w);
-  const net = widgets.find((x) => x.w.network && !x.w.network.fallback) || widgets.find((x) => x.w.network);
+  const netPick = settings.network?.service;
+  const net = netPick
+    ? widgets.find((x) => x.s.name === netPick && x.w.network)
+    : widgets.find((x) => x.w.network && !x.w.network.fallback) || widgets.find((x) => x.w.network);
   const dns = widgets.find((x) => x.w.dns);
   if (net || dns) {
     const key = net?.w.network.fallback ? 'fritz' : 'net';
+    const sDown = net ? series(`${key}.down`, since24, now, 72) : null;
+    const sUp = net ? series(`${key}.up`, since24, now, 72) : null;
     network = {
       source: net?.w.network.source ?? null,
       href: net?.s.href ?? null,
       down: net?.w.network.down ?? null,
       up: net?.w.network.up ?? null,
-      seriesDown: net ? series(`${key}.down`, since24, now, 72) : null,
-      seriesUp: net ? series(`${key}.up`, since24, now, 72) : null,
+      seriesDown: sDown?.values ?? null,
+      seriesUp: sUp?.values ?? null,
+      spanH: sDown ? Math.max(1, Math.round((now - sDown.from) / H)) : null,
       dns: dns ? { ...dns.w.dns, href: dns.s.href } : null
     };
   }

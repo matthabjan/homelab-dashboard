@@ -115,9 +115,13 @@ h1, h2, h3 { margin: 0; }
 .muted { color: var(--muted); }
 .card { background: var(--surface); border-radius: 20px; box-shadow: var(--shadow); }
 .lift { transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1), background 0.18s, box-shadow 0.18s; }
-@media (hover: hover) { .lift:hover { transform: translateY(-2px); } }
+/* phones get no hover lift, only the press scale */
+@media (hover: hover) and (not (max-width: 760px)) { .lift:hover { transform: translateY(-2px); } }
 .lift:active { transform: scale(0.98); }
 :focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; border-radius: 6px; }
+/* markup that differs per form factor; the phone breakpoint is 760px everywhere */
+@media not all and (max-width: 760px) { .only-phone { display: none !important; } }
+@media (max-width: 760px) { .only-desktop { display: none !important; } }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: 0 0 auto; }
 .lv-ok { --lv: var(--ok); --lv-soft: var(--ok-soft); }

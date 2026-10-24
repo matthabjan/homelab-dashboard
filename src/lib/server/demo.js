@@ -72,8 +72,12 @@ export async function demoCollect(type, w, ctx) {
         network: { down, up, source: 'OPNsense' }
       };
     }
-    case 'fritzbox':
-      return { stats: [{ k: 'internet', v: 'online', level: 'ok' }, { k: 'max ↓ Mbit/s', v: '250' }, { k: 'max ↑ Mbit/s', v: '40' }], line: 'Online · 250 / 40 Mbit/s · up 12 d', alerts: [] };
+    case 'fritzbox': {
+      const down = 30 + Math.random() * 80, up = 4 + Math.random() * 12;
+      ctx.metric('fritz.down', down);
+      ctx.metric('fritz.up', up);
+      return { stats: [{ k: 'internet', v: 'online', level: 'ok' }, { k: 'max ↓ Mbit/s', v: '250' }, { k: 'max ↑ Mbit/s', v: '40' }], line: 'Online · 250 / 40 Mbit/s · up 12 d', alerts: [], network: { down, up, source: 'FRITZ!Box', fallback: true } };
+    }
     case 'adguard': {
       const series = Array.from({ length: 24 }, (_, i) => 1400 + Math.round(Math.sin((i - 6) / 3.8) * 900 + 900));
       return {
@@ -90,7 +94,9 @@ export async function demoCollect(type, w, ctx) {
         stats: [{ k: 'running', v: bad ? '24' : '25' }, { k: 'stopped', v: bad ? '1' : '0', level: bad ? 'crit' : null }, { k: 'unhealthy', v: '0' }],
         line: bad ? '24 / 25 running · 1 failed' : '25 / 25 running',
         alerts: bad ? [{ sev: 'warn', key: 'ct-music-assistant', title: 'Container music-assistant stopped', detail: 'Exited (1) 1 hour ago · 5 restarts' }] : [],
-        containers: ctx.shared.containers
+        containers: ctx.shared.containers,
+        discovered: [{ group: 'Management', name: 'Traefik', def: { icon: 'traefik', href: 'https://traefik.home.arpa', description: 'Reverse proxy · from container labels', siteMonitor: 'https://traefik.home.arpa' }, container: { state: 'running', health: null, exitCode: 0 } },
+          { group: 'Management', name: 'What\'s Up Docker', def: { icon: 'whats-up-docker', href: 'https://wud.home.arpa', description: 'Image updates · container state only' }, container: { state: 'running', health: 'healthy', exitCode: 0 } }]
       };
     }
     case 'openmediavault':

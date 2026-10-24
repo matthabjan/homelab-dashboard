@@ -22,7 +22,8 @@ export async function collect(w, ctx) {
 
   const wanted = ctx.settings.host.storages;
   const storages = res
-    .filter((r) => r.type === 'storage' && r.node === node.node && r.status === 'available' && r.maxdisk > 0)
+    // PBS datastores attached to PVE are reported by the PBS widget, and they aren't host disks
+    .filter((r) => r.type === 'storage' && r.node === node.node && r.status === 'available' && r.maxdisk > 0 && r.plugintype !== 'pbs')
     .filter((r) => (wanted ? wanted.includes(r.storage) : true))
     .map((s) => ({ name: s.storage, used: s.disk, total: s.maxdisk, pct: pct(s.disk, s.maxdisk), sub: fmtPair(s.disk, s.maxdisk), source: 'pve' }));
 

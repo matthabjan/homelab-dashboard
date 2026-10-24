@@ -1,6 +1,6 @@
 <script>
-  /** Minimal sparkline. `values` may contain nulls (gaps). */
-  let { values = [], max = null, min = 0, color = 'var(--acc)', area = false, height = 24, dashed = false, label = '' } = $props();
+  /** Minimal sparkline. `values` may contain nulls (gaps). `minSpan` keeps a near-flat series from being blown up into noise. */
+  let { values = [], max = null, min = 0, minSpan = 0, color = 'var(--acc)', area = false, height = 24, dashed = false, label = '' } = $props();
 
   const W = 200;
   const H = 48;
@@ -8,8 +8,12 @@
     const vs = values ?? [];
     const nums = vs.filter((v) => v != null);
     if (nums.length < 2) return null;
-    const hi = max ?? Math.max(...nums) * 1.1;
-    const lo = min ?? Math.min(...nums);
+    let hi = max ?? Math.max(...nums) * 1.1;
+    let lo = min ?? Math.min(...nums);
+    if (hi - lo < minSpan) {
+      lo = Math.max(0, (hi + lo - minSpan) / 2);
+      hi = lo + minSpan;
+    }
     const span = hi - lo || 1;
     const step = W / (vs.length - 1);
     const segs = [];
