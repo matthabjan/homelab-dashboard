@@ -27,7 +27,7 @@
 
 <!-- phones: compact card (no ring, no sparkline); the two variants switch by media query -->
 <div class="mini lv-{g.level}" role="img" aria-label="{g.label} {g.val} {g.unit}{g.sub ? ', ' + g.sub : ''}">
-  <div class="mini-head"><span class="label">{g.label}</span><span class="mono sub">{g.sub?.replace(/ threads$/, ' thr') ?? ''}</span></div>
+  <div class="mini-head"><span class="label">{g.label}</span><span class="mono sub">{g.sub ?? ''}</span></div>
   <div class="mini-val"><span class="mono">{g.val}</span><span class="mono unit">{g.unit}</span></div>
   <div class="bar"><div style:width="{pct}%"></div></div>
 </div>

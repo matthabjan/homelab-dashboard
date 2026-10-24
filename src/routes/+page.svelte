@@ -197,9 +197,9 @@
     </section>
 
     {#if snap.host || snap.storage.length || snap.network}
-      <section class="vitals" aria-label="Host vitals">
+      <section class="vitals" id="host" aria-label="Host vitals">
         {#if snap.host}
-          <div class="card host" id="host">
+          <div class="card host">
             <div class="row-head">
               <div class="title">
                 <h2>{#if snap.host.href}<a href={snap.host.href} target={target} rel="noopener">{snap.host.name}</a>{:else}{snap.host.name}{/if}</h2>
@@ -323,10 +323,10 @@
 
   <nav class="tabbar" aria-label="Sections">
     <a href="#top" aria-current={current('top')}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z" /></svg>Home</a>
+    <a href="#attention" class="bell" aria-current={current('attention')}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0" /></svg>Alerts{#if snap.needCount}<span class="badge mono">{snap.needCount}</span>{/if}</a>
+    {#if snap.host || snap.storage.length || snap.network}<a href="#host" aria-current={current('host')}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h18v6H3zM3 14h18v6H3zM7 7h.01M7 17h.01" /></svg>Host</a>{/if}
     <a href="#services" aria-current={current('services')}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" /></svg>Services</a>
     <button onclick={() => (paletteOpen = true)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14ZM20 20l-3.5-3.5" /></svg>Search</button>
-    <a href="#attention" class="bell" aria-current={current('attention')}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0" /></svg>Alerts{#if snap.needCount}<span class="badge mono">{snap.needCount}</span>{/if}</a>
-    {#if snap.host}<a href="#host" aria-current={current('host')}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h18v6H3zM3 14h18v6H3zM7 7h.01M7 17h.01" /></svg>Host</a>{/if}
   </nav>
 
   <Palette bind:open={paletteOpen} services={allServices} bookmarks={snap.bookmarks} pinned={snap.pinned} {target} onopen={opened} />
@@ -499,10 +499,9 @@
 
     .gauges { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 
-    /* storage and network go below all services; the vitals wrapper hands its children to .page */
-    .vitals { display: contents; }
-    .storage, .network { order: 1; padding: 20px; }
-    .links { order: 2; }
+    /* host, storage and network stay together as one section */
+    .vitals { gap: 12px; }
+    .storage, .network { padding: 20px; }
     .netchart, .network > span.small { display: none; }
 
     /* pinned: icon, name, one status line */
