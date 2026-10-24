@@ -124,7 +124,7 @@
 </script>
 
 {#snippet traffic(t, what, downWord, upWord, height)}
-  <!-- one traffic reading: where it comes from and the current rates on one line, then the recent chart -->
+  <!-- one traffic reading: where it comes from, the current rates, then the recent chart -->
   {@const down = (t.seriesDown ?? []).filter((v) => v != null)}
   <div class="traffic">
     <div class="net-row">
@@ -471,14 +471,17 @@
   .track { height: 6px; border-radius: 4px; background: var(--track); overflow: hidden; }
   .fill { height: 100%; border-radius: 4px; background: var(--fill); transition: width 0.6s cubic-bezier(0.2, 0.8, 0.2, 1); }
   .traffic { display: flex; flex-direction: column; gap: 8px; }
-  .net-row { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; }
+  /* WAN, LAN and DNS separated by a rule; spare height (a taller card sets the row) stays below them */
+  .traffic + .traffic, .traffic + .dns { padding-top: 14px; border-top: 1px solid var(--track); }
+  /* always two lines (where it comes from, then the values): one line only fits the shorter sources, so blocks would differ */
+  .net-row { display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
   .net-src { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
   .net-what { font-weight: 600; }
   .net-vals { white-space: nowrap; }
   .net-vals > :not(.muted) { font-size: 15px; font-weight: 500; }
   .netchart { position: relative; }
   .layer { position: absolute; inset: 0; }
-  .dns { color: inherit; text-decoration: none; margin-top: auto; padding-top: 12px; border-top: 1px solid var(--track); }
+  .dns { color: inherit; text-decoration: none; }
 
   /* pinned */
   .block { display: flex; flex-direction: column; gap: 12px; }
