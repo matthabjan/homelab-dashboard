@@ -37,7 +37,7 @@ export function fixtureTransport(table, { scenario = 'issues', now } = {}) {
       if (!m) continue;
       const params = Object.fromEntries(r.names.map((n, i) => [n, decodeURIComponent(m[i + 1])]));
       let parsed = body;
-      try { parsed = JSON.parse(body); } catch { /* not JSON: SOAP */ }
+      try { parsed = JSON.parse(body ?? ''); } catch { /* not JSON: SOAP */ }
       const out = await r.fn({ now: now ?? Date.now(), scenario, params, headers, body: parsed, url: u });
       return typeof out === 'string' ? new Response(out, { headers: { 'Content-Type': 'text/xml' } }) : Response.json(out);
     }

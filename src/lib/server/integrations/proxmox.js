@@ -55,7 +55,7 @@ export async function collect(w, ctx) {
   try { updates = (await ctx.getJson(`${base}/nodes/${node.node}/apt/update`, opts)).data?.length ?? null; } catch { /* needs Sys.Audit */ }
 
   const cpu = (node.cpu ?? 0) * 100;
-  const memPct = pct(node.mem, node.maxmem);
+  const memPct = pct(node.mem, node.maxmem) ?? 0;
   ctx.metric('host.cpu', cpu);
   ctx.metric('host.mem', memPct);
   const rootPct = pct(node.disk, node.maxdisk);

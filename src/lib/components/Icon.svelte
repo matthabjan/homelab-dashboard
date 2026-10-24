@@ -1,5 +1,6 @@
 <script>
   /** Service/bookmark logo with optional dark-theme variant and a monogram fallback. */
+  /** @type {{ src: string | null, dark?: string | null, name?: string, size?: number }} */
   let { src, dark = null, name = '', size = 24 } = $props();
   const mono = $derived('/assets/monogram/' + encodeURIComponent(name || '?') + '.svg');
   let failed = $state(false);

@@ -1,5 +1,9 @@
 <script>
   /** Minimal sparkline. `values` may contain nulls (gaps). `minSpan` keeps a near-flat series from being blown up into noise. */
+  /**
+   * @type {{ values?: (number | null)[] | null, max?: number | null, min?: number | null, minSpan?: number,
+   *   color?: string, area?: boolean, height?: number, dashed?: boolean, label?: string }}
+   */
   let { values = [], max = null, min = 0, minSpan = 0, color = 'var(--acc)', area = false, height = 24, dashed = false, label = '' } = $props();
 
   const W = 200;

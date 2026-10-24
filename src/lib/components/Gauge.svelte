@@ -1,5 +1,6 @@
 <script>
   import Sparkline from './Sparkline.svelte';
+  /** @type {{ g: import('$lib/types').Gauge }} */
   let { g } = $props();
   const R = 34;
   const C = 2 * Math.PI * R;

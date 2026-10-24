@@ -1,8 +1,8 @@
 // OpenMediaVault — JSON-RPC with session login (same credentials as homepage).
 // Reads services, SMART status and mounted file systems in one go.
 import { trimUrl } from '../http.js';
-import { fmtPair, pct } from '../format.js';
-/** @import { Alert, StorageRow, Context, Widget, WidgetResult } from '$lib/types' */
+import { fmtPair, fmtPct, pct } from '../format.js';
+/** @import { Alert, UsageRow, Context, Widget, WidgetResult } from '$lib/types' */
 
 async function rpc(ctx, url, body) {
   const st = ctx.state;
@@ -85,7 +85,7 @@ export async function collect(w, ctx) {
     alerts.push({ sev: 'crit', title: `SMART warning on ${d.devicefile || d.model}`, detail: `Status ${d.overallstatus}` });
   }
 
-  /** @type {StorageRow[]} */
+  /** @type {UsageRow[]} */
   const storage = (Array.isArray(fs) ? fs : [])
     .filter((f) => Number(f.size) > 0 && f.mountpoint !== '/')
     .map((f) => {
@@ -100,11 +100,11 @@ export async function collect(w, ctx) {
 
   return {
     stats: [
-      { k: 'pool', v: main ? `${Math.round(main.pct)}%` : '—', level: main && main.pct >= ctx.settings.thresholds.storageAmberPct ? 'warn' : null },
+      { k: 'pool', v: fmtPct(main?.pct), level: (main?.pct ?? 0) >= ctx.settings.thresholds.storageAmberPct ? 'warn' : null },
       { k: 'SMART', v: disks.length ? `${good} / ${disks.length}` : '—', level: good < disks.length ? 'crit' : null },
       { k: 'services', v: services ? `${svcRunning} / ${enabled.length}` : '—' }
     ],
-    line: [main && `Pool ${Math.round(main.pct)}%`, disks.length && `SMART ${good} / ${disks.length} ok`].filter(Boolean).join(' · ') || 'Online',
+    line: [main && `Pool ${fmtPct(main.pct)}`, disks.length && `SMART ${good} / ${disks.length} ok`].filter(Boolean).join(' · ') || 'Online',
     alerts,
     storage
   };

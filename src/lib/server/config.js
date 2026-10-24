@@ -145,7 +145,7 @@ export function withDiscovered(cfg, discovered) {
     if (ids.has(svc.id)) continue;
     ids.add(svc.id);
     let group = groups.find((g) => g.name === d.group);
-    if (!group) groups.push((group = { name: d.group, services: [] }));
+    if (!group) groups.push((group = { name: d.group, services: /** @type {Service[]} */ ([]) }));
     group.services.push(svc);
     services.push(svc);
   }
@@ -161,7 +161,7 @@ export function loadConfig() {
   for (const g of raw) {
     if (!g || typeof g !== 'object') continue;
     const [gname, items] = Object.entries(g)[0];
-    const group = { name: gname, services: [] };
+    const group = { name: gname, services: /** @type {Service[]} */ ([]) };
     for (const it of items || []) {
       if (!it || typeof it !== 'object') continue;
       const [name, def] = Object.entries(it)[0];

@@ -38,5 +38,11 @@ export function fmtDuration(ms) {
   return `${Math.floor(h / 24)} d`;
 }
 
+/** "14:05" for a timestamp, in local time */
+export const fmtClock = (ts) => (ts == null ? '—' : new Date(ts).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }));
+
+/** "42%", or "—" when the size is unknown */
+export const fmtPct = (p) => (p == null ? '—' : `${Math.round(p)}%`);
+
 export const pct = (a, b) => (b > 0 ? (a / b) * 100 : null);
 export const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));

@@ -3,6 +3,7 @@
 // is the Proxmox host's, so these are the host's real CPU / NVMe / drive temperatures.
 import fs from 'node:fs/promises';
 import path from 'node:path';
+/** @import { Temps } from '$lib/types' */
 
 const HWMON = process.env.HWMON_DIR || '/sys/class/hwmon';
 const CPU_DRIVERS = ['coretemp', 'k10temp', 'zenpower', 'cpu_thermal', 'soc_thermal', 'acpitz'];
@@ -17,6 +18,7 @@ async function readStr(file) {
 export async function readTemps() {
   let dirs;
   try { dirs = await fs.readdir(HWMON); } catch { return null; }
+  /** @type {Temps} */
   const out = { cpu: null, cpuLabel: null, nvme: [], drives: [] };
   for (const d of dirs) {
     const dir = path.join(HWMON, d);

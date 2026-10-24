@@ -5,12 +5,13 @@ import { EventEmitter } from 'node:events';
 import { CONFIG_DIR, loadConfig, withDiscovered } from './config.js';
 import { openDb, insertProbe, insertMetric, insertEvent, prune, kvGet, kvSet } from './db.js';
 import { probe, certInfo, reasonText } from './http.js';
+import { fmtClock } from './format.js';
 import { readTemps } from './integrations/host.js';
 import { DEMO, SCENARIO, demoProbe, demoCert, demoTemps, seedHistory } from './demo.js';
 import { FIXTURES, fixtureTransport } from './demo/index.js';
 import { buildSnapshot } from './snapshot.js';
 import { INTEGRATIONS, ORDER, createContext } from './integrations/index.js';
-/** @import { Config, Discovered, ServiceState, Shared, Snapshot, Temps } from '$lib/types' */
+/** @import { Config, Discovered, Service, ServiceState, Shared, Snapshot, Temps, Widget } from '$lib/types' */
 
 const kv = { get: kvGet, set: kvSet };
 
@@ -18,10 +19,11 @@ const withTimeout = (p, ms, label) =>
   Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(`${label} timed out`)), ms))]);
 
 export class Engine extends EventEmitter {
+  // both set by reload(), which start() runs first; unset before that (see hooks.server.js)
   /** @type {Config} */
-  cfg = null;
+  cfg;
   /** @type {Config} */
-  base = null; // services.yaml only; cfg adds the services discovered from container labels
+  base; // services.yaml only; cfg adds the services discovered from container labels
   /** @type {Discovered[]} */
   discovered = [];
   discoveredBy = new Map(); // widget service id → its last successful discovery
@@ -71,8 +73,9 @@ export class Engine extends EventEmitter {
 
   /** @returns {ServiceState} */
   state(id) {
-    if (!this.rt.has(id)) this.rt.set(id, { probe: { fails: 0, down: false, since: null, reason: null, ms: null, checked: null }, widget: null, wstate: {}, cert: null });
-    return this.rt.get(id);
+    let st = this.rt.get(id);
+    if (!st) this.rt.set(id, (st = { probe: { fails: 0, down: false, since: null, reason: null, ms: null, checked: null }, widget: null, wstate: {}, cert: null }));
+    return st;
   }
 
   async runProbes() {
@@ -85,7 +88,7 @@ export class Engine extends EventEmitter {
         p.checked = now;
         p.ms = r.ms;
         if (r.ok) {
-          if (p.down) insertEvent(now, 'ok', s.id, `${s.name} recovered`, `was down since ${new Date(p.since).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`);
+          if (p.down) insertEvent(now, 'ok', s.id, `${s.name} recovered`, `was down since ${fmtClock(p.since)}`);
           Object.assign(p, { fails: 0, down: false, since: null, reason: null });
         } else {
           p.fails++;
@@ -104,7 +107,7 @@ export class Engine extends EventEmitter {
   async runWidgets() {
     const now = Date.now();
     const settings = this.cfg.settings;
-    const list = this.cfg.services.filter((s) => s.widget?.type && INTEGRATIONS[s.widget.type]);
+    const list = /** @type {(Service & { widget: Widget })[]} */ (this.cfg.services.filter((s) => s.widget?.type && INTEGRATIONS[s.widget.type]));
     const run = async (s) => {
       const st = this.state(s.id);
       const ctx = createContext({

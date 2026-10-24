@@ -3,10 +3,10 @@
 // Removable datastores (PBS 3.3+, mount-status other than "nonremovable") are an offsite disk that is plugged
 // in now and then: detached is normal, they only alert after offsiteMaxDetachedDays, and backup freshness skips them.
 import { trimUrl } from '../http.js';
-import { fmtPair, fmtDuration, pct } from '../format.js';
-/** @import { Alert, StorageRow, WidgetEvent, Context, Widget, WidgetResult } from '$lib/types' */
+import { fmtPair, fmtDuration, fmtPct, pct } from '../format.js';
+/** @import { Alert, StorageRow, UsageRow, WidgetEvent, Context, Widget, WidgetResult } from '$lib/types' */
 
-/** @returns {StorageRow} */
+/** @returns {UsageRow} */
 const usageRow = (name, s) => ({ name, used: s.used, total: s.total, pct: pct(s.used, s.total), sub: fmtPair(s.used, s.total), source: 'pbs' });
 const removable = (s) => s['mount-status'] != null && s['mount-status'] !== 'nonremovable';
 
@@ -39,15 +39,16 @@ export async function collect(w, ctx) {
   const base = trimUrl(w.url) + '/api2/json';
   const opts = { headers: { Authorization: `PBSAPIToken=${w.username}:${w.password}` }, insecure: ctx.insecure };
   const { data: usage } = await ctx.getJson(`${base}/status/datastore-usage`, opts);
-  const wanted = w.datastore == null ? null : [].concat(w.datastore);
+  const wanted = w.datastore == null ? null : [w.datastore].flat();
   const selected = usage.filter((s) => (wanted ? wanted.includes(s.store) : true));
   // freshness and the widget's stats are about the regular stores
   const stores = selected.filter((s) => !removable(s) && s.total > 0);
   const now = ctx.now;
   /** @type {Alert[]} */
   const alerts = [];
+  const regular = stores.map((s) => usageRow(`${s.store} · backups`, s));
   /** @type {StorageRow[]} */
-  const storage = stores.map((s) => usageRow(`${s.store} · backups`, s));
+  const storage = [...regular];
   for (const s of selected.filter(removable)) {
     const { row, alert } = removableStatus(s, now, ctx.settings.thresholds.offsiteMaxDetachedDays, ctx.kv);
     storage.push(row);
@@ -93,10 +94,10 @@ export async function collect(w, ctx) {
   }
   ctx.state.latest = latest;
 
-  const store = stores.length ? storage[0] : null;
+  const store = regular[0] ?? null;
   const stats = [
     { k: 'oldest backup', v: oldest ? fmtDuration(oldest.age) : '—', level: oldest && oldest.age > maxAge ? 'warn' : null },
-    { k: 'datastore', v: store ? `${Math.round(store.pct)}%` : '—' },
+    { k: 'datastore', v: fmtPct(store?.pct) },
     { k: 'groups', v: String(relevant.length || groups.length || '—') }
   ];
   if (freshnessError) alerts.push({ sev: 'info', key: 'pbs-perm', title: 'Backup freshness unavailable', detail: freshnessError });
@@ -104,7 +105,7 @@ export async function collect(w, ctx) {
   const overdue = alerts.filter((a) => a.title === 'Backup overdue').length;
   return {
     stats,
-    line: overdue ? `${overdue} backup${overdue > 1 ? 's' : ''} overdue` : oldest ? `Last backup ${fmtDuration(now - latest * 1000)} ago · store ${Math.round(store?.pct ?? 0)}%` : store ? `Store ${Math.round(store.pct)}%` : 'Online',
+    line: overdue ? `${overdue} backup${overdue > 1 ? 's' : ''} overdue` : oldest ? `Last backup ${fmtDuration(now - latest * 1000)} ago · store ${fmtPct(store?.pct)}` : store ? `Store ${fmtPct(store.pct)}` : 'Online',
     alerts,
     events,
     storage,

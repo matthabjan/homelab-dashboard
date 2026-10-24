@@ -46,7 +46,7 @@ export interface Settings {
 /** The `widget:` block of a service. Fields beyond `type` depend on the integration. */
 export interface Widget {
   type: string;
-  url?: string;
+  url: string;
   username?: string;
   password?: string;
   [option: string]: any;
@@ -139,7 +139,8 @@ export interface Context {
   shared: Shared;
   /** in memory, per service, between polls */
   state: Record<string, any>;
-  metric(key: string, value: number): void;
+  /** history for sparklines; null and NaN are skipped */
+  metric(key: string, value: number | null): void;
   kv: Kv;
   request: Transport;
   getJson(url: string, opts?: RequestOptions): Promise<any>;
@@ -168,15 +169,25 @@ export interface Stat {
   level?: string | null;
 }
 
-/** One line in the storage card: usage, or `offline` (unavailable or detached). */
-export interface StorageRow {
+/** One line in the storage card: usage, or `offline` (an unavailable or detached storage). */
+export type StorageRow = UsageRow | OfflineRow;
+
+export interface UsageRow {
   name: string;
   sub: string;
   source: 'pve' | 'pbs' | 'omv';
-  used?: number;
-  total?: number;
-  pct?: number | null;
-  offline?: boolean;
+  used: number;
+  total: number;
+  /** null when the total is 0 (size unknown) */
+  pct: number | null;
+  offline?: false;
+}
+
+export interface OfflineRow {
+  name: string;
+  sub: string;
+  source: 'pve' | 'pbs' | 'omv';
+  offline: true;
 }
 
 /** The Proxmox node shown as "host". */
@@ -186,7 +197,7 @@ export interface HostVitals {
   cpus: number;
   mem: number;
   maxmem: number;
-  memPct: number | null;
+  memPct: number;
   disk: { name: string; pct: number | null; sub: string };
   load: number[] | null;
   uptime: string | null;
@@ -345,7 +356,7 @@ export interface Gauge {
   unit: string;
   pct: number | null;
   level: Level | 'none';
-  sub: string;
+  sub: string | null;
   series: (number | null)[] | null;
   max?: number | null;
 }
