@@ -123,6 +123,17 @@ Set `iconDark:` for a variant shown in dark mode. If no icon is set, or one fail
 
 To add a secret for a new service, add it to both the `secrets:` lists in `compose.yaml`.
 
+**Containers from labels.** Like homepage, the dashboard lists containers that carry `homepage.*` labels. It reads them through the Portainer widget, so at least one `portainer` widget must be configured. `homepage.group` and `homepage.name` are required. The other labels map to the YAML keys: `homepage.href`, `homepage.icon`, `homepage.description`, `homepage.siteMonitor`, `homepage.pinned`, `homepage.weight` (sort order), `homepage.widget.type`, and so on. A container joins the `services.yaml` group with the same name, or gets a new group. An entry in `services.yaml` with the same group and name takes precedence. Label values are used literally: `${NAME}` secrets are **not** filled in, so a container image can't read your secrets. Define services whose widgets need credentials in `services.yaml`.
+
+```yaml
+labels:
+  - homepage.group=Management
+  - homepage.name=Traefik
+  - homepage.icon=traefik
+  - homepage.href=https://traefik.home.arpa
+  - homepage.siteMonitor=https://traefik.home.arpa
+```
+
 ## API permissions (least privilege)
 
 Give the dashboard its own read-only account wherever the product allows it. Don't reuse an admin login.
@@ -134,7 +145,7 @@ Give the dashboard its own read-only account wherever the product allows it. Don
 | **OPNsense** | A dedicated user without the admin group. Grant only the privileges for **Diagnostics: Activity** and the **traffic** API (check *Effective Privileges*), then create the API key for that user. |
 | **OpenMediaVault** | Needs an admin login; OMV's RPC has no read-only role. Treat this password as highly sensitive and use `https://`. |
 | **AdGuard Home** | Needs the AdGuard login; AdGuard has no read-only role. Use `https://`. |
-| **Portainer** | Business Edition: a user with the *Read-only user* role on the environment, and an API key for that user. Community Edition: a key always carries its user's full rights, so it can start, stop and delete containers. Protect it accordingly. Set `env:` to the environment id. Add the label `dashboard.ignore=true` to a container to hide it. |
+| **Portainer** | Business Edition: a user with the *Read-only user* role on the environment, and an API key for that user. Community Edition: a key always carries its user's full rights, so it can start, stop and delete containers. Protect it accordingly. Set `env:` to the environment id. Add the label `dashboard.ignore=true` to a container to hide it (from the counts and from label discovery). |
 | **FRITZ!Box** | No credentials. Enable *Heimnetz → Netzwerk → Netzwerkeinstellungen → "Statusinformationen über UPnP übertragen"* (English UI: "Transmit status information over UPnP"). |
 
 **Proxmox VE** (on a PVE node):

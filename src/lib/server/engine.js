@@ -2,7 +2,7 @@
 // keeps runtime state, writes history and pushes snapshots to SSE clients.
 import fs from 'node:fs';
 import { EventEmitter } from 'node:events';
-import { CONFIG_DIR, loadConfig } from './config.js';
+import { CONFIG_DIR, loadConfig, withDiscovered } from './config.js';
 import { openDb, insertProbe, insertMetric, insertEvent, prune } from './db.js';
 import { probe, certInfo, reasonText } from './http.js';
 import { readTemps } from './integrations/host.js';
@@ -24,6 +24,9 @@ const withTimeout = (p, ms, label) =>
 
 class Engine extends EventEmitter {
   cfg = null;
+  base = null; // services.yaml only; cfg adds the services discovered from container labels
+  discovered = [];
+  discoveredBy = new Map(); // widget service id → its last successful discovery
   rt = new Map();
   shared = {};
   temps = null;
@@ -49,7 +52,8 @@ class Engine extends EventEmitter {
   }
 
   reload() {
-    this.cfg = loadConfig();
+    this.base = loadConfig();
+    this.cfg = withDiscovered(this.base, this.discovered);
     for (const t of this.timers) clearInterval(t);
     this.timers = [];
     const ids = new Set(this.cfg.services.map((s) => s.id));
@@ -122,12 +126,34 @@ class Engine extends EventEmitter {
     };
     for (const s of list.filter((x) => ORDER.includes(x.widget.type))) await run(s);
     await Promise.all(list.filter((x) => !ORDER.includes(x.widget.type)).map(run));
+    this.updateDiscovered(list);
 
     if (settings.host.temperature) {
       this.temps = DEMO ? demoTemps() : await readTemps();
       if (this.temps?.cpu != null) insertMetric('host.temp', now, this.temps.cpu);
     }
     this.publish();
+  }
+
+  /** Rebuild cfg when the set of label-discovered services changed; a failed widget keeps its last list. */
+  updateDiscovered(widgetServices) {
+    const prev = this.discoveredBy;
+    this.discoveredBy = new Map(widgetServices.map((s) => {
+      const w = this.state(s.id).widget;
+      return [s.id, w?.ok ? w.discovered ?? [] : prev.get(s.id) ?? []];
+    }));
+    const found = [...this.discoveredBy.values()].flat();
+    if (JSON.stringify(found) === JSON.stringify(this.discovered)) return;
+    const added = found.filter((d) => !this.discovered.some((o) => o.group === d.group && o.name === d.name));
+    this.discovered = found;
+    this.cfg = withDiscovered(this.base, found);
+    const ids = new Set(this.cfg.services.map((s) => s.id));
+    for (const id of this.rt.keys()) if (!ids.has(id)) this.rt.delete(id);
+    if (added.length) {
+      console.log(`[discovery] ${added.map((d) => `${d.group}/${d.name}`).join(', ')}`);
+      this.runProbes().catch((e) => console.error('[probe]', e));
+      this.runCerts().catch((e) => console.error('[cert]', e));
+    }
   }
 
   async runCerts() {

@@ -105,6 +105,45 @@ function deepMerge(base, over) {
 
 export const slug = (s) => s.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
+function toService(gname, name, def, settings) {
+  return {
+    id: slug(gname + '-' + name),
+    name,
+    group: gname,
+    href: def?.href ?? null,
+    description: def?.description ?? '',
+    icon: def?.icon ?? null,
+    iconDark: def?.iconDark ?? null,
+    probe: def?.siteMonitor ?? def?.probe ?? null,
+    pinned: !!def?.pinned,
+    insecure: def?.tlsVerify === undefined ? !settings.tlsVerify : !def.tlsVerify,
+    latencyWarnMs: Number(def?.latencyWarnMs) || null,
+    widget: def?.widget ?? null
+  };
+}
+
+/**
+ * Add services discovered from container labels ({ group, name, def }) to a loaded config.
+ * They join the services.yaml group of the same name (or a new group at the end);
+ * a service already defined in services.yaml under the same group and name wins.
+ */
+export function withDiscovered(cfg, discovered) {
+  if (!discovered?.length) return cfg;
+  const groups = cfg.groups.map((g) => ({ ...g, services: [...g.services] }));
+  const services = [...cfg.services];
+  const ids = new Set(services.map((s) => s.id));
+  for (const d of discovered) {
+    const svc = toService(d.group, d.name, d.def, cfg.settings);
+    if (ids.has(svc.id)) continue;
+    ids.add(svc.id);
+    let group = groups.find((g) => g.name === d.group);
+    if (!group) groups.push((group = { name: d.group, services: [] }));
+    group.services.push(svc);
+    services.push(svc);
+  }
+  return { ...cfg, groups, services };
+}
+
 export function loadConfig() {
   const settings = deepMerge(DEFAULT_SETTINGS, readYaml('settings.yaml', {}));
   const raw = readYaml('services.yaml', []) || [];
@@ -117,20 +156,7 @@ export function loadConfig() {
     for (const it of items || []) {
       if (!it || typeof it !== 'object') continue;
       const [name, def] = Object.entries(it)[0];
-      const svc = {
-        id: slug(gname + '-' + name),
-        name,
-        group: gname,
-        href: def?.href ?? null,
-        description: def?.description ?? '',
-        icon: def?.icon ?? null,
-        iconDark: def?.iconDark ?? null,
-        probe: def?.siteMonitor ?? def?.probe ?? null,
-        pinned: !!def?.pinned,
-        insecure: def?.tlsVerify === undefined ? !settings.tlsVerify : !def.tlsVerify,
-        latencyWarnMs: Number(def?.latencyWarnMs) || null,
-        widget: def?.widget ?? null
-      };
+      const svc = toService(gname, name, def, settings);
       group.services.push(svc);
       services.push(svc);
     }

@@ -1,6 +1,23 @@
 // Portainer — X-API-Key, environment id in `env` (same as homepage).
 // Containers with label `dashboard.ignore=true` are skipped.
+// Containers with gethomepage labels (`homepage.group`, `homepage.name`, `homepage.href`, …) become services.
 import { getJson, trimUrl } from '../http.js';
+
+/** `homepage.widget.type=x` → { widget: { type: 'x' } }. Values stay literal: no ${SECRET} substitution from labels. */
+function fromLabels(labels) {
+  const def = {};
+  for (const [k, v] of Object.entries(labels || {})) {
+    if (!k.startsWith('homepage.')) continue;
+    const parts = k.slice('homepage.'.length).split('.');
+    if (parts.some((p) => p === '__proto__' || p === 'constructor' || p === 'prototype')) continue;
+    let o = def;
+    for (const p of parts.slice(0, -1)) o = o[p] = o[p] && typeof o[p] === 'object' ? o[p] : {};
+    o[parts.at(-1)] = v === 'true' ? true : v === 'false' ? false : v;
+  }
+  if (!def.group || !def.name) return null;
+  const { group, name, weight, ...rest } = def;
+  return { group: String(group), name: String(name), weight: Number(weight) || 0, def: rest };
+}
 
 export async function collect(w, ctx) {
   const base = `${trimUrl(w.url)}/api/endpoints/${w.env}/docker`;
@@ -25,6 +42,10 @@ export async function collect(w, ctx) {
   }
   for (const c of unhealthy) alerts.push({ sev: 'warn', key: `ct-${name(c)}`, title: `Container ${name(c)} unhealthy`, detail: c.Status });
 
+  const discovered = list.map((c) => fromLabels(c.Labels)).filter(Boolean)
+    .sort((a, b) => a.weight - b.weight || a.name.localeCompare(b.name))
+    .map(({ weight, ...d }) => d);
+
   ctx.shared.containers = { running: running.length, total: list.length, failed: failed.length + restarting.length, unhealthy: unhealthy.length };
   const bad = failed.length + restarting.length;
   return {
@@ -35,6 +56,7 @@ export async function collect(w, ctx) {
     ],
     line: `${running.length} / ${list.length} running${bad ? ` · ${bad} failed` : ''}${unhealthy.length ? ` · ${unhealthy.length} unhealthy` : ''}`,
     alerts,
-    containers: ctx.shared.containers
+    containers: ctx.shared.containers,
+    discovered
   };
 }
