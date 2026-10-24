@@ -66,9 +66,10 @@ services:
       - traefik.http.middlewares.dashboard-headers.headers.referrerPolicy=no-referrer
       - traefik.http.middlewares.dashboard-headers.headers.permissionsPolicy=camera=(), microphone=(), geolocation=(), payment=(), usb=()
       - traefik.http.middlewares.dashboard-headers.headers.customResponseHeaders.X-Robots-Tag=noindex, nofollow
-      # App manifest and icons without login: phones fetch them for "Install app" / the home-screen icon
-      # without the basic-auth credentials. Still behind admin-only; these files hold nothing sensitive.
-      - traefik.http.routers.dashboard-icons.rule=Host(`${DASHBOARD_HOST}`) && (Path(`/manifest.webmanifest`) || PathPrefix(`/assets/images/`))
+      # App manifest, icons and service worker without login: phones fetch them for "Install app" / the home-screen
+      # icon without the basic-auth credentials, and the browser checks the worker for updates the same way.
+      # Still behind admin-only; these files hold nothing sensitive.
+      - traefik.http.routers.dashboard-icons.rule=Host(`${DASHBOARD_HOST}`) && (Path(`/manifest.webmanifest`) || Path(`/service-worker.js`) || PathPrefix(`/assets/images/`))
       - traefik.http.routers.dashboard-icons.priority=1000
       - traefik.http.routers.dashboard-icons.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}
       - traefik.http.routers.dashboard-icons.tls=true
