@@ -3,7 +3,7 @@
 #   push to main        → :edge (+ :sha-<commit>)
 #   tag vX.Y.Z          → :X.Y.Z, :X.Y, :X, :latest (+ GitHub Release, Docker Hub description)
 #   pull request        → build only, nothing is pushed
-# Requires the repository secret DOCKERHUB_SECRET (Docker Hub access token for matthabjan, Read & Write).
+# Requires repository secrets DOCKERHUB_USERNAME and DOCKERHUB_TOKEN (Docker Hub access token, Read & Write).
 # Actions are pinned to commit SHAs; Dependabot (.github/dependabot.yml) keeps them current.
 name: Image
 
@@ -49,8 +49,8 @@ jobs:
         if: github.event_name != 'pull_request'
         uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
-          username: matthabjan
-          password: ${{ secrets.DOCKERHUB_SECRET }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Tags and labels
         id: meta
@@ -103,8 +103,8 @@ jobs:
           persist-credentials: false
       - uses: peter-evans/dockerhub-description@1b9a80c056b620d92cedb9d9b5a223409c68ddfa # v5
         with:
-          username: matthabjan
-          password: ${{ secrets.DOCKERHUB_SECRET }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
           repository: ${{ env.IMAGE }}
           short-description: Self-hosted homelab dashboard (SvelteKit, port 3000)
           readme-filepath: ./README.md
