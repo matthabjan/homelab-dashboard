@@ -31,7 +31,8 @@ export const DEFAULT_SETTINGS = {
     service: null, // name of the Proxmox service whose node is shown as "host" (default: first proxmox widget)
     node: null,
     temperature: true, // read CPU/NVMe temps from the kernel (works because the LXC shares the host kernel)
-    storages: null // list of PVE storage names to show; null = all active
+    storages: null, // list of PVE storage names in the storage card; null = all
+    storage: null // PVE storage on the host gauge; null = the largest local one holding guest disks, else root
   },
   network: {
     service: null // service whose widget provides WAN traffic (default: OPNsense, else FRITZ!Box)

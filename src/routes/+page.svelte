@@ -217,8 +217,8 @@
             <h2>Storage</h2>
             {#each snap.storage as s}
               <div class="bar lv-{s.level}" title="{s.name} · {s.sub}">
-                <div class="bar-head"><span class="name">{s.name}</span><span class="mono muted sub">{s.sub}</span><span class="mono pct">{Math.round(s.pct)}%</span></div>
-                <div class="track"><div class="fill" style:width="{Math.min(100, s.pct)}%"></div></div>
+                <div class="bar-head"><span class="name">{s.name}</span><span class="mono muted sub">{s.sub}</span><span class="mono pct">{s.pct == null ? '—' : `${Math.round(s.pct)}%`}</span></div>
+                {#if s.pct != null}<div class="track"><div class="fill" style:width="{Math.min(100, s.pct)}%"></div></div>{/if}
               </div>
             {/each}
           </div>
@@ -403,6 +403,7 @@
   .bar-head .sub { flex: 1 1 auto; min-width: 0; text-align: right; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .bar-head .pct { flex: none; }
   .bar.lv-warn .pct, .bar.lv-crit .pct { color: var(--lv); }
+  .bar.lv-off .name, .bar.lv-off .pct { color: var(--muted); }
   .track { height: 6px; border-radius: 4px; background: var(--track); overflow: hidden; }
   .fill { height: 100%; border-radius: 4px; background: var(--fill); transition: width 0.6s cubic-bezier(0.2, 0.8, 0.2, 1); }
   .rates { display: flex; gap: 22px; }

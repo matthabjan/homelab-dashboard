@@ -163,6 +163,8 @@ export function buildSnapshot(engine) {
   for (const s of engine.cfg.services) {
     const w = engine.state(s.id).widget;
     for (const x of w?.storage || []) {
+      // unavailable or detached: shown muted without a bar, the widget raises any alert itself
+      if (x.offline) { storage.push({ name: x.name, pct: null, level: 'off', sub: x.sub, href: s.href }); continue; }
       const lv = x.pct >= th.storageWarnPct ? 'crit' : x.pct >= th.storageAmberPct ? 'warn' : 'ok';
       storage.push({ name: x.name, pct: x.pct, level: lv, sub: x.sub ?? fmtPair(x.used, x.total), href: s.href });
       if (x.pct >= th.storageWarnPct) attention.push({ sev: 'warn', title: `${x.name} is ${Math.round(x.pct)}% full`, detail: x.sub, href: s.href, ts: now });

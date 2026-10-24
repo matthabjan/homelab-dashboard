@@ -43,10 +43,15 @@ export async function demoCollect(type, w, ctx) {
       ctx.shared.guestIds = new Set(['100', '101', '102', '103', '104', '105']);
       ctx.shared.guestNames = { 100: 'opnsense', 101: 'docker-apps', 102: 'homeassistant', 103: 'omv', 104: 'pbs', 105: 'adguard' };
       const storage = [{ name: 'local-zfs', used: 532 * GiB, total: 920 * GiB, pct: 57.8, sub: fmtPair(532 * GiB, 920 * GiB), source: 'pve' }];
+      const alerts = [{ sev: 'info', key: 'updates', title: '12 updates available on pve', detail: 'apt packages pending' }];
+      if (!calm()) {
+        storage.push({ name: 'nas-backup', offline: true, sub: 'unavailable', source: 'pve' });
+        alerts.push({ sev: 'warn', key: 'storage-nas-backup', title: 'nas-backup is unavailable on pve', detail: 'Proxmox reports the storage as unknown' });
+      }
       return {
         stats: [{ k: 'CPU', v: `${Math.round(cpu)}%` }, { k: 'RAM', v: '41.2 / 64 GiB' }, { k: 'guests', v: '6 / 7' }],
         line: `CPU ${Math.round(cpu)}% · RAM 41.2 / 64 GiB`,
-        alerts: [{ sev: 'info', key: 'updates', title: '12 updates available on pve', detail: 'apt packages pending' }],
+        alerts,
         storage,
         host: { node: 'pve', cpu, cpus: 16, mem: 41.2 * GiB, maxmem: 64 * GiB, memPct: 64.4, disk: { name: 'local-zfs', pct: 57.8, sub: fmtPair(532 * GiB, 920 * GiB) }, load: [1.42, 1.38, 1.21], uptime: '38 d', guestsRunning: 6, guestsTotal: 7, updates: 12 }
       };

@@ -3,7 +3,7 @@
 A launcher and status overview for a Proxmox-based homelab. It answers "is everything OK?" at a glance and gets you to your services fast. For deep metrics, link out to something like [Pulse](https://github.com/rcourtman/Pulse).
 
 - **Status first.** The top line gives one verdict ("Everything is running." or the most important problem). Below it, a "Needs attention" list is ordered by severity. When nothing needs attention, the list shows recent activity instead.
-- **Host vitals.** CPU, RAM, storage and temperature for the Proxmox node, each with a 24 h trend. Storage also covers PVE, PBS and the NAS. Network shows WAN traffic (OPNsense or FRITZ!Box) and AdGuard stats.
+- **Host vitals.** CPU, RAM, storage and temperature for the Proxmox node, each with a 24 h trend. The host's storage is the PVE storage holding the guest disks; a separate storage card lists PVE, PBS and the NAS, including storages that are unavailable. Network shows WAN traffic (OPNsense or FRITZ!Box) and AdGuard stats.
 - **Launcher.** Pinned services are ordered by how often you open them, followed by all services in their groups. Press `/` or `⌘K`/`Ctrl K` to open the command palette.
 - **Checks:**
   - every service is checked every 30 s, giving uptime (24 h / 7 d) and p95 latency
