@@ -59,11 +59,9 @@ function driveStatus(d, where, th) {
     d.errors ? `${d.errors} errors` : null
   ].filter(Boolean).join(' · ');
   const status = d.health === 'failing' ? 'failing' : level === 'warn' ? 'check' : d.health === 'unknown' ? '—' : 'ok';
-  /** @type {Fact[]} the chips under the life bar */
+  /** @type {Fact[]} shown next to the model; power-on time and data written stay in `detail` (the tooltip) */
   const facts = [];
   if (d.tempC != null) facts.push({ k: '', v: `${d.tempC} °C`, level: d.tempC >= th.driveTempWarnC ? 'warn' : null });
-  if (d.hours != null) facts.push({ k: 'on', v: fmtHours(d.hours), level: null });
-  if (d.written != null) facts.push({ k: 'written', v: fmtSize(d.written), level: null });
   if (d.errors) facts.push({ k: 'errors', v: String(d.errors), level: 'warn' });
   /** @type {Level} */
   const lifeLevel = d.lifeLeft != null && d.lifeLeft <= th.driveLifeWarnPct ? 'warn' : 'ok';

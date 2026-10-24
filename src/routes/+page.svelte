@@ -253,18 +253,19 @@
             {/if}
             {#if storageView === 'drives' && snap.drives.length}
               {#each snap.drives as d}
-                <!-- a drive: model and SMART verdict, what it is and where, its life left as a bar, then the other SMART readings as chips -->
+                <!-- a drive in two lines: model, temperature and SMART verdict; what it is and where, and its life left as a labelled bar. The rest is in the tooltip -->
                 <div class="bar drive lv-{d.lifeLevel}" title="{d.name} · {d.meta} · {d.detail}">
-                  <div class="bar-head"><span class="name">{d.name}</span><span class="verdict lv-{d.level}">{d.status}</span></div>
-                  <span class="mono muted off-sub">{d.meta}</span>
-                  {#if d.life != null}
-                    <div class="life"><div class="track"><div class="fill" style:width="{Math.max(0, Math.min(100, d.life))}%"></div></div><span class="mono pct">{d.life}%</span></div>
-                  {/if}
-                  {#if d.facts.length}
-                    <div class="dfacts">
-                      {#each d.facts as f}<span class="dfact mono" class:lv-warn={f.level === 'warn'}>{f.v}{#if f.k}<span class="muted"> {f.k}</span>{/if}</span>{/each}
-                    </div>
-                  {/if}
+                  <div class="bar-head">
+                    <span class="name">{d.name}</span>
+                    {#each d.facts as f}<span class="dfact mono" class:lv-warn={f.level === 'warn'}>{f.v}{f.k ? ` ${f.k}` : ''}</span>{/each}
+                    <span class="dstatus lv-{d.level}">{d.status}</span>
+                  </div>
+                  <div class="dline">
+                    <span class="mono muted off-sub">{d.meta}</span>
+                    {#if d.life != null}
+                      <span class="life" title="Life left: {d.life}% of the drive's rated write endurance"><span class="muted">life</span><span class="track"><span class="fill" style:width="{Math.max(0, Math.min(100, d.life))}%"></span></span><span class="mono pct">{d.life}%</span></span>
+                    {/if}
+                  </div>
                 </div>
               {/each}
             {:else}
@@ -452,15 +453,17 @@
   .bar.lv-off { --fill: color-mix(in srgb, var(--muted) 50%, transparent); }
   .bar.lv-off .name, .bar.lv-off .pct { color: var(--muted); }
   .off-sub { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .drive { gap: 6px; }
-  .drive + .drive { padding-top: 12px; border-top: 1px solid var(--track); }
+  .drive { gap: 4px; }
+  .drive + .drive { padding-top: 10px; border-top: 1px solid var(--track); }
   .drive .name { flex: 1 1 auto; max-width: none; }
-  .verdict { flex: none; font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 999px; color: var(--lv); background: var(--lv-soft); }
-  .life { display: flex; align-items: center; gap: 8px; font-size: 12px; }
-  .life .track { flex: 1 1 auto; }
-  .dfacts { display: flex; flex-wrap: wrap; gap: 6px; }
-  .dfact { font-size: 11px; padding: 2px 7px; border-radius: 6px; background: var(--surface-2); }
-  .dfact.lv-warn { color: var(--lv); background: var(--lv-soft); }
+  .dstatus { flex: none; font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 999px; color: var(--lv); background: var(--lv-soft); }
+  .dfact { flex: none; font-size: 11px; color: var(--muted); white-space: nowrap; }
+  .dfact.lv-warn { color: var(--lv); }
+  .dline { display: flex; align-items: center; gap: 12px; }
+  .dline .off-sub { flex: 1 1 auto; min-width: 0; }
+  .life { flex: none; display: flex; align-items: center; gap: 6px; font-size: 11px; }
+  .life .track { display: block; width: 56px; height: 4px; }
+  .life .fill { display: block; }
   .tabs { display: flex; gap: 16px; }
   .tabs button { all: unset; cursor: pointer; font-size: 14px; font-weight: 600; color: var(--muted); }
   .tabs button[aria-selected='true'] { color: var(--text); }
