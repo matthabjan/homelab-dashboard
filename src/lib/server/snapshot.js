@@ -6,6 +6,7 @@ import { DEMO } from './demo.js';
 
 const RANK = { crit: 3, warn: 2, info: 1, ok: 0 };
 const H = 3600_000;
+const MIN_SLOW_SAMPLES = 10; // ~5 min of probes before a service can be called slow
 
 let statCache = { ts: 0, data: new Map() };
 function stats(sid, now) {
@@ -13,7 +14,7 @@ function stats(sid, now) {
   if (!statCache.data.has(sid)) {
     const d = probeStats(sid, now - 24 * H);
     const h1 = probeStats(sid, now - H);
-    statCache.data.set(sid, { up24: d.uptime, p95: d.p95, p95h: h1.p95, up7: uptimeSince(sid, now - 7 * 24 * H) });
+    statCache.data.set(sid, { up24: d.uptime, p95: d.p95, p95h: h1.p95, n1: h1.n, up7: uptimeSince(sid, now - 7 * 24 * H) });
   }
   return statCache.data.get(sid);
 }
@@ -45,16 +46,17 @@ export function buildSnapshot(engine) {
 
       const push = (a) => attention.push({ ...a, sid: s.id, service: s.name, href: s.href, ts: a.ts ?? w?.ts ?? now });
 
+      const slowMs = s.latencyWarnMs ?? th.latencyWarnMs;
       if (p.down) {
         lvl = 'crit';
         status = 'Down';
         line = `Down since ${new Date(p.since).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} · ${p.reason}`;
         lineLevel = 'crit';
         push({ sev: 'crit', title: `${s.name} is down`, detail: `${p.reason} · since ${new Date(p.since).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`, ts: p.since });
-      } else if (ps?.p95h != null && ps.p95h > th.latencyWarnMs) {
+      } else if (ps?.p95h != null && ps.n1 >= MIN_SLOW_SAMPLES && ps.p95h > slowMs) {
         lvl = 'warn';
         status = 'Slow';
-        push({ sev: 'warn', title: `${s.name} is slow`, detail: `p95 ${Math.round(ps.p95h)} ms over the last hour · limit ${th.latencyWarnMs} ms` });
+        push({ sev: 'warn', title: `${s.name} is slow`, detail: `p95 ${Math.round(ps.p95h)} ms over the last hour · limit ${slowMs} ms` });
         if (!w) { line = `Slow · p95 ${Math.round(ps.p95h)} ms`; lineLevel = 'warn'; }
       }
 

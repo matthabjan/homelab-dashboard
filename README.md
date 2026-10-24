@@ -102,7 +102,7 @@ Uptime checks and certificate-expiry checks always accept self-signed certificat
 
 | File | What |
 |---|---|
-| `services.yaml` | Services, in groups. Same format as homepage, plus `pinned: true`, `iconDark:` and `tlsVerify:` |
+| `services.yaml` | Services, in groups. Same format as homepage, plus `pinned: true`, `iconDark:`, `tlsVerify:` and `latencyWarnMs:` |
 | `settings.yaml` | Title, default theme, accent colour, header link, app icon, TLS verification, thresholds, intervals |
 | `bookmarks.yaml` | Links at the bottom |
 | `icons/` | Your own service icons, referenced by file name |

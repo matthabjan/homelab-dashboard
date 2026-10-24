@@ -125,6 +125,7 @@ export function loadConfig() {
         probe: def?.siteMonitor ?? def?.probe ?? null,
         pinned: !!def?.pinned,
         insecure: def?.tlsVerify === undefined ? !settings.tlsVerify : !def.tlsVerify,
+        latencyWarnMs: Number(def?.latencyWarnMs) || null,
         widget: def?.widget ?? null
       };
       group.services.push(svc);
