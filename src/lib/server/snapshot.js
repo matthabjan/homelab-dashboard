@@ -259,7 +259,7 @@ export function buildSnapshot(engine) {
     containers && { k: 'containers running', v: `${containers.running} / ${containers.total}`, level: containers.failed ? 'warn' : null },
     backups?.oldestAge != null && { k: 'oldest backup', v: fmtAge(backups.oldestAge), level: backups.overdue ? 'warn' : null },
     nextCert && { k: 'next cert expiry', v: `${nextCert.cert.days} d`, level: nextCert.cert.days < th.certWarnDays ? 'warn' : null }
-  ]).filter((f) => typeof f === 'object');
+  ]).filter(/** @returns {f is Fact} */ (f) => !!f);
 
   const events = recentEvents(now - 24 * H, 5).map((e) => ({ ...e, href: tiles.get(e.sid)?.href ?? null }));
 
