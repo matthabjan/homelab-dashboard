@@ -2,7 +2,8 @@
 // Token needs PVEAuditor on "/" (read-only).
 import { trimUrl } from '../http.js';
 import { fmtPair, fmtDuration, pct } from '../format.js';
-/** @import { Alert, Context, NetworkReading, Widget, WidgetResult } from '$lib/types' */
+import { fromAttributes, fromNvmeText, isVirtual, kindOf, slowly, toDrive } from './smart.js';
+/** @import { Alert, Context, Drive, NetworkReading, Widget, WidgetResult } from '$lib/types' */
 
 /**
  * The node's storages for the storage card (filtered by host.storages, unavailable ones kept as `down`)
@@ -23,6 +24,23 @@ function nodeStorages(res, nodeName, { storages: wanted, storage: pinned }) {
     main: chosen ?? guestDisks,
     missing: pinned && !chosen ? pinned : null
   };
+}
+
+/**
+ * The node's physical disks with SMART details (Sys.Audit, part of PVEAuditor), refreshed every 10 minutes.
+ * @param {Context} ctx @param {string} base @param {object} opts @param {string} nodeName
+ * @returns {Promise<Drive[]>}
+ */
+async function nodeDrives(ctx, base, opts, nodeName) {
+  const url = `${base}/nodes/${nodeName}/disks`;
+  const list = (await ctx.getJson(`${url}/list`, opts)).data ?? [];
+  return Promise.all(list.filter((d) => !isVirtual(d)).map(async (d) => {
+    /** @type {any} */
+    let smart = null;
+    try { smart = (await ctx.getJson(`${url}/smart?disk=${encodeURIComponent(d.devpath)}`, opts)).data; } catch { /* health and wearout from the list still show */ }
+    const reading = !smart ? null : smart.type === 'text' ? fromNvmeText(smart.text ?? '') : fromAttributes(smart.attributes ?? []);
+    return toDrive({ model: d.model, serial: d.serial, kind: kindOf(d.type, d.rpm), size: d.size, status: d.health, wearout: d.wearout, smart: reading, where: nodeName });
+  }));
 }
 
 /**
@@ -60,6 +78,7 @@ export async function collect(w, ctx) {
     if (last) lan = { down: (last.netin * 8) / 1e6, up: (last.netout * 8) / 1e6, source: node.node };
   } catch { /* optional */ }
   if (lan) { ctx.metric('lan.down', lan.down); ctx.metric('lan.up', lan.up); }
+  const drives = (await slowly(ctx, 'drives', () => nodeDrives(ctx, base, opts, node.node))) ?? [];
 
   const cpu = (node.cpu ?? 0) * 100;
   const memPct = pct(node.mem, node.maxmem) ?? 0;
@@ -88,6 +107,7 @@ export async function collect(w, ctx) {
     alerts,
     storage: [...storages, ...down.map((s) => ({ name: s.storage, offline: true, sub: 'unavailable', source: 'pve' }))],
     lan,
+    drives,
     host: {
       node: node.node,
       cpu,

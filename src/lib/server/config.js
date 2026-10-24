@@ -48,7 +48,9 @@ export const DEFAULT_SETTINGS = {
     storageAmberPct: 70,
     storageWarnPct: 85,
     tempMinC: 30,
-    tempWarnC: 75
+    tempWarnC: 75,
+    driveLifeWarnPct: 10, // warn when a drive has this much of its rated endurance left
+    driveTempWarnC: 70
   },
   retentionDays: 30
 };

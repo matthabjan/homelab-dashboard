@@ -1,9 +1,9 @@
 // Turns engine state + history into the JSON the browser renders.
 import { resolveIcon, assetUrl } from './config.js';
 import { probeStats, uptimeSince, probeBuckets, series, recentEvents, openCounts } from './db.js';
-import { fmtClock, fmtDuration as fmtAge } from './format.js';
+import { fmtClock, fmtDuration as fmtAge, fmtHours, fmtSize } from './format.js';
 import { DEMO } from './demo.js';
-/** @import { AttentionItem, Fact, Gauge, Level, NetworkReading, Snapshot, Tile, Traffic } from '$lib/types' */
+/** @import { AttentionItem, Drive, Fact, Gauge, Level, NetworkReading, Settings, Snapshot, Tile, Traffic } from '$lib/types' */
 /** @import { Engine } from './engine.js' */
 
 const RANK = { crit: 3, warn: 2, info: 1, ok: 0 };
@@ -36,6 +36,30 @@ function containerStatus({ state, health, exitCode }) {
   if (state === 'running') return { lvl: 'ok', status: 'Up', line: null };
   if (state === 'restarting') return { lvl: 'crit', status: 'Down', line: 'Container restarting' };
   return { lvl: 'crit', status: 'Down', line: `Container ${state}${exitCode ? ` · exit ${exitCode}` : ''}` };
+}
+
+/**
+ * A drive's row in the Drives view, and what is wrong with it (each problem becomes an alert).
+ * @param {Drive} d @param {string} where @param {Settings['thresholds']} th
+ */
+function driveStatus(d, where, th) {
+  /** @type {['crit' | 'warn', string, string][]} severity, alert text, alert key */
+  const problems = [];
+  if (d.health === 'failing') problems.push(['crit', 'SMART reports failing', 'health']);
+  if (d.lifeLeft != null && d.lifeLeft <= th.driveLifeWarnPct) problems.push(['warn', `${d.lifeLeft}% life left`, 'life']);
+  if (d.errors) problems.push(['warn', `${d.errors} media errors or bad sectors`, 'errors']);
+  if (d.tempC != null && d.tempC >= th.driveTempWarnC) problems.push(['warn', `${d.tempC} °C`, 'temp']);
+  /** @type {Level} */
+  const level = problems.some((p) => p[0] === 'crit') ? 'crit' : problems.length ? 'warn' : 'ok';
+  const detail = [
+    d.lifeLeft != null && `${d.lifeLeft}% life left`,
+    d.tempC != null && `${d.tempC} °C`,
+    d.hours != null && `${fmtHours(d.hours)} powered on`,
+    d.written != null && `${fmtSize(d.written)} written`,
+    d.errors ? `${d.errors} errors` : null
+  ].filter(Boolean).join(' · ');
+  const status = d.health === 'failing' ? 'failing' : level === 'warn' ? 'check' : d.health === 'unknown' ? '—' : 'ok';
+  return { row: { name: d.model, meta: [d.kind, fmtSize(d.size), where].join(' · '), detail: detail || 'no SMART details', status, level }, problems };
 }
 
 /**
@@ -189,6 +213,22 @@ export function buildSnapshot(engine) {
     }
   }
 
+  // ---- drives ----
+  /** @type {Snapshot['drives']} */
+  const drives = [];
+  const seenSerials = new Set();
+  for (const s of engine.cfg.services) {
+    const w = engine.state(s.id).widget;
+    for (const d of [...(w?.drives || [])].sort((a, b) => a.model.localeCompare(b.model, undefined, { numeric: true }))) {
+      // a disk passed through whole is reported by the host and by the VM
+      if (d.serial && seenSerials.has(d.serial)) continue;
+      if (d.serial) seenSerials.add(d.serial);
+      const { row, problems } = driveStatus(d, d.where ?? s.name, th);
+      for (const [sev, text, key] of problems) attention.push({ sev, key: `drive-${d.serial ?? d.model}-${key}`, title: `${d.model}: ${text}`, detail: row.meta, href: s.href, ts: now });
+      drives.push({ ...row, href: s.href });
+    }
+  }
+
   // ---- network ----
   /** @type {Snapshot['network']} */
   let network = null;
@@ -295,6 +335,7 @@ export function buildSnapshot(engine) {
     fleetAvail,
     host,
     storage,
+    drives,
     network,
     pinned,
     groups: groups.map((g) => {

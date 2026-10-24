@@ -90,6 +90,8 @@ The page shows a "stale" notice when no update has arrived for 2.5 × the longer
 | `storageWarnPct` | `85` | The storage bar turns red and raises an alert. |
 | `tempMinC` | `30` | Bottom of the temperature gauge's scale. |
 | `tempWarnC` | `75` | Warn at this CPU temperature; at +10 °C it is critical. NVMe drives warn at 70 °C. |
+| `driveLifeWarnPct` | `10` | Warn when a drive has this much of its rated endurance left (SMART wear). |
+| `driveTempWarnC` | `70` | Warn when a drive in **Drives** reaches this temperature. |
 
 CPU and memory gauges use fixed limits: CPU warns at 75% and is critical at 90%, memory at 80% and 92%.
 

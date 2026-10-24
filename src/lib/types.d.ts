@@ -39,6 +39,8 @@ export interface Settings {
     storageWarnPct: number;
     tempMinC: number;
     tempWarnC: number;
+    driveLifeWarnPct: number;
+    driveTempWarnC: number;
   };
   retentionDays: number;
 }
@@ -213,6 +215,31 @@ export interface NetworkReading {
   fallback?: boolean;
 }
 
+/** What SMART says about one drive, whichever format it came in (NVMe log text, ATA attributes, PBS names). */
+export interface SmartReading {
+  tempC: number | null;
+  hours: number | null;
+  /** bytes written over the drive's life */
+  written: number | null;
+  /** % of rated endurance left (100 − NVMe "Percentage Used", or the ATA wear attribute) */
+  lifeLeft: number | null;
+  /** media errors, reallocated, pending and uncorrectable sectors added up */
+  errors: number | null;
+  /** NVMe critical warning set, or an ATA attribute below its threshold */
+  failing: boolean;
+}
+
+/** One physical drive: PVE host disks, and disks passed into the OMV and PBS VMs (virtual disks are skipped). */
+export interface Drive extends Omit<SmartReading, 'failing'> {
+  model: string;
+  serial: string | null;
+  kind: 'NVMe' | 'SSD' | 'HDD' | 'USB';
+  size: number;
+  /** which system sees it: the PVE node; unset means the widget's own service (the snapshot fills in its name) */
+  where?: string;
+  health: 'ok' | 'failing' | 'unknown';
+}
+
 /** Current rates plus their 24 h series, as the network card draws them. */
 export interface Traffic {
   source: string | null;
@@ -264,6 +291,7 @@ export interface WidgetResult {
   host?: HostVitals;
   network?: NetworkReading | null;
   lan?: NetworkReading | null;
+  drives?: Drive[];
   dns?: DnsStats;
   backups?: BackupStatus;
   containers?: ContainerCounts;
@@ -391,6 +419,8 @@ export interface Snapshot {
   fleetAvail: number | null;
   host: { name: string; href: string | null; detail: string; gauges: Gauge[] } | null;
   storage: { name: string; pct: number | null; level: Level | 'off'; sub: string; href: string | null }[];
+  /** the storage card's second view; empty when no widget reports drives */
+  drives: { name: string; meta: string; detail: string; status: string; level: Level; href: string | null }[];
   network: (Traffic & {
     /** the Proxmox host NIC, shown under WAN on its own scale */
     lan: Traffic | null;

@@ -49,5 +49,7 @@ thresholds:
   storageWarnPct: 85
   tempMinC: 30
   tempWarnC: 75
+  driveLifeWarnPct: 10       # drive with this much rated endurance left → warning
+  driveTempWarnC: 70
 
 retentionDays: 30

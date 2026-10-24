@@ -2,7 +2,8 @@
 // Reads services, SMART status and mounted file systems in one go.
 import { trimUrl } from '../http.js';
 import { fmtPair, fmtPct, pct } from '../format.js';
-/** @import { Alert, UsageRow, Context, Widget, WidgetResult } from '$lib/types' */
+import { attributesFromText, fromAttributes, fromNvmeText, slowly, toDrive } from './smart.js';
+/** @import { Alert, UsageRow, Context, Drive, Widget, WidgetResult } from '$lib/types' */
 
 async function rpc(ctx, url, body) {
   const st = ctx.state;
@@ -57,7 +58,31 @@ async function callBg(w, ctx, service, method) {
 function diskOf(f, disks) {
   const dev = f.canonicaldevicefile || f.devicefile || '';
   const candidates = [f.parentdevicefile, dev, dev.replace(/p?\d+$/, '')].filter(Boolean);
-  return disks.find((d) => candidates.includes(d.devicefile)) ?? null;
+  // OMV's devicefile is a /dev/disk/by-id link; the plain /dev/sdX is canonicaldevicefile
+  return disks.find((d) => candidates.includes(d.canonicaldevicefile) || candidates.includes(d.devicefile)) ?? null;
+}
+
+/**
+ * Drives from OMV's SMART list (only disks with monitoring on: passed-through disks; virtual disks have none).
+ * Hours, wear and bytes written come from smartctl's extended output, refreshed every 10 minutes.
+ * @param {Widget} w @param {Context} ctx @param {any[]} disks
+ * @returns {Promise<Drive[]>}
+ */
+function omvDrives(w, ctx, disks) {
+  return Promise.all(disks.map(async (d) => {
+    const dev = d.canonicaldevicefile || d.devicefile;
+    const text = await slowly(ctx, `smart ${dev}`, async () => {
+      const r = await call(w, ctx, 'smart', 'getExtendedInformation', { devicefile: d.devicefile });
+      return typeof r === 'string' ? r : r?.output ?? '';
+    });
+    const nvme = /NVMe Log/i.test(text ?? '');
+    const reading = !text ? null : nvme ? fromNvmeText(text) : fromAttributes(attributesFromText(text));
+    const kind = /\/usb-/.test(d.devicefile ?? '') ? 'USB' : nvme ? 'NVMe' : /Rotation Rate:\s+\d+ rpm/i.test(text ?? '') ? 'HDD' : 'SSD';
+    // the list's temperature is fresher than the 10-minute details, and still there when they fail
+    const tempC = Number(d.temperature) || reading?.tempC || null;
+    const smart = reading ? { ...reading, tempC } : { tempC, hours: null, written: null, lifeLeft: null, errors: null, failing: false };
+    return toDrive({ model: d.model, serial: d.serialnumber || null, kind, size: Number(d.size), status: d.overallstatus, smart });
+  }));
 }
 
 /**
@@ -106,6 +131,7 @@ export async function collect(w, ctx) {
     ],
     line: [main && `Pool ${fmtPct(main.pct)}`, disks.length && `SMART ${good} / ${disks.length} ok`].filter(Boolean).join(' · ') || 'Online',
     alerts,
-    storage
+    storage,
+    drives: await omvDrives(w, ctx, disks)
   };
 }

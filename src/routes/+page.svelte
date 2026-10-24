@@ -15,6 +15,15 @@
   let paletteOpen = $state(false);
   let feedOpen = $state(false); // phones: attention list expanded past the first 3
   let section = $state('top'); // phones: tab bar item for the section in view
+  // storage card: usage or drives. Remembered per browser as a convenience, so storage errors are ignored
+  let storageView = $state('storage');
+  onMount(() => {
+    try { if (localStorage.getItem('storageView') === 'drives') storageView = 'drives'; } catch {}
+  });
+  function showStorage(view) {
+    storageView = view;
+    try { localStorage.setItem('storageView', view); } catch {}
+  }
 
   const allServices = $derived(snap ? snap.groups.flatMap((g) => g.services) : []);
   const stale = $derived(snap && now - snap.generatedAt > snap.staleAfter);
@@ -231,7 +240,24 @@
         {/if}
         {#if snap.storage.length}
           <div class="card storage">
-            <h2>Storage</h2>
+            {#if snap.drives.length}
+              <div class="tabs" role="tablist" aria-label="Storage card">
+                <button role="tab" aria-selected={storageView === 'storage'} onclick={() => showStorage('storage')}>Storage</button>
+                <button role="tab" aria-selected={storageView === 'drives'} onclick={() => showStorage('drives')}>Drives</button>
+              </div>
+            {:else}
+              <h2>Storage</h2>
+            {/if}
+            {#if storageView === 'drives' && snap.drives.length}
+              {#each snap.drives as d}
+                <!-- a drive: model and SMART verdict, then what it is and where, then the SMART details -->
+                <div class="bar drive lv-{d.level}" title="{d.name} · {d.meta} · {d.detail}">
+                  <div class="bar-head"><span class="name">{d.name}</span><span class="mono pct">{d.status}</span></div>
+                  <span class="mono muted off-sub">{d.meta}</span>
+                  <span class="mono muted off-sub">{d.detail}</span>
+                </div>
+              {/each}
+            {:else}
             {#each snap.storage as s}
               <div class="bar lv-{s.level}" title="{s.name} · {s.sub}">
                 {#if s.pct != null}
@@ -244,6 +270,7 @@
                 {/if}
               </div>
             {/each}
+            {/if}
           </div>
         {/if}
         {#if snap.network}
@@ -423,6 +450,12 @@
   .bar.lv-off .name, .bar.lv-off .pct { color: var(--muted); }
   .bar.lv-off .name { flex: 1 1 auto; max-width: none; }
   .off-sub { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .drive { gap: 3px; }
+  .drive .name { flex: 1 1 auto; max-width: none; }
+  .tabs { display: flex; gap: 16px; }
+  .tabs button { all: unset; cursor: pointer; font-size: 14px; font-weight: 600; color: var(--muted); }
+  .tabs button[aria-selected='true'] { color: var(--text); }
+  .tabs button:focus-visible { outline: 2px solid var(--acc); outline-offset: 3px; border-radius: 4px; }
   .track { height: 6px; border-radius: 4px; background: var(--track); overflow: hidden; }
   .fill { height: 100%; border-radius: 4px; background: var(--fill); transition: width 0.6s cubic-bezier(0.2, 0.8, 0.2, 1); }
   .rates { display: flex; gap: 22px; }
@@ -482,7 +515,7 @@
   @media (max-width: 760px) {
     /* the tab bar floats over the bottom: clear it plus the home indicator */
     .page { gap: 22px; padding-bottom: calc(110px + env(safe-area-inset-bottom)); }
-    h2 { font-size: 17px; }
+    h2, .tabs button { font-size: 17px; }
     .search, .deep, .live :global(.demo) { display: none; }
 
     /* header: logo, date over title, Live pill, theme button */
