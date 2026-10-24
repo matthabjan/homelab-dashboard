@@ -48,6 +48,16 @@ async function callBg(w, st, service, method, insecure) {
   throw new Error('OMV background job timed out');
 }
 
+/**
+ * The monitored SMART disk a file system lives on, or null (e.g. a virtual disk in a VM has no SMART).
+ * Matches the parent device first, then the device itself with any partition suffix removed.
+ */
+function diskOf(f, disks) {
+  const dev = f.canonicaldevicefile || f.devicefile || '';
+  const candidates = [f.parentdevicefile, dev, dev.replace(/p?\d+$/, '')].filter(Boolean);
+  return disks.find((d) => candidates.includes(d.devicefile)) ?? null;
+}
+
 export async function collect(w, ctx) {
   const st = ctx.state;
   const ins = ctx.insecure;
@@ -75,7 +85,8 @@ export async function collect(w, ctx) {
       const total = Number(f.size), avail = Number(f.available);
       const used = Number.isFinite(avail) ? total - avail : Number(f.used);
       const dev = f.canonicaldevicefile || f.devicefile;
-      return { name: `${f.label || (dev ? dev.replace(/^\/dev\//, '') : f.mountpoint)} · NAS`, used, total, pct: pct(used, total), sub: fmtPair(used, total) + (disks.length ? ` · SMART ${good === disks.length ? 'ok' : 'warning'}` : ''), source: 'omv' };
+      const disk = diskOf(f, disks);
+      return { name: `${f.label || (dev ? dev.replace(/^\/dev\//, '') : f.mountpoint)} · NAS`, used, total, pct: pct(used, total), sub: fmtPair(used, total) + (disk ? ` · SMART ${disk.overallstatus === 'GOOD' ? 'ok' : 'warning'}` : ''), source: 'omv' };
     });
   for (const s of storage) ctx.metric(`storage.omv.${s.name}`, s.pct);
   const main = [...storage].sort((a, b) => b.total - a.total)[0];

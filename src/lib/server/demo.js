@@ -112,7 +112,10 @@ export async function demoCollect(type, w, ctx) {
         stats: [{ k: 'pool', v: '71%', level: 'warn' }, { k: 'SMART', v: '4 / 4' }, { k: 'services', v: '3 / 3' }],
         line: 'Pool 71% · SMART 4 / 4 ok',
         alerts: [],
-        storage: [{ name: 'data · NAS', used: 5.7e12, total: 8e12, pct: 71.3, sub: '5.2 / 7.3 TiB · SMART ok', source: 'omv' }]
+        storage: [
+          { name: 'data · NAS', used: 5.7e12, total: 8e12, pct: 71.3, sub: '5.2 / 7.3 TiB · SMART ok', source: 'omv' },
+          { name: 'scratch · NAS', used: 120 * GiB, total: 500 * GiB, pct: 24, sub: fmtPair(120 * GiB, 500 * GiB), source: 'omv' } // virtual disk: no SMART
+        ]
       };
     default:
       return { stats: [], line: null, alerts: [] };
