@@ -74,7 +74,8 @@ export async function collect(w, ctx) {
     .map((f) => {
       const total = Number(f.size), avail = Number(f.available);
       const used = Number.isFinite(avail) ? total - avail : Number(f.used);
-      return { name: `${f.label || f.devicefile || f.mountpoint} · NAS`, used, total, pct: pct(used, total), sub: fmtPair(used, total) + (disks.length ? ` · SMART ${good === disks.length ? 'ok' : 'warning'}` : ''), source: 'omv' };
+      const dev = f.canonicaldevicefile || f.devicefile;
+      return { name: `${f.label || (dev ? dev.replace(/^\/dev\//, '') : f.mountpoint)} · NAS`, used, total, pct: pct(used, total), sub: fmtPair(used, total) + (disks.length ? ` · SMART ${good === disks.length ? 'ok' : 'warning'}` : ''), source: 'omv' };
     });
   for (const s of storage) ctx.metric(`storage.omv.${s.name}`, s.pct);
   const main = [...storage].sort((a, b) => b.total - a.total)[0];

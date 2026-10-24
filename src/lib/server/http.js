@@ -1,9 +1,12 @@
-import { Agent, fetch } from 'undici';
+import { Agent, fetch, interceptors } from 'undici';
 import tls from 'node:tls';
 import net from 'node:net';
 
-const insecureAgent = new Agent({ connect: { rejectUnauthorized: false }, keepAliveTimeout: 10_000 });
-const secureAgent = new Agent({ keepAliveTimeout: 10_000 });
+// Cache DNS answers: without it every probe and widget call resolves its host again, and the
+// burst every 30 s can trip the DNS server's rate limit (AdGuard: 20 queries/s per client).
+const dnsCache = () => interceptors.dns({ maxTTL: 300_000 });
+const insecureAgent = new Agent({ connect: { rejectUnauthorized: false }, keepAliveTimeout: 10_000 }).compose(dnsCache());
+const secureAgent = new Agent({ keepAliveTimeout: 10_000 }).compose(dnsCache());
 
 export async function request(url, { method = 'GET', headers = {}, body, insecure = true, timeout = 10_000, redirect = 'follow' } = {}) {
   return fetch(url, {
@@ -54,7 +57,8 @@ const REASONS = {
   TimeoutError: 'Timed out',
   UND_ERR_CONNECT_TIMEOUT: 'Connect timeout',
   ECONNRESET: 'Connection reset',
-  UND_ERR_SOCKET: 'Socket error'
+  UND_ERR_SOCKET: 'Socket error',
+  EAI_AGAIN: 'DNS lookup failed'
 };
 export const reasonText = (code) => (typeof code === 'number' ? `HTTP ${code}` : REASONS[code] || code || 'Unreachable');
 
