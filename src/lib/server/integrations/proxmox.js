@@ -2,7 +2,7 @@
 // Token needs PVEAuditor on "/" (read-only).
 import { trimUrl } from '../http.js';
 import { fmtPair, fmtDuration, pct } from '../format.js';
-/** @import { Alert, Context, Widget, WidgetResult } from '$lib/types' */
+/** @import { Alert, Context, NetworkReading, Widget, WidgetResult } from '$lib/types' */
 
 /**
  * The node's storages for the storage card (filtered by host.storages, unavailable ones kept as `down`)
@@ -53,6 +53,15 @@ export async function collect(w, ctx) {
   try { status = (await ctx.getJson(`${base}/nodes/${node.node}/status`, opts)).data; } catch { /* optional */ }
   let updates = null;
   try { updates = (await ctx.getJson(`${base}/nodes/${node.node}/apt/update`, opts)).data?.length ?? null; } catch { /* needs Sys.Audit */ }
+  // the host NIC: LAN traffic to and from the server (NAS, backups, apps). RRD points are bytes/s averages; the newest can still be empty
+  /** @type {NetworkReading | null} */
+  let lan = null;
+  try {
+    const rrd = (await ctx.getJson(`${base}/nodes/${node.node}/rrddata?timeframe=hour&cf=AVERAGE`, opts)).data ?? [];
+    const last = rrd.findLast((p) => p.netin != null && p.netout != null);
+    if (last) lan = { down: (last.netin * 8) / 1e6, up: (last.netout * 8) / 1e6, source: node.node };
+  } catch { /* optional */ }
+  if (lan) { ctx.metric('lan.down', lan.down); ctx.metric('lan.up', lan.up); }
 
   const cpu = (node.cpu ?? 0) * 100;
   const memPct = pct(node.mem, node.maxmem) ?? 0;
@@ -80,6 +89,7 @@ export async function collect(w, ctx) {
     line: `CPU ${Math.round(cpu)}% · RAM ${fmtPair(node.mem, node.maxmem)}`,
     alerts,
     storage: [...storages, ...down.map((s) => ({ name: s.storage, offline: true, sub: 'unavailable', source: 'pve' }))],
+    lan,
     host: {
       node: node.node,
       cpu,

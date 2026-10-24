@@ -206,7 +206,7 @@ export interface HostVitals {
   updates: number | null;
 }
 
-/** WAN traffic in Mbit/s. `fallback`: from the FRITZ!Box, used only when no router reports it. */
+/** Traffic in Mbit/s: WAN from a router (`fallback`: from the FRITZ!Box, used only when no router reports it), or LAN from the Proxmox host NIC (down = into the host). */
 export interface NetworkReading {
   down: number | null;
   up: number | null;
@@ -214,11 +214,24 @@ export interface NetworkReading {
   fallback?: boolean;
 }
 
+/** Current rates plus their 24 h series, as the network card draws them. */
+export interface Traffic {
+  source: string | null;
+  href: string | null;
+  down: number | null;
+  up: number | null;
+  seriesDown: (number | null)[] | null;
+  seriesUp: (number | null)[] | null;
+  spanH: number | null;
+}
+
 export interface DnsStats {
   queries: number;
   blockedPct: number;
   avgMs: number;
   series: number[] | null;
+  /** what the counts cover, e.g. "24 h" (AdGuard's statistics interval) */
+  period: string | null;
 }
 
 export interface BackupStatus {
@@ -251,6 +264,7 @@ export interface WidgetResult {
   storage?: StorageRow[];
   host?: HostVitals;
   network?: NetworkReading | null;
+  lan?: NetworkReading | null;
   dns?: DnsStats;
   backups?: BackupStatus;
   containers?: ContainerCounts;
@@ -379,16 +393,11 @@ export interface Snapshot {
   fleetAvail: number | null;
   host: { name: string; href: string | null; detail: string; load: string | null; gauges: Gauge[] } | null;
   storage: { name: string; pct: number | null; level: Level | 'off'; sub: string; href: string | null }[];
-  network: {
-    source: string | null;
-    href: string | null;
-    down: number | null;
-    up: number | null;
-    seriesDown: (number | null)[] | null;
-    seriesUp: (number | null)[] | null;
-    spanH: number | null;
-    dns: (DnsStats & { href: string | null }) | null;
-  } | null;
+  network: (Traffic & {
+    /** the Proxmox host NIC, shown under WAN on its own scale */
+    lan: Traffic | null;
+    dns: (DnsStats & { href: string | null; name: string }) | null;
+  }) | null;
   pinned: Tile[];
   groups: { name: string; summary: string; services: Tile[] }[];
   bookmarks: Bookmark[];

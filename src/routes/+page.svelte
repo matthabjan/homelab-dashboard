@@ -114,6 +114,21 @@
   const fmtNum = (n) => (n == null ? '—' : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(n >= 1e4 ? 0 : 1) + 'k' : String(n));
 </script>
 
+{#snippet traffic(t, what, downWord, upWord, height)}
+  <!-- one traffic reading: current rates, a 24 h chart, and where it comes from -->
+  <div class="traffic">
+    <div class="rates">
+      <div><div class="mono big" style:color="var(--acc)">{fmtRate(t.down)}</div><div class="muted small">Mbit/s {downWord}</div></div>
+      <div><div class="mono big" style:color="var(--acc-2)">{fmtRate(t.up)}</div><div class="muted small">Mbit/s {upWord}</div></div>
+    </div>
+    <div class="netchart" style:height="{height}px">
+      <div class="layer"><Sparkline values={t.seriesDown} color="var(--acc)" area {height} min={0} label="{what} {downWord}, last {t.spanH ?? 24} hours" /></div>
+      <div class="layer"><Sparkline values={t.seriesUp} color="var(--acc-2)" {height} min={0} max={Math.max(1, ...(t.seriesDown ?? []).filter((v) => v != null)) * 1.1} /></div>
+    </div>
+    <span class="muted small caption">{t.source} · {what} · {t.spanH ?? 24} h</span>
+  </div>
+{/snippet}
+
 <svelte:window onkeydown={onKey} />
 
 {#if !snap}
@@ -235,21 +250,15 @@
         {#if snap.network}
           <div class="card network">
             <h2>Network</h2>
-            {#if snap.network.source}
-              <div class="rates">
-                <div><div class="mono big" style:color="var(--acc)">{fmtRate(snap.network.down)}</div><div class="muted small">Mbit/s down</div></div>
-                <div><div class="mono big" style:color="var(--acc-2)">{fmtRate(snap.network.up)}</div><div class="muted small">Mbit/s up</div></div>
-              </div>
-              <div class="netchart">
-                <div class="layer"><Sparkline values={snap.network.seriesDown} color="var(--acc)" area height={60} min={0} label="WAN download, last {snap.network.spanH ?? 24} hours" /></div>
-                <div class="layer"><Sparkline values={snap.network.seriesUp} color="var(--acc-2)" height={60} min={0} max={Math.max(1, ...(snap.network.seriesDown ?? []).filter((v) => v != null)) * 1.1} /></div>
-              </div>
-              <span class="muted small">{snap.network.source} · WAN · {snap.network.spanH ?? 24} h</span>
-            {/if}
+            {#if snap.network.source}{@render traffic(snap.network, 'WAN', 'down', 'up', 60)}{/if}
+            {#if snap.network.lan}{@render traffic(snap.network.lan, 'LAN', 'in', 'out', 40)}{/if}
             {#if snap.network.dns}
               <div class="dns">
-                <a class="chip" href={snap.network.dns.href} target={target} rel="noopener"><span class="mono">{fmtNum(snap.network.dns.queries)}</span><span class="muted">DNS queries</span></a>
-                <a class="chip" href={snap.network.dns.href} target={target} rel="noopener"><span class="mono">{snap.network.dns.blockedPct.toFixed(1)}%</span><span class="muted">blocked</span></a>
+                <div class="chips">
+                  <a class="chip" href={snap.network.dns.href} target={target} rel="noopener"><span class="mono">{fmtNum(snap.network.dns.queries)}</span><span class="muted">DNS queries</span></a>
+                  <a class="chip" href={snap.network.dns.href} target={target} rel="noopener"><span class="mono">{snap.network.dns.blockedPct.toFixed(1)}%</span><span class="muted">blocked</span></a>
+                </div>
+                <span class="muted small">{snap.network.dns.name}{snap.network.dns.period ? ` · ${snap.network.dns.period}` : ''}</span>
               </div>
             {/if}
           </div>
@@ -419,9 +428,11 @@
   .fill { height: 100%; border-radius: 4px; background: var(--fill); transition: width 0.6s cubic-bezier(0.2, 0.8, 0.2, 1); }
   .rates { display: flex; gap: 22px; }
   .big { font-size: 22px; font-weight: 500; }
-  .netchart { position: relative; height: 60px; }
+  .traffic { display: flex; flex-direction: column; gap: 10px; }
+  .netchart { position: relative; }
   .layer { position: absolute; inset: 0; }
-  .dns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: auto; }
+  .dns { display: flex; flex-direction: column; gap: 8px; margin-top: auto; }
+  .chips { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   .chip { display: flex; flex-direction: column; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); font-size: 12px; }
   .chip .mono { font-size: 15px; }
 
@@ -514,7 +525,7 @@
     /* host, storage and network stay together as one section */
     .vitals { gap: 12px; }
     .storage, .network { padding: 20px; }
-    .netchart, .network > span.small { display: none; }
+    .netchart, .traffic .caption { display: none; }
 
     /* pinned: icon, name, one status line */
     .pins { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }

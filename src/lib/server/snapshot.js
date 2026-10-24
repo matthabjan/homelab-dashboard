@@ -3,7 +3,7 @@ import { resolveIcon, assetUrl } from './config.js';
 import { probeStats, uptimeSince, probeBuckets, series, recentEvents, openCounts } from './db.js';
 import { fmtClock, fmtDuration as fmtAge } from './format.js';
 import { DEMO } from './demo.js';
-/** @import { AttentionItem, Fact, Gauge, Level, Snapshot, Tile } from '$lib/types' */
+/** @import { AttentionItem, Fact, Gauge, Level, NetworkReading, Snapshot, Tile, Traffic } from '$lib/types' */
 /** @import { Engine } from './engine.js' */
 
 const RANK = { crit: 3, warn: 2, info: 1, ok: 0 };
@@ -202,20 +202,23 @@ export function buildSnapshot(engine) {
     ? widgets.find((x) => x.s.name === netPick && x.w.network)
     : widgets.find((x) => x.w.network && !x.w.network.fallback) || widgets.find((x) => x.w.network);
   const dns = widgets.find((x) => x.w.dns);
-  const nw = net?.w.network;
-  if (net || dns) {
-    const key = nw?.fallback ? 'fritz' : 'net';
-    const sDown = net ? series(`${key}.down`, since24, now, 72) : null;
-    const sUp = net ? series(`${key}.up`, since24, now, 72) : null;
+  const lan = widgets.find((x) => x.w.lan);
+  /**
+   * Rates plus 24 h series for one reading, from the metrics `<key>.down` / `<key>.up`.
+   * @param {string} key @param {NetworkReading} reading @param {string | null} href
+   * @returns {Traffic}
+   */
+  const traffic = (key, reading, href) => {
+    const sDown = series(`${key}.down`, since24, now, 72);
+    const sUp = series(`${key}.up`, since24, now, 72);
+    return { source: reading.source, href, down: reading.down, up: reading.up, seriesDown: sDown.values, seriesUp: sUp.values, spanH: Math.max(1, Math.round((now - sDown.from) / H)) };
+  };
+  if (net || dns || lan?.w.lan) {
+    const nw = net?.w.network;
     network = {
-      source: nw?.source ?? null,
-      href: net?.s.href ?? null,
-      down: nw?.down ?? null,
-      up: nw?.up ?? null,
-      seriesDown: sDown?.values ?? null,
-      seriesUp: sUp?.values ?? null,
-      spanH: sDown ? Math.max(1, Math.round((now - sDown.from) / H)) : null,
-      dns: dns?.w.dns ? { ...dns.w.dns, href: dns.s.href } : null
+      ...(nw ? traffic(nw.fallback ? 'fritz' : 'net', nw, net.s.href) : { source: null, href: null, down: null, up: null, seriesDown: null, seriesUp: null, spanH: null }),
+      lan: lan?.w.lan ? traffic('lan', lan.w.lan, lan.s.href) : null,
+      dns: dns?.w.dns ? { ...dns.w.dns, href: dns.s.href, name: dns.s.name } : null
     };
   }
 

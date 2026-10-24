@@ -23,7 +23,7 @@ A widget adds live data to a service: tile stats, cards on the page and alerts. 
 
 ## Proxmox VE
 
-Provides the **Host** card (CPU, memory, storage, load, uptime, guests), the PVE rows in **Storage**, and guest ids that the PBS widget uses to judge backup age.
+Provides the **Host** card (CPU, memory, storage, load, uptime, guests), the PVE rows in **Storage**, the host NIC traffic (LAN in and out) in **Network**, and guest ids that the PBS widget uses to judge backup age.
 
 ```yaml
 widget:

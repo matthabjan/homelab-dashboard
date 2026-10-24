@@ -54,6 +54,8 @@ export function seedHistory(services) {
       insertMetric('host.temp', ts, 46 + day * 4 + r() * 3);
       insertMetric('net.down', ts, Math.max(2, 50 + day * 45 + r() * 60 + (r() < 0.05 ? 120 : 0)));
       insertMetric('net.up', ts, Math.max(1, 8 + day * 5 + r() * 8));
+      insertMetric('lan.down', ts, Math.max(1, 6 + r() * 20 + (i % 288 > 20 && i % 288 < 30 ? 300 : 0))); // nightly backup burst
+      insertMetric('lan.up', ts, Math.max(1, 15 + day * 10 + r() * 30));
     }
     if (calm()) {
       insertEvent(now - 13 * 3600_000, 'ok', null, 'Backups completed', '6 guests · main');

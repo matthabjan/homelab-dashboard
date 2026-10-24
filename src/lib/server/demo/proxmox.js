@@ -19,5 +19,12 @@ export default {
     ]
   }),
   'GET /api2/json/nodes/:node/status': () => ({ data: { loadavg: ['1.42', '1.38', '1.21'] } }),
+  // host NIC, bytes/s per minute; the newest point is still being filled, as in the real RRD
+  'GET /api2/json/nodes/:node/rrddata': ({ now }) => ({
+    data: Array.from({ length: 70 }, (_, i) => {
+      const t = Math.floor(now / 60_000) - 69 + i;
+      return i === 69 ? { time: t * 60 } : { time: t * 60, netin: (2 + Math.abs(Math.sin(t / 9)) * 25) * 125_000, netout: (6 + Math.abs(Math.sin(t / 13)) * 60) * 125_000 };
+    })
+  }),
   'GET /api2/json/nodes/:node/apt/update': () => ({ data: Array.from({ length: 12 }, (_, i) => ({ Package: `pkg-${i}` })) })
 };
