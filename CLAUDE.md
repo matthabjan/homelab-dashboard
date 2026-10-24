@@ -16,7 +16,7 @@ npm run build && DEMO=1 CONFIG_DIR=config.example npm start   # production build
 docker build -t homelab-dashboard:local .
 ```
 
-CI (`.github/workflows/image.yml`) runs `check` and `test` and builds the image on every push/PR; both must pass.
+CI (`.github/workflows/image.yml`) runs `check` and `test`, then builds the image and smoke-tests it in demo mode (`/api/health`, `/api/state`, `/`), on every push/PR; all must pass.
 
 ## Architecture
 

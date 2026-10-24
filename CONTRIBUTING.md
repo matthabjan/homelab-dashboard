@@ -60,7 +60,7 @@ Guidelines: match gethomepage's widget fields where an equivalent exists. Never 
 ## Pull requests
 
 - Target the `development` branch.
-- `npm run check` and `npm test` must pass. CI runs them along with an image build.
+- `npm run check` and `npm test` must pass. CI runs them, then builds the image and smoke-tests it in demo mode.
 - Update the docs when behaviour or configuration changes.
 - Screenshots help for UI changes. Take them in demo mode, never from a real setup.
 
@@ -70,6 +70,6 @@ Guidelines: match gethomepage's widget fields where an equivalent exists. Never 
 
 1. Bump `version` in `package.json` on `development`, and merge to `main` through a pull request.
 2. Tag `main`: `git tag vX.Y.Z && git push origin vX.Y.Z`.
-3. The [Image workflow](.github/workflows/image.yml) checks that the tag matches `package.json`, builds `linux/amd64` and `linux/arm64` with provenance and an SBOM, pushes `X.Y.Z`, `X.Y`, `X` and `latest` to Docker Hub, creates the GitHub Release with generated notes, and syncs this README to Docker Hub.
+3. The [Image workflow](.github/workflows/image.yml) checks that the tag matches `package.json`, builds `linux/amd64` and `linux/arm64` with provenance, an SBOM and a GitHub artifact attestation, pushes `X.Y.Z`, `X.Y`, `X` and `latest` to Docker Hub, creates the GitHub Release with generated notes, and syncs this README to Docker Hub.
 
-Dependabot targets `development` weekly. Major versions are upgraded by hand.
+Dependabot targets `development` weekly and waits 7 days after a release before proposing it. Major versions are upgraded by hand.
