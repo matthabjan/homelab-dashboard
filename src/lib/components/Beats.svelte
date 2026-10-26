@@ -2,11 +2,10 @@
   /** 24 h health ribbon: 48 half-hour buckets ending at `end`. Healthy ones form one quiet ribbon; a degraded or down one stands taller in its colour. */
   /** @import { Level } from '$lib/types' */
   /**
-   * `note` is added to every slot's tooltip (e.g. the uptime), so hovering anywhere on the strip shows it.
    * `onpick` makes the strip touch-scrubbable (tooltips don't exist on touch): it gets the slot under the finger as text, then null shortly after release
-   * @type {{ beats: (Level | 'none')[], end: number, label: string, note?: string, onpick?: (text: string | null) => void }}
+   * @type {{ beats: (Level | 'none')[], end: number, label: string, onpick?: (text: string | null) => void }}
    */
-  let { beats, end, label, note = '', onpick } = $props();
+  let { beats, end, label, onpick } = $props();
 
   const B = 1_800_000;
   const WORD = { ok: 'all up', warn: 'degraded', crit: 'outage', none: 'no data' };
@@ -58,7 +57,7 @@
   onpointerup={release}
   onpointercancel={release}
 >
-  {#each beats as b, i}<span class="lv-{b}" class:on={i === picked} title="{slot(i)} · {WORD[b]}{note ? `\n${note}` : ''}"></span>{/each}
+  {#each beats as b, i}<span class="lv-{b}" class:on={i === picked} title="{slot(i)} · {WORD[b]}"></span>{/each}
 </div>
 
 <style>

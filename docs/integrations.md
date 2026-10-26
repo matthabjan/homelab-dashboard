@@ -193,10 +193,10 @@ widget:
 | Severity | When |
 |---|---|
 | critical | A container is restarting. |
-| warning | A container exited with a non-zero code. The alert includes the restart count. |
+| warning | A container stopped: it exited with a non-zero code, or with code 0 although its restart policy is `always` or `unless-stopped` (a `docker stop`). The alert includes the restart count. |
 | warning | A container's health check reports `unhealthy`. |
 
-Containers that exited with code 0 count as finished jobs, not failures. Add the label `dashboard.ignore=true` to hide a container entirely.
+Containers that exited with code 0 under restart policy `no` or `on-failure` count as finished jobs, not failures. A container that is its own tile through [label discovery](configuration.md#services-from-container-labels) without `siteMonitor` gets no alert here: its tile reports it. Add the label `dashboard.ignore=true` to hide a container entirely.
 
 ---
 

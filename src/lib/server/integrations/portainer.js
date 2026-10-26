@@ -6,6 +6,7 @@ import { trimUrl } from '../http.js';
 
 /** `homepage.widget.type=x` → { widget: { type: 'x' } }. Values stay literal: no ${SECRET} substitution from labels. */
 function fromLabels(labels) {
+  /** @type {Record<string, any>} */
   const def = {};
   for (const [k, v] of Object.entries(labels || {})) {
     if (!k.startsWith('homepage.')) continue;
@@ -13,11 +14,31 @@ function fromLabels(labels) {
     if (parts.some((p) => p === '__proto__' || p === 'constructor' || p === 'prototype')) continue;
     let o = def;
     for (const p of parts.slice(0, -1)) o = o[p] = o[p] && typeof o[p] === 'object' ? o[p] : {};
-    o[parts.at(-1)] = v === 'true' ? true : v === 'false' ? false : v;
+    o[/** @type {string} */ (parts.at(-1))] = v === 'true' ? true : v === 'false' ? false : v;
   }
   if (!def.group || !def.name) return null;
   const { group, name, weight, ...rest } = def;
   return { group: String(group), name: String(name), weight: Number(weight) || 0, def: rest };
+}
+
+/**
+ * Which exited containers are failures. Exit code 0 is a finished one-shot job, unless the restart policy says the
+ * container should be running (a `docker stop`). The policy only changes when the container is recreated, which gives
+ * it a new id, so each id is looked up once and kept in `state` while it stays exited.
+ * @param {any[]} exited @param {(c: any) => Promise<any>} inspect @param {Record<string, any>} state
+ */
+async function stoppedContainers(exited, inspect, state) {
+  const clean = (c) => /^Exited \(0\)/.test(c.Status);
+  /** @type {Record<string, string>} */
+  const known = state.restartPolicy ?? {};
+  /** @type {Record<string, string>} */
+  const policies = (state.restartPolicy = {});
+  await Promise.all(exited.filter(clean).map(async (c) => {
+    const p = known[c.Id] ?? (await inspect(c))?.HostConfig?.RestartPolicy?.Name;
+    if (p != null) policies[c.Id] = p; // a failed lookup is retried next poll
+  }));
+  const crashed = exited.filter((c) => !clean(c));
+  return { crashed, failed: [...crashed, ...exited.filter((c) => clean(c) && /^(always|unless-stopped)$/.test(policies[c.Id] ?? ''))] };
 }
 
 /**
@@ -34,20 +55,23 @@ export async function collect(w, ctx) {
   const exited = list.filter((c) => c.State === 'exited');
   const restarting = list.filter((c) => c.State === 'restarting');
   const unhealthy = running.filter((c) => /\(unhealthy\)/.test(c.Status));
-  const failed = exited.filter((c) => !/Exited \(0\)/.test(c.Status)); // exit code 0 = finished one-shot job
+  const inspect = async (c) => {
+    try { return await ctx.getJson(`${base}/containers/${c.Id}/json`, opts); } catch { return null; }
+  };
+  const { crashed, failed } = await stoppedContainers(exited, inspect, ctx.state);
 
   /** @type {Alert[]} */
   const alerts = [];
   const name = (c) => (c.Names?.[0] || c.Id.slice(0, 12)).replace(/^\//, '');
-  const restartsOf = async (c) => {
-    try { return (await ctx.getJson(`${base}/containers/${c.Id}/json`, opts)).RestartCount ?? 0; } catch { return null; }
-  };
-  for (const c of restarting) alerts.push({ sev: 'crit', key: `ct-${name(c)}`, title: `Container ${name(c)} is restarting`, detail: c.Status });
-  for (const c of failed) {
-    const n = await restartsOf(c);
+  // A labelled container without siteMonitor is its own tile, health and alert included: no second alert here.
+  const alerting = (cs) => cs.filter((c) => { const d = fromLabels(c.Labels); return !d || d.def.siteMonitor || d.def.probe; });
+  for (const c of alerting(restarting)) alerts.push({ sev: 'crit', key: `ct-${name(c)}`, title: `Container ${name(c)} is restarting`, detail: c.Status });
+  for (const c of alerting(failed)) {
+    // the restart count changes, so a crashed container is looked up every poll, as before
+    const n = crashed.includes(c) ? (await inspect(c))?.RestartCount : null;
     alerts.push({ sev: 'warn', key: `ct-${name(c)}`, title: `Container ${name(c)} stopped`, detail: `${c.Status}${n ? ` · ${n} restarts` : ''}` });
   }
-  for (const c of unhealthy) alerts.push({ sev: 'warn', key: `ct-${name(c)}`, title: `Container ${name(c)} unhealthy`, detail: c.Status });
+  for (const c of alerting(unhealthy)) alerts.push({ sev: 'warn', key: `ct-${name(c)}`, title: `Container ${name(c)} unhealthy`, detail: c.Status });
 
   // Container state is the health check for discovered services without a siteMonitor.
   // Only stable fields: the Status text ("Up 3 hours") changes every poll.
