@@ -25,6 +25,19 @@ test('every integration has a fixture table and a widget here', () => {
   assert.deepEqual(Object.keys(WIDGETS).sort(), Object.keys(INTEGRATIONS).sort());
 });
 
+test('PBS reports backups made while the dashboard was restarting', async () => {
+  const kv = memoryKv();
+  const run = (now) => {
+    const ctx = createContext({ transport: fixtureTransport(FIXTURES.proxmoxbackupserver, { scenario: 'calm', now }), kv, settings: DEFAULT_SETTINGS, now });
+    return INTEGRATIONS.proxmoxbackupserver.collect({ type: 'proxmoxbackupserver', ...WIDGETS.proxmoxbackupserver }, ctx);
+  };
+  const t0 = Date.now();
+  assert.deepEqual((await run(t0)).events, []);
+  // fresh ctx.state, same kv: a restart
+  const after = await run(t0 + 3600_000);
+  assert.equal(after.events?.[0]?.title, 'Backups completed');
+});
+
 for (const scenario of ['issues', 'calm']) {
   test(`all integrations collect from the ${scenario} fixtures`, async (t) => {
     const shared = {};
