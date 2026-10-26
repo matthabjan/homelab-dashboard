@@ -35,6 +35,11 @@ host:
 network:
   # service: FRITZ!Box     # which widget provides WAN traffic (default: OPNsense, else FRITZ!Box)
 
+# "Most used" row: the services you open most; each open counts half as much after halfLifeDays
+mostUsed:
+  count: 4                 # 0 hides the row
+  halfLifeDays: 14
+
 intervals:                 # seconds
   probe: 30
   widgets: 60

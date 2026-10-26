@@ -20,9 +20,13 @@ export function openDb() {
     CREATE INDEX IF NOT EXISTS metrics_key_ts ON metrics (key, ts);
     CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, sev TEXT NOT NULL, sid TEXT, title TEXT NOT NULL, detail TEXT);
     CREATE INDEX IF NOT EXISTS events_ts ON events (ts);
-    CREATE TABLE IF NOT EXISTS opens (sid TEXT PRIMARY KEY, n INTEGER NOT NULL DEFAULT 0, last INTEGER);
+    CREATE TABLE IF NOT EXISTS opens (sid TEXT PRIMARY KEY, n INTEGER NOT NULL DEFAULT 0, last INTEGER, score REAL NOT NULL DEFAULT 0);
     CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT);
   `);
+  // databases from before the decaying score start from their plain open counts
+  if (!db.prepare('PRAGMA table_info(opens)').all().some((c) => c.name === 'score')) {
+    db.exec('ALTER TABLE opens ADD COLUMN score REAL NOT NULL DEFAULT 0; UPDATE opens SET score = n');
+  }
   return db;
 }
 
@@ -86,11 +90,17 @@ export function series(key, since, until, points) {
   return { values: sums.map((s, i) => (counts[i] ? s / counts[i] : null)), from };
 }
 
-export function recordOpen(sid) {
-  stmt('INSERT INTO opens (sid, n, last) VALUES (?, 1, ?) ON CONFLICT(sid) DO UPDATE SET n = n + 1, last = excluded.last').run(sid, Date.now());
+/** Open count where each open loses half its weight every `halfLifeDays`; only the sum and its time are stored. */
+const decayed = (score, last, now, halfLifeDays) => score * 0.5 ** (Math.max(0, now - last) / (halfLifeDays * 86_400_000));
+
+export function recordOpen(sid, now, halfLifeDays) {
+  const r = stmt('SELECT score, last FROM opens WHERE sid = ?').get(sid);
+  const score = (r ? decayed(r.score, r.last, now, halfLifeDays) : 0) + 1;
+  stmt('INSERT INTO opens (sid, n, last, score) VALUES (?, 1, ?, ?) ON CONFLICT(sid) DO UPDATE SET n = n + 1, last = excluded.last, score = excluded.score').run(sid, now, score);
 }
-export function openCounts() {
-  return Object.fromEntries(stmt('SELECT sid, n FROM opens').all().map((r) => [r.sid, r.n]));
+/** Current decayed open score per service id. */
+export function openScores(now, halfLifeDays) {
+  return Object.fromEntries(stmt('SELECT sid, score, last FROM opens').all().map((r) => [r.sid, decayed(r.score, r.last, now, halfLifeDays)]));
 }
 
 export const kvGet = (k) => {

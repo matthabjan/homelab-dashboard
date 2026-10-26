@@ -1,7 +1,8 @@
 // DEMO=1 — preview the UI without any homelab APIs. DEMO_SCENARIO=issues (default) | calm
 // Widgets run the real integrations on the API fixtures in ./demo/; this file only fakes what has no
 // integration logic behind it: probes, certificates, temperatures and the first day of history.
-import { insertProbe, insertMetric, countProbes, transaction, insertEvent } from './db.js';
+import { DEFAULT_SETTINGS } from './config.js';
+import { insertProbe, insertMetric, countProbes, transaction, insertEvent, recordOpen } from './db.js';
 
 export const DEMO = !!process.env.DEMO && process.env.DEMO !== '0';
 export const SCENARIO = process.env.DEMO_SCENARIO === 'calm' ? 'calm' : 'issues';
@@ -57,6 +58,9 @@ export function seedHistory(services) {
       insertMetric('lan.down', ts, Math.max(1, 6 + r() * 20 + (i % 288 > 20 && i % 288 < 30 ? 300 : 0))); // nightly backup burst
       insertMetric('lan.up', ts, Math.max(1, 15 + day * 10 + r() * 30));
     }
+    // a few opens so the "Most used" row has something to show
+    const used = { portainer: 9, 'proxmox ve': 7, 'adguard home': 5, opnsense: 4 };
+    for (const s of services) for (let i = 0; i < (used[s.name.toLowerCase()] ?? 0); i++) recordOpen(s.id, now, DEFAULT_SETTINGS.mostUsed.halfLifeDays);
     if (calm()) {
       insertEvent(now - 13 * 3600_000, 'ok', null, 'Backups completed', '6 guests · main');
       insertEvent(now - 5 * 3600_000, 'info', null, '12 updates available on pve', 'apt packages pending');

@@ -9,13 +9,24 @@
   let current = $state('system');
   const opt = $derived(OPTIONS.find((o) => o.id === current) ?? OPTIONS[0]);
 
+  // --bg per theme: the browser and installed-app chrome (theme-color) follows a manually picked theme too
+  const BG = { light: '#f4f5f7', dark: '#0a0d12' };
+  function themeColor(id) {
+    for (const m of document.querySelectorAll('meta[name="theme-color"]')) {
+      const own = m.getAttribute('media')?.includes('dark') ? BG.dark : BG.light;
+      m.setAttribute('content', id === 'light' || id === 'dark' ? BG[id] : own);
+    }
+  }
+
   onMount(() => {
     current = document.documentElement.dataset.theme || 'system';
+    themeColor(current);
   });
 
   function pick(id) {
     current = id;
     document.documentElement.dataset.theme = id;
+    themeColor(id);
     try { localStorage.setItem('theme', id); } catch {}
   }
 </script>

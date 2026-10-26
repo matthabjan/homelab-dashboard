@@ -68,7 +68,7 @@ export async function collect(w, ctx) {
   const { storages, down, main, missing } = nodeStorages(res, node.node, ctx.settings.host);
 
   let updates = null;
-  try { updates = (await ctx.getJson(`${base}/nodes/${node.node}/apt/update`, opts)).data?.length ?? null; } catch { /* needs Sys.Audit */ }
+  try { updates = (await ctx.getJson(`${base}/nodes/${node.node}/apt/update`, opts)).data?.length ?? null; } catch { /* needs Sys.Modify, which PVEAuditor lacks */ }
   // the host NIC: LAN traffic to and from the server (NAS, backups, apps). RRD points are bytes/s averages; the newest can still be empty
   /** @type {NetworkReading | null} */
   let lan = null;

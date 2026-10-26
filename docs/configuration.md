@@ -68,6 +68,15 @@ Paths are relative to the config folder (served under `/assets/`), or full `http
 |---|---|---|
 | `service` | OPNsense, else FRITZ!Box | Name of the service whose widget provides the WAN traffic. |
 
+### `mostUsed`
+
+The *Most used* row above the groups fills itself from how often you open each service from the dashboard or the command palette. Each open loses half its weight every `halfLifeDays`, so services you stopped using drop out over time.
+
+| Key | Default | Description |
+|---|---|---|
+| `count` | `4` | Number of tiles in the row. `0` hides it. |
+| `halfLifeDays` | `14` | Days after which an open counts half as much. |
+
 ### `intervals` (seconds)
 
 | Key | Default | Description |
@@ -108,7 +117,6 @@ A list of groups. Each group is a list of services. This is the [gethomepage for
         href: https://pve.home.arpa:8006
         description: Virtualization
         siteMonitor: https://pve.home.arpa:8006
-        pinned: true
         widget:
           type: proxmox
           url: https://pve.home.arpa:8006
@@ -123,7 +131,6 @@ A list of groups. Each group is a list of services. This is the [gethomepage for
 | `icon` | See [Icons](#icons). Without one, a monogram is generated. |
 | `iconDark` | Icon used in dark mode. |
 | `siteMonitor` | URL checked every `intervals.probe` seconds, which gives up/down status, uptime and latency. Any response below 500 counts as up, including the 401 a login page returns. Two failures in a row mark the service down. `https://` URLs also get certificate-expiry checks. `probe` is accepted as an alias. |
-| `pinned` | `true` shows the service in the *Pinned* row. Pinned services are ordered by how often you open them. |
 | `latencyWarnMs` | The *Slow* limit for this service, overriding `thresholds.latencyWarnMs`. |
 | `tlsVerify` | `false` accepts a self-signed certificate on this service's **widget** API. It overrides the global `tlsVerify`. |
 | `widget` | Live data from the service's API. See [Integrations](integrations.md) for each `type`. |

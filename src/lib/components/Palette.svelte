@@ -4,8 +4,8 @@
 
   /** Command palette: fuzzy search over services and bookmarks. */
   /** @import { Bookmark, Tile } from '$lib/types' */
-  /** @type {{ open?: boolean, services?: Tile[], bookmarks?: Bookmark[], pinned?: Tile[], target?: string, onopen?: (id: string) => void }} */
-  let { open = $bindable(false), services = [], bookmarks = [], pinned = [], target = '_blank', onopen } = $props();
+  /** @type {{ open?: boolean, services?: Tile[], bookmarks?: Bookmark[], mostUsed?: Tile[], target?: string, onopen?: (id: string) => void }} */
+  let { open = $bindable(false), services = [], bookmarks = [], mostUsed = [], target = '_blank', onopen } = $props();
 
   let q = $state('');
   let active = $state(0);
@@ -33,9 +33,9 @@
   const results = $derived.by(() => {
     const query = q.trim().toLowerCase();
     if (!query) {
-      const pins = pinned.map((p) => items.find((i) => i.id === p.id)).filter((i) => i !== undefined);
-      const rest = items.filter((i) => i.kind === 'service' && !pins.includes(i));
-      return [...pins, ...rest].slice(0, 9);
+      const top = mostUsed.map((t) => items.find((i) => i.id === t.id)).filter((i) => i !== undefined);
+      const rest = items.filter((i) => i.kind === 'service' && !top.includes(i));
+      return [...top, ...rest].slice(0, 9);
     }
     return items
       .map((i) => ({ i, s: score(i.hay, i.name, query) }))
@@ -95,7 +95,7 @@
         />
         <button class="esc" onclick={() => (open = false)} aria-label="Close search">esc</button>
       </div>
-      <div class="label">{q.trim() ? `${results.length} result${results.length === 1 ? '' : 's'}` : 'Pinned & services'}</div>
+      <div class="label">{q.trim() ? `${results.length} result${results.length === 1 ? '' : 's'}` : 'Most used & services'}</div>
       <ul id="palette-list" role="listbox" bind:this={list}>
         {#each results as r, i (r.id)}
           <li id={'pi-' + r.id} role="option" aria-selected={i === active}>
@@ -110,7 +110,7 @@
               <span class="ic"><Icon src={r.icon} dark={r.iconDark} name={r.name} size={22} /></span>
               <span class="name">{r.name}</span>
               <span class="mono sub">{r.sub}</span>
-              {#if r.level}<span class="dot lv-{r.level}" style:background="var(--lv)"></span>{/if}
+              {#if r.level}<span class="dot lv-{r.level}"></span>{/if}
             </a>
           </li>
         {:else}
@@ -148,6 +148,13 @@
   .empty { padding: 20px 10px; color: var(--muted); text-align: center; }
   .hints { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 10px 16px; font-size: 11px; color: var(--muted); border-top: 1px solid var(--line); }
   @media (hover: none) { .hints { display: none; } }
+  /* phones: pinned under the status bar so the keyboard never covers the results */
+  @media (max-width: 760px) {
+    .scrim { padding: max(10px, env(safe-area-inset-top)) 10px 10px; }
+    .panel { border-radius: 20px; }
+    ul { max-height: 50dvh; }
+    a { min-height: 52px; }
+  }
   @keyframes fade { from { opacity: 0; } }
   @keyframes rise { from { opacity: 0; transform: translateY(8px) scale(0.98); } }
 </style>

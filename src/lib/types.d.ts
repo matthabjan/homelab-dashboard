@@ -29,6 +29,7 @@ export interface Settings {
     storage: string | null;
   };
   network: { service: string | null };
+  mostUsed: { count: number; halfLifeDays: number };
   intervals: { probe: number; widgets: number; cert: number };
   thresholds: {
     backupMaxAgeHours: number;
@@ -70,7 +71,6 @@ export interface Service {
   icon: string | null;
   iconDark: string | null;
   probe: string | null;
-  pinned: boolean;
   insecure: boolean;
   latencyWarnMs: number | null;
   widget: Widget | null;
@@ -383,12 +383,12 @@ export interface Tile {
   line: string;
   lineLevel: Level | 'muted' | null;
   stats: Stat[];
-  pinned: boolean;
-  opens: number;
   uptime24: number | null;
   uptime7: number | null;
   p95: number | null;
   cert: { days: number; selfSigned: boolean } | null;
+  /** probe health in 48 half-hour buckets, oldest first; null when the service has no probes */
+  beats: (Level | 'none')[] | null;
 }
 
 export interface Gauge {
@@ -441,7 +441,8 @@ export interface Snapshot {
     lan: Traffic | null;
     dns: (DnsStats & { href: string | null; name: string }) | null;
   }) | null;
-  pinned: Tile[];
+  /** most-opened services, by open count with a half-life of `settings.mostUsed.halfLifeDays` */
+  mostUsed: Tile[];
   groups: { name: string; summary: string; services: Tile[] }[];
   bookmarks: Bookmark[];
 }

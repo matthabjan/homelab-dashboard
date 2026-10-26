@@ -39,6 +39,10 @@ export const DEFAULT_SETTINGS = {
   network: {
     service: null // service whose widget provides WAN traffic (default: OPNsense, else FRITZ!Box)
   },
+  mostUsed: {
+    count: 4, // tiles in the "Most used" row; 0 hides it
+    halfLifeDays: 14 // an open counts half as much after this many days, so the row follows current habits
+  },
   intervals: { probe: 30, widgets: 60, cert: 21600 },
   thresholds: {
     backupMaxAgeHours: 26,
@@ -122,7 +126,6 @@ function toService(gname, name, def, settings) {
     icon: def?.icon ?? null,
     iconDark: def?.iconDark ?? null,
     probe: def?.siteMonitor ?? def?.probe ?? null,
-    pinned: !!def?.pinned,
     insecure: def?.tlsVerify === undefined ? !settings.tlsVerify : !def.tlsVerify,
     latencyWarnMs: Number(def?.latencyWarnMs) || null,
     widget: def?.widget ?? null

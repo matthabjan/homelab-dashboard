@@ -103,14 +103,19 @@ export async function collect(w, ctx) {
     }
   }
 
-  // Event when new backups landed since the last poll
+  // Event when new backups landed since the last poll; the baseline is durable so backups made during a restart count.
+  // No groups (missing permission, API error) leaves it alone, so the next good poll doesn't report every backup as new.
   const latest = Math.max(0, ...groups.map((g) => g['last-backup']));
-  const prevLatest = ctx.state.latest ?? latest;
-  if (latest > prevLatest) {
-    const fresh = groups.filter((g) => g['last-backup'] > prevLatest);
-    events.push({ sev: 'ok', title: 'Backups completed', detail: `${fresh.length} ${fresh.length === 1 ? 'guest' : 'guests'} · ${stores.map((s) => s.store).join(', ')}` });
+  if (latest) {
+    const key = `pbs.latest.${base}`;
+    const stored = ctx.kv.get(key);
+    const prevLatest = stored ?? latest;
+    if (latest > prevLatest) {
+      const fresh = groups.filter((g) => g['last-backup'] > prevLatest);
+      events.push({ sev: 'ok', title: 'Backups completed', detail: `${fresh.length} ${fresh.length === 1 ? 'guest' : 'guests'} · ${stores.map((s) => s.store).join(', ')}` });
+    }
+    if (latest !== stored) ctx.kv.set(key, latest);
   }
-  ctx.state.latest = latest;
 
   const store = regular[0] ?? null;
   const stats = [

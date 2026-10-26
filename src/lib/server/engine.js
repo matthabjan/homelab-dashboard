@@ -167,10 +167,15 @@ export class Engine extends EventEmitter {
       this.cfg.services.filter((s) => s.probe?.startsWith('https')).map(async (s) => {
         const st = this.state(s.id);
         const c = DEMO ? demoCert(s) : await certInfo(s.probe);
-        if (c && st.cert && c.validTo > st.cert.validTo + 86_400_000) {
+        if (!c) return;
+        // durable, so a renewal while the dashboard was down still shows up
+        const key = `cert.validTo.${s.id}`;
+        const prev = st.cert?.validTo ?? kvGet(key);
+        if (prev != null && c.validTo > prev + 86_400_000) {
           insertEvent(Date.now(), 'ok', s.id, 'Certificate renewed', `${s.name} · valid ${Math.round((c.validTo - Date.now()) / 86_400_000)} d`);
         }
-        if (c) st.cert = c;
+        if (c.validTo !== prev) kvSet(key, c.validTo);
+        st.cert = c;
       })
     );
     this.publish();

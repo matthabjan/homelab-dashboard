@@ -34,7 +34,7 @@ widget:
   # node: pve2                          # cluster: which node to show (default: settings host.node, else first online)
 ```
 
-**Account.** Create a privilege-separated token with the `PVEAuditor` role on a PVE node. The role is read-only, and its `Sys.Audit` privilege also covers the update count and the disk list with SMART data.
+**Account.** Create a privilege-separated token with the `PVEAuditor` role on a PVE node. The role is read-only, and its `Sys.Audit` privilege also covers the disk list with SMART data. The update count is the exception: Proxmox requires `Sys.Modify` on `/nodes/<node>` to list pending updates, which `PVEAuditor` doesn't include. Without it the dashboard skips the count, and no updates alert appears. To grant it, put `PVEAuditor` on the node path too, because an ACL on a more specific path replaces the roles inherited from `/`: `pveum role add DashboardUpdates --privs Sys.Modify`, then `pveum acl modify /nodes/<node> --tokens '<user>!<token>' --roles PVEAuditor,DashboardUpdates` (and the same with `--users <user>` for a privilege-separated token).
 
 ```bash
 pveum user add dashboard@pve --comment "homelab dashboard (read-only)"
