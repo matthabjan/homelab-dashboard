@@ -133,12 +133,28 @@ export class Engine extends EventEmitter {
     for (const s of list.filter((x) => ORDER.includes(x.widget.type))) await run(s);
     await Promise.all(list.filter((x) => !ORDER.includes(x.widget.type)).map(run));
     this.updateDiscovered(list);
+    this.recordContainers(list, now);
 
     if (settings.host.temperature) {
       this.temps = DEMO ? demoTemps() : await readTemps();
       if (this.temps?.cpu != null) insertMetric('host.temp', now, this.temps.cpu);
     }
     this.publish();
+  }
+
+  /**
+   * Label-discovered services without a siteMonitor are checked by their container state, so each state the
+   * Portainer widget just read goes into the probe history too (uptime, strips). A failed widget records nothing.
+   */
+  recordContainers(widgetServices, now) {
+    const fresh = new Set(widgetServices.flatMap((s) => {
+      const w = this.state(s.id).widget;
+      return w?.ok ? (w.discovered ?? []).map((d) => `${d.group}\0${d.name}`) : [];
+    }));
+    for (const s of this.cfg.services) {
+      if (s.probe || !s.container || !fresh.has(`${s.group}\0${s.name}`)) continue;
+      insertProbe(s.id, now, s.container.state === 'running' && s.container.health !== 'unhealthy', null);
+    }
   }
 
   /** Rebuild cfg when the set of label-discovered services changed; a failed widget keeps its last list. */

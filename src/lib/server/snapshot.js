@@ -89,7 +89,7 @@ export function buildSnapshot(engine) {
       const st = engine.state(s.id);
       const p = st.probe;
       const w = st.widget;
-      const ps = s.probe ? stats(s.id, now) : null;
+      const ps = s.probe || s.container ? stats(s.id, now) : null; // a container's state is recorded like a probe
       const host = (() => { try { return new URL(s.href || s.probe || '').host; } catch { return ''; } })();
       /** @type {Tile['level']} */
       let lvl = s.probe ? (p.checked ? 'ok' : 'unknown') : w ? 'ok' : 'unknown';

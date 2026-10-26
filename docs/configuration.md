@@ -212,7 +212,7 @@ labels:
 - `homepage.group` and `homepage.name` are required. Every other `homepage.<key>` maps to the YAML key of the same name, and nested keys use dots (`homepage.widget.type=adguard`). The values `true` and `false` become booleans.
 - `homepage.weight` sets the order within the group (lowest first, then by name).
 - A labelled service joins the `services.yaml` group with the same name, or creates a new group at the end. If `services.yaml` already defines a service with the same group and name, that one is used and the label is ignored.
-- A labelled service **without** `siteMonitor` uses the container's state as its health: running, unhealthy, restarting or exited.
+- A labelled service **without** `siteMonitor` uses the container's state as its health: running, unhealthy, restarting or exited. Each Portainer poll (`intervals.widgets`) also records that state in the service's history, so it gets an uptime figure and a 24-hour strip like a checked service; running counts as up, anything else (including unhealthy) as down. It has no latency, and while Portainer is unreachable nothing is recorded.
 - Label values are **used literally**. `${…}` placeholders are not filled in, so a container image can't extract your secrets. Define services whose widgets need credentials in `services.yaml`.
 - Add `dashboard.ignore=true` to a container to hide it from discovery and from the container counts.
 
