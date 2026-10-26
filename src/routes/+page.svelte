@@ -401,17 +401,17 @@
           <div class="sec-head"><h2>{g.name}</h2><span class="mono muted small">{g.summary}</span></div>
           <div class="tiles">
             {#each g.services as t (t.id)}
-              <a class="tile lift lv-{t.level}" class:flash={flash.has(t.id)} class:alert={t.level === 'crit' || t.level === 'warn'} href={t.href} target={target} rel="noopener" onclick={() => opened(t.id)} aria-label="{t.name}, {t.status}{t.lineLevel ? ', ' + t.line : ''}">
+              {@const up = uptimeTxt(t)}
+              <a class="tile lift lv-{t.level}" class:flash={flash.has(t.id)} class:alert={t.level === 'crit' || t.level === 'warn'} href={t.href} target={target} rel="noopener" onclick={() => opened(t.id)} aria-label="{t.name}, {t.status}{t.lineLevel ? ', ' + t.line : ''}{up ? ', ' + up : ''}">
                 <span class="ic"><Icon src={t.icon} dark={t.iconDark} name={t.name} size={24} /></span>
                 <span class="txt">
                   <span class="n">{t.name}</span>
                   <span class="l" class:hl={t.lineLevel === 'crit' || t.lineLevel === 'warn'} title={t.line}>{t.line}</span>
                 </span>
                 <span class="dot lv-{t.level}" title={t.status}></span>
-                <!-- the strip is the visual cue; the exact uptime is in its tooltip -->
+                <!-- the strip with its exact uptime as text; the tile's label already says both -->
                 {#if t.beats}
-                  {@const up = uptimeTxt(t)}
-                  <span class="beats"><Beats beats={t.beats} end={snap.generatedAt} note={up} label="{t.name} availability over the last 24 hours{up ? ', ' + up : ''}" /></span>
+                  <span class="beats" aria-hidden="true"><Beats beats={t.beats} end={snap.generatedAt} label="" /><span class="mono">{pctTxt(t.uptime24)}</span></span>
                 {/if}
               </a>
             {/each}
@@ -429,9 +429,9 @@
               <span class="txt">
                 <span class="n">{t.name}</span>
                 <span class="l" class:hl={isProblem(t.level)}>{#if word}<b>{word}</b>{' · '}{/if}{t.line}<span class="grp">{` · ${group}`}</span></span>
-                <!-- the strip with its exact uptime as text: the desktop tooltip has no touch equivalent. The row's label already says both -->
+                <!-- the strip with its exact uptime as text, as on tiles; the row's label already says both -->
                 {#if t.beats}
-                  <span class="sbeats" aria-hidden="true"><Beats beats={t.beats} end={snap.generatedAt} label="" /><span class="mono">{pctTxt(t.uptime24)}</span></span>
+                  <span class="beats" aria-hidden="true"><Beats beats={t.beats} end={snap.generatedAt} label="" /><span class="mono">{pctTxt(t.uptime24)}</span></span>
                 {/if}
               </span>
               <span class="dot lv-{t.level}" title={t.status}></span>
@@ -605,7 +605,11 @@
   /* the status line may take two lines: it often joins several facts ("Pool 71% · SMART 1 / 1 ok") */
   .tile .l, .srow .l { font-size: 12px; line-height: 1.35; color: var(--muted); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
   .tile .l.hl { color: var(--lv); }
-  .beats { grid-column: 1 / -1; --beats-h: 10px; }
+  /* a service's 24 h strip and its exact uptime (tiles, and the phone list) */
+  .beats { display: flex; align-items: center; gap: 8px; --beats-h: 10px; }
+  .beats > :global(.strip) { flex: 1; }
+  .beats .mono { flex: none; min-width: 6.5ch; text-align: right; font-size: 11px; color: var(--muted); }
+  .tile .beats { grid-column: 1 / -1; }
 
   /* links */
   .links { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -699,9 +703,7 @@
     .srow .n { font-size: 15px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .srow .l { display: block; -webkit-line-clamp: none; line-clamp: none; }
     .srow .l.hl { color: var(--lv); }
-    .sbeats { display: flex; align-items: center; gap: 8px; margin-top: 5px; --beats-h: 8px; }
-    .sbeats > :global(.strip) { flex: 1; }
-    .sbeats .mono { flex: none; min-width: 6.5ch; text-align: right; font-size: 11px; color: var(--muted); }
+    .srow .beats { margin-top: 5px; --beats-h: 8px; }
     .grp { color: var(--muted); }
     .tabbar {
       position: fixed; left: 12px; right: 12px; bottom: max(14px, env(safe-area-inset-bottom)); z-index: 40;
