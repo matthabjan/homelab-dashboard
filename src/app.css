@@ -118,12 +118,15 @@ h1, h2, h3 { margin: 0; }
 /* phones get no hover lift, only the press scale */
 @media (hover: hover) and (not (max-width: 760px)) { .lift:hover { transform: translateY(-2px); } }
 .lift:active { transform: scale(0.98); }
-:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; border-radius: 6px; }
+:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
 /* markup that differs per form factor; the phone breakpoint is 760px everywhere */
 @media not all and (max-width: 760px) { .only-phone { display: none !important; } }
 @media (max-width: 760px) { .only-desktop { display: none !important; } }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: 0 0 auto; }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: 0 0 auto; background: var(--lv); }
+/* status is never colour alone: degraded is a triangle, down a diamond */
+.dot.lv-warn { width: 10px; height: 9px; border-radius: 0; clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+.dot.lv-crit { border-radius: 1.5px; transform: rotate(45deg); }
 .lv-ok { --lv: var(--ok); --lv-soft: var(--ok-soft); }
 .lv-warn { --lv: var(--warn); --lv-soft: var(--warn-soft); }
 .lv-crit { --lv: var(--crit); --lv-soft: var(--crit-soft); }

@@ -110,7 +110,7 @@
               <span class="ic"><Icon src={r.icon} dark={r.iconDark} name={r.name} size={22} /></span>
               <span class="name">{r.name}</span>
               <span class="mono sub">{r.sub}</span>
-              {#if r.level}<span class="dot lv-{r.level}" style:background="var(--lv)"></span>{/if}
+              {#if r.level}<span class="dot lv-{r.level}"></span>{/if}
             </a>
           </li>
         {:else}
@@ -148,6 +148,13 @@
   .empty { padding: 20px 10px; color: var(--muted); text-align: center; }
   .hints { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 10px 16px; font-size: 11px; color: var(--muted); border-top: 1px solid var(--line); }
   @media (hover: none) { .hints { display: none; } }
+  /* phones: pinned under the status bar so the keyboard never covers the results */
+  @media (max-width: 760px) {
+    .scrim { padding: max(10px, env(safe-area-inset-top)) 10px 10px; }
+    .panel { border-radius: 20px; }
+    ul { max-height: 50dvh; }
+    a { min-height: 52px; }
+  }
   @keyframes fade { from { opacity: 0; } }
   @keyframes rise { from { opacity: 0; transform: translateY(8px) scale(0.98); } }
 </style>

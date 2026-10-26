@@ -161,7 +161,8 @@ export function buildSnapshot(engine) {
         uptime24: ps?.up24 ?? null,
         uptime7: ps?.up7 ?? null,
         p95: ps?.p95 ?? null,
-        cert
+        cert,
+        beats: null
       });
     }
   }
@@ -278,6 +279,12 @@ export function buildSnapshot(engine) {
     /** @type {Level} */
     const lv = ratio >= 0.5 ? 'crit' : ratio >= 0.1 || r.maxms > th.latencyWarnMs * 2 ? 'warn' : 'ok';
     if (buckets[i] === 'none' || RANK[lv] > RANK[buckets[i]]) buckets[i] = lv;
+    // the same buckets per service, for the strip on each tile
+    const t = tiles.get(String(r.sid));
+    if (t) {
+      t.beats ??= Array.from({ length: 48 }, () => 'none');
+      t.beats[i] = lv;
+    }
   }
   const ups = all.map((t) => t.uptime24).filter((x) => x != null);
   const fleetAvail = ups.length ? ups.reduce((a, b) => a + b, 0) / ups.length : null;

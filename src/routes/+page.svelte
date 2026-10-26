@@ -5,6 +5,7 @@
   import Sparkline from '$lib/components/Sparkline.svelte';
   import ThemeToggle from '$lib/components/ThemeToggle.svelte';
   import Palette from '$lib/components/Palette.svelte';
+  import Beats from '$lib/components/Beats.svelte';
 
   /** @type {import('./$types').PageProps} */
   let { data } = $props();
@@ -24,9 +25,41 @@
     storageView = view;
     try { localStorage.setItem('storageView', view); } catch {}
   }
+  // arrow keys move between the two tabs (roving tabindex)
+  function tabKey(e) {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    e.preventDefault();
+    const next = storageView === 'storage' ? 'drives' : 'storage';
+    showStorage(next);
+    document.getElementById(`tab-${next}`)?.focus();
+  }
 
   const allServices = $derived(snap ? snap.groups.flatMap((g) => g.services) : []);
   const stale = $derived(snap && now - snap.generatedAt > snap.staleAfter);
+  // the stream has been down past a short grace (a server restart is a blip), or the device is offline
+  let lost = $state(false);
+  let offline = $state(false);
+  // a status page must not keep saying "all good" on old data: the page greys out instead
+  const degraded = $derived(!!stale || lost || offline);
+  // tiles (and 'verdict') whose level changed in the last update, briefly highlighted
+  let flash = $state(new Set());
+  /** @param {import('$lib/types').Snapshot} prev @param {import('$lib/types').Snapshot} next */
+  function changes(prev, next) {
+    const was = new Map(prev.groups.flatMap((g) => g.services).map((t) => [t.id, t.level]));
+    const ids = next.groups.flatMap((g) => g.services).filter((t) => was.has(t.id) && was.get(t.id) !== t.level).map((t) => t.id);
+    if (prev.verdict.level !== next.verdict.level) ids.push('verdict');
+    return ids;
+  }
+  let unflash;
+  /** a new snapshot from the stream; whatever changed level is highlighted for a moment */
+  function receive(next) {
+    const ids = snap ? changes(snap, next) : [];
+    snap = next;
+    if (!ids.length) return;
+    flash = new Set(ids);
+    clearTimeout(unflash);
+    unflash = setTimeout(() => (flash = new Set()), 2400);
+  }
   // problems first; when all is well show recent changes (incl. informational notes)
   const feed = $derived(
     !snap ? [] : snap.needCount ? snap.attention : dedupe([...snap.attention, ...snap.events].sort((a, b) => b.ts - a.ts))
@@ -47,27 +80,48 @@
     return `${d.toLocaleDateString('en-GB', { weekday: 'long' })}, ${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`;
   });
 
+  /** (re)open the stream now: the banner's Retry, coming back online. Set once mounted */
+  let connect = () => {};
   onMount(() => {
     let es;
     let retry;
-    const connect = () => {
+    let grace;
+    const connected = () => { live = 'live'; lost = false; clearTimeout(grace); grace = undefined; };
+    connect = () => {
+      clearTimeout(retry);
+      es?.close();
       es = new EventSource('/api/stream');
-      es.onopen = () => (live = 'live');
-      es.onmessage = (e) => { snap = JSON.parse(e.data); live = 'live'; };
+      es.onopen = connected;
+      es.onmessage = (e) => { receive(JSON.parse(e.data)); connected(); };
       es.onerror = () => {
         live = 'reconnecting';
         es.close();
-        clearTimeout(retry);
+        grace ??= setTimeout(() => (lost = true), 8000);
         retry = setTimeout(connect, 4000);
       };
     };
     connect();
     const tick = setInterval(() => (now = Date.now()), 15_000);
-    const vis = () => { if (document.visibilityState === 'visible') { now = Date.now(); if (live !== 'live') { es?.close(); connect(); } } };
+    const vis = () => { if (document.visibilityState === 'visible') { now = Date.now(); if (live !== 'live') connect(); } };
+    const net = () => { offline = !navigator.onLine; if (!offline && live !== 'live') connect(); };
     document.addEventListener('visibilitychange', vis);
+    addEventListener('online', net);
+    addEventListener('offline', net);
+    net();
     now = Date.now(); // the server rendered the date in its own timezone
     const spy = watchSections();
-    return () => { es?.close(); clearInterval(tick); clearTimeout(retry); spy.disconnect(); document.removeEventListener('visibilitychange', vis); };
+    return () => {
+      es?.close(); clearInterval(tick); clearTimeout(retry); clearTimeout(grace); clearTimeout(unflash); spy.disconnect();
+      document.removeEventListener('visibilitychange', vis); removeEventListener('online', net); removeEventListener('offline', net);
+    };
+  });
+
+  // the alert count on the tab title and, for the installed app, on its icon
+  $effect(() => {
+    const n = snap?.needCount ?? 0;
+    document.title = n ? `(${n}) ${snap?.title}` : (snap?.title ?? document.title);
+    const nav = /** @type {Navigator & { setAppBadge?: (n?: number) => Promise<void>, clearAppBadge?: () => Promise<void> }} */ (navigator);
+    (n ? nav.setAppBadge?.(n) : nav.clearAppBadge?.())?.catch(() => {});
   });
 
   // tab bar highlight: the last section whose top has passed a line at 30% of the viewport
@@ -112,10 +166,6 @@
     if (h < 24) return `${h} h${h < 10 && m % 60 ? ' ' + String(m % 60).padStart(2, '0') + ' m' : ''}`;
     return `${Math.floor(h / 24)} d`;
   }
-  // fleet strip: 48 half-hour buckets ending at the snapshot
-  const SLOT = { ok: 'all up', warn: 'degraded', crit: 'outage', none: 'no data' };
-  const hm = (t) => new Date(t).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-  const slot = (i) => { if (!snap) return ''; const end = snap.generatedAt - (snap.fleet.length - 1 - i) * 1_800_000; return `${hm(end - 1_800_000)}–${hm(end)}`; };
   const pctTxt = (v, d = 2) => (v == null ? '—' : v >= 99.995 ? '100%' : v.toFixed(d) + '%');
   const ICONS = {
     crit: 'M12 9v4M12 17h.01M10.3 3.9 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z',
@@ -177,9 +227,21 @@
       </div>
     </header>
 
+    {#if degraded}
+      {@const age = ago(snap.generatedAt)}
+      <div class="banner" role="alert">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={ICONS.crit} /></svg>
+        <span class="txt">
+          <span class="t">{offline ? 'You’re offline' : lost ? 'Can’t reach the dashboard' : 'Updates have stopped'}</span>
+          <span class="d">Showing the last known state, {age === 'now' ? 'just now' : age + ' old'}.</span>
+        </span>
+        {#if !offline}<button onclick={() => connect()}>Retry</button>{/if}
+      </div>
+    {/if}
+
     <section class="hero" aria-label="Overall status">
-      <div class="card verdict lv-{snap.verdict.level}">
-        <div class="tag"><span class="halo"></span>{snap.verdict.tag}</div>
+      <div class="card verdict lv-{degraded ? 'none' : snap.verdict.level}" class:flash={flash.has('verdict')}>
+        <div class="tag"><span class="halo"></span>{degraded ? 'Last known state' : snap.verdict.tag}</div>
         <h1>{snap.verdict.title}</h1>
         <p class="muted">{snap.verdict.sub}</p>
         {#if snap.facts?.length}
@@ -192,10 +254,7 @@
         {/if}
         <div class="fleet">
           <div class="fleet-head"><span class="muted">Last 24 h</span><span><span class="mono pct">{pctTxt(snap.fleetAvail)}</span> <span class="muted">uptime</span></span></div>
-          <!-- healthy half-hours form one quiet ribbon; a degraded or down one stands taller in its colour -->
-          <div class="strip" role="img" aria-label="Availability of all services over the last 24 hours">
-            {#each snap.fleet as b, i}<span class="lv-{b}" title="{slot(i)} · {SLOT[b]}"></span>{/each}
-          </div>
+          <Beats beats={snap.fleet} end={snap.generatedAt} label="Availability of all services over the last 24 hours" />
           <div class="fleet-head muted mono small"><span>−24 h</span><span>−12 h</span><span>now</span></div>
         </div>
       </div>
@@ -206,7 +265,7 @@
           <span class="muted small">{snap.needCount ? 'most severe first' : 'last 24 h'}</span>
         </div>
         {#each feed.slice(0, 5) as a}
-          <svelte:element this={a.href ? 'a' : 'div'} class="item lift only-desktop lv-{a.sev}" href={a.href} target={a.href ? target : undefined} rel={a.href ? 'noopener' : undefined}>
+          <svelte:element this={a.href ? 'a' : 'div'} class="item only-desktop lv-{a.sev}" class:lift={!!a.href} href={a.href} target={a.href ? target : undefined} rel={a.href ? 'noopener' : undefined}>
             <span class="ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={ICONS[a.sev] ?? ICONS.info} /></svg></span>
             <span class="txt"><span class="t">{a.title}</span>{#if a.detail}<span class="d muted">{a.detail}</span>{/if}</span>
             <span class="mono muted small when">{ago(a.ts)}</span>
@@ -219,7 +278,7 @@
           <div class="rows only-phone" id="feed-rows">
             {#each feedOpen ? feed : feed.slice(0, 3) as a}
               <svelte:element this={a.href ? 'a' : 'div'} class="row lv-{a.sev}" class:lift={!!a.href} href={a.href} target={a.href ? target : undefined} rel={a.href ? 'noopener' : undefined}>
-                <span class="sdot" style:background="var(--lv)"></span>
+                <span class="dot lv-{a.sev}"></span>
                 <span class="txt"><span class="t">{a.title}</span>{#if a.detail}<span class="d muted">{a.detail}</span>{/if}</span>
                 {#if a.href}<svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>{/if}
               </svelte:element>
@@ -251,12 +310,14 @@
           <div class="card storage">
             {#if snap.drives.length}
               <div class="tabs" role="tablist" aria-label="Storage card">
-                <button role="tab" aria-selected={storageView === 'storage'} onclick={() => showStorage('storage')}>Storage</button>
-                <button role="tab" aria-selected={storageView === 'drives'} onclick={() => showStorage('drives')}>Drives</button>
+                {#each [['storage', 'Storage'], ['drives', 'Drives']] as [id, name]}
+                  <button role="tab" id="tab-{id}" aria-selected={storageView === id} aria-controls="storage-panel" tabindex={storageView === id ? 0 : -1} onclick={() => showStorage(id)} onkeydown={tabKey}>{name}</button>
+                {/each}
               </div>
             {:else}
               <h2>Storage</h2>
             {/if}
+            <div class="panel" id="storage-panel" role={snap.drives.length ? 'tabpanel' : undefined} aria-labelledby={snap.drives.length ? `tab-${storageView}` : undefined}>
             {#if storageView === 'drives' && snap.drives.length}
               {#each snap.drives as d}
                 <!-- a drive in two lines: model, temperature and SMART verdict; what it is and where, and its life left as a labelled bar. The rest is in the tooltip -->
@@ -283,6 +344,7 @@
               </div>
             {/each}
             {/if}
+            </div>
           </div>
         {/if}
         {#if snap.network}
@@ -306,10 +368,10 @@
         <div class="sec-head"><h2>Most used</h2></div>
         <div class="pins">
           {#each snap.mostUsed as t (t.id)}
-            <a class="card pin lift lv-{t.level}" class:alert={t.level === 'crit' || t.level === 'warn'} href={t.href} target={target} rel="noopener" onclick={() => opened(t.id)} aria-label="{t.name}, {t.status}">
+            <a class="card pin lift lv-{t.level}" class:flash={flash.has(t.id)} class:alert={t.level === 'crit' || t.level === 'warn'} href={t.href} target={target} rel="noopener" onclick={() => opened(t.id)} aria-label="{t.name}, {t.status}">
               <div class="pin-top">
                 <span class="ic big"><Icon src={t.icon} dark={t.iconDark} name={t.name} size={30} /></span>
-                <span class="dot" style:background="var(--lv)" title={t.status}></span>
+                <span class="dot lv-{t.level}" title={t.status}></span>
               </div>
               <div class="pin-name"><span class="n">{t.name}</span><span class="mono muted hostname">{t.host}</span><span class="pline only-phone" class:hl={isProblem(t.level)}>{t.line}</span></div>
               {#if t.stats.length}
@@ -333,16 +395,18 @@
           <div class="sec-head"><h2>{g.name}</h2><span class="mono muted small">{g.summary}</span></div>
           <div class="tiles">
             {#each g.services as t (t.id)}
-              <a class="tile lift lv-{t.level}" class:alert={t.level === 'crit' || t.level === 'warn'} href={t.href} target={target} rel="noopener" onclick={() => opened(t.id)} aria-label="{t.name}, {t.status}{t.lineLevel ? ', ' + t.line : ''}">
+              <a class="tile lift lv-{t.level}" class:flash={flash.has(t.id)} class:alert={t.level === 'crit' || t.level === 'warn'} href={t.href} target={target} rel="noopener" onclick={() => opened(t.id)} aria-label="{t.name}, {t.status}{t.lineLevel ? ', ' + t.line : ''}">
                 <span class="ic"><Icon src={t.icon} dark={t.iconDark} name={t.name} size={24} /></span>
                 <span class="txt">
                   <span class="n">{t.name}</span>
-                  <span class="l" class:hl={t.lineLevel === 'crit' || t.lineLevel === 'warn'}>{t.line}</span>
+                  <span class="l" class:hl={t.lineLevel === 'crit' || t.lineLevel === 'warn'} title={t.line}>{t.line}</span>
                 </span>
-                <span class="meta">
-                  <span class="dot" style:background="var(--lv)" title={t.status}></span>
-                  {#if t.uptime24 != null}<span class="mono muted tiny">{pctTxt(t.uptime24, 1)}</span>{/if}
-                </span>
+                <span class="dot lv-{t.level}" title={t.status}></span>
+                <!-- the strip is the visual cue; the exact uptime is in its tooltip -->
+                {#if t.beats}
+                  {@const up = t.uptime24 != null ? `${pctTxt(t.uptime24)} uptime in 24 h` : ''}
+                  <span class="beats"><Beats beats={t.beats} end={snap.generatedAt} note={up} label="{t.name} availability over the last 24 hours{up ? ', ' + up : ''}" /></span>
+                {/if}
               </a>
             {/each}
           </div>
@@ -358,7 +422,7 @@
                 <span class="n">{t.name}</span>
                 <span class="l" class:hl={isProblem(t.level)}>{t.line}<span class="grp">{` · ${group}`}</span></span>
               </span>
-              <span class="dot" style:background="var(--lv)" title={t.status}></span>
+              <span class="dot lv-{t.level}" title={t.status}></span>
             </a>
           {/each}
         </div>
@@ -387,9 +451,8 @@
 
 <style>
   .boot { min-height: 100vh; display: grid; place-items: center; }
-  .page { max-width: 1320px; margin: 0 auto; padding: max(20px, env(safe-area-inset-top)) 16px 64px; display: flex; flex-direction: column; gap: 28px; }
+  .page { max-width: 1320px; margin: 0 auto; padding: max(20px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 64px max(16px, env(safe-area-inset-left)); display: flex; flex-direction: column; gap: 28px; }
   .small { font-size: 12px; }
-  .tiny { font-size: 10.5px; }
   h2 { font-size: 14px; font-weight: 600; }
 
   /* header */
@@ -441,14 +504,6 @@
   .fleet-head.small { font-size: 11px; }
   .pct { font-size: 14px; font-weight: 500; }
   /* one continuous rounded ribbon; problems rise above it, set apart by a hairline */
-  .strip { display: flex; align-items: flex-end; height: 20px; }
-  .strip span { flex: 1; height: 8px; background: var(--lv); transition: height 0.15s, opacity 0.15s; }
-  .strip span:first-child { border-radius: 4px 0 0 4px; }
-  .strip span:last-child { border-radius: 0 4px 4px 0; }
-  .strip .lv-ok { opacity: 0.55; }
-  .strip .lv-warn, .strip .lv-crit { height: 20px; border-radius: 3px; margin: 0 1px; }
-  .strip .lv-none { opacity: 0.6; }
-  .strip span:hover { opacity: 1; height: 20px; }
 
   .feed { padding: 22px; display: flex; flex-direction: column; gap: 8px; }
   .feed-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
@@ -467,7 +522,8 @@
   .row-head { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; }
   .row-head .title { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
   .gauges { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
-  .storage { gap: 12px; }
+  .storage, .panel { gap: 12px; }
+  .panel { display: flex; flex-direction: column; }
   .bar { --fill: var(--acc); display: flex; flex-direction: column; gap: 5px; }
   .bar.lv-warn, .bar.lv-crit { --fill: var(--lv); }
   .bar-head { display: flex; align-items: baseline; gap: 8px; font-size: 13px; }
@@ -530,13 +586,14 @@
 
   /* tiles */
   .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
-  .tile { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 14px; background: var(--surface); box-shadow: var(--shadow); min-height: 66px; }
+  .tile { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px 12px; padding: 12px 14px; border-radius: 14px; background: var(--surface); box-shadow: var(--shadow); min-height: 66px; }
   .tile.alert { background: var(--lv-soft); box-shadow: inset 0 0 0 1px var(--lv); }
   .tile.alert .ic { background: var(--surface); }
   .tile .n { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .tile .l { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* the status line may take two lines: it often joins several facts ("Pool 71% · SMART 1 / 1 ok") */
+  .tile .l, .srow .l { font-size: 12px; line-height: 1.35; color: var(--muted); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
   .tile .l.hl { color: var(--lv); }
-  .meta { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex: 0 0 auto; }
+  .beats { grid-column: 1 / -1; --beats-h: 10px; }
 
   /* links */
   .links { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -575,10 +632,7 @@
     .verdict h1 { font-size: 26px; line-height: 1.12; }
     .verdict p { font-size: 13px; }
     .facts { display: none; }
-    .fleet { margin-top: 4px; }
-    .strip { height: 16px; }
-    .strip span { height: 6px; }
-    .strip .lv-warn, .strip .lv-crit { height: 16px; }
+    .fleet { margin-top: 4px; --beats-h: 16px; }
 
     /* sections lose their card: heading outside, rows/cards below */
     .feed, .host { padding: 0; background: none; box-shadow: none; border-radius: 0; }
@@ -587,7 +641,7 @@
     .host { gap: 12px; }
     .rows { display: flex; flex-direction: column; gap: 8px; }
     .row { display: flex; align-items: center; gap: 12px; min-height: 60px; padding: 10px 14px 10px 16px; border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); }
-    .sdot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+    .row .dot { scale: 1.25; }
     .row .t { font-size: 15px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .row .d { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .chev { flex: none; color: var(--muted); }
@@ -618,7 +672,6 @@
     .srow:focus-visible { outline-offset: -2px; border-radius: 0; }
     .srow .ic { width: 38px; height: 38px; border-radius: 11px; }
     .srow .n { font-size: 15px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .srow .l { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .srow .l.hl { color: var(--lv); }
     .grp { color: var(--muted); }
     .tabbar {
@@ -628,6 +681,7 @@
       border: 1px solid var(--line); box-shadow: var(--shadow-lg);
     }
     .tabbar a, .tabbar button {
+      touch-action: manipulation; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
       position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
       min-width: 56px; min-height: 52px; border: 0; border-radius: 18px; background: transparent; color: var(--muted);
       font-size: 10px; font-weight: 500; cursor: pointer;
@@ -636,5 +690,23 @@
     .tabbar svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
     .badge { position: absolute; top: 4px; right: 10px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--crit); color: #fff; font-size: 10px; display: flex; align-items: center; justify-content: center; }
   }
-  :global(html) { scroll-behavior: smooth; scroll-padding-top: 12px; }
+  :global(html) { scroll-padding-top: 12px; }
+  @media (prefers-reduced-motion: no-preference) { :global(html) { scroll-behavior: smooth; } }
+
+  /* connection lost or data stale: say so, and stop showing status colour as if it were current */
+  .banner {
+    display: flex; align-items: center; gap: 12px; padding: 12px 12px 12px 16px; border-radius: 16px;
+    background: var(--warn-soft); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--warn) 40%, transparent); color: var(--text);
+    animation: drop 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .banner > svg { color: var(--warn); flex: none; }
+  .banner .t { font-weight: 600; }
+  .banner .d { font-size: 12px; color: var(--muted); }
+  .banner button { min-height: 36px; padding: 0 14px; border: 0; border-radius: 10px; background: var(--surface); box-shadow: var(--shadow); font-weight: 500; cursor: pointer; }
+  .page:has(.banner) :is(.hero, .vitals, .block) { filter: grayscale(0.7); opacity: 0.8; transition: filter 0.3s, opacity 0.3s; }
+  @keyframes drop { from { opacity: 0; transform: translateY(-6px); } }
+
+  /* a status that just changed: one soft ring in its new colour */
+  .flash { animation: flash 2.4s ease-out; }
+  @keyframes flash { 0%, 30% { box-shadow: 0 0 0 3px var(--lv), var(--shadow); } }
 </style>
