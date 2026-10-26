@@ -311,9 +311,9 @@ export function buildSnapshot(engine) {
   const nextCert = all.map((t) => t.cert).filter((c) => c !== null).filter((c) => !c.selfSigned).sort((a, b) => a.days - b.days)[0];
   const facts = /** @type {(Fact | false | undefined)[]} */ ([
     { k: 'services up', v: `${up} / ${probed.length}`, level: up < probed.length ? 'crit' : null },
-    containers && { k: 'containers running', v: `${containers.running} / ${containers.total}`, level: containers.failed ? 'warn' : null },
+    containers && { k: 'containers up', v: `${containers.running} / ${containers.total}`, level: containers.failed ? 'warn' : null },
     backups?.oldestAge != null && { k: 'oldest backup', v: fmtAge(backups.oldestAge), level: backups.overdue ? 'warn' : null },
-    nextCert && { k: 'next cert expiry', v: `${nextCert.days} d`, level: nextCert.days < th.certWarnDays ? 'warn' : null }
+    nextCert && { k: 'next cert', v: `${nextCert.days} d`, level: nextCert.days < th.certWarnDays ? 'warn' : null }
   ]).filter(/** @returns {f is Fact} */ (f) => !!f);
 
   const events = recentEvents(now - 24 * H, 5).map((e) => ({ ...e, href: tiles.get(e.sid)?.href ?? null }));

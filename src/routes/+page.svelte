@@ -112,6 +112,10 @@
     if (h < 24) return `${h} h${h < 10 && m % 60 ? ' ' + String(m % 60).padStart(2, '0') + ' m' : ''}`;
     return `${Math.floor(h / 24)} d`;
   }
+  // fleet strip: 48 half-hour buckets ending at the snapshot
+  const SLOT = { ok: 'all up', warn: 'degraded', crit: 'outage', none: 'no data' };
+  const hm = (t) => new Date(t).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  const slot = (i) => { if (!snap) return ''; const end = snap.generatedAt - (snap.fleet.length - 1 - i) * 1_800_000; return `${hm(end - 1_800_000)}–${hm(end)}`; };
   const pctTxt = (v, d = 2) => (v == null ? '—' : v >= 99.995 ? '100%' : v.toFixed(d) + '%');
   const ICONS = {
     crit: 'M12 9v4M12 17h.01M10.3 3.9 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z',
@@ -181,16 +185,18 @@
         {#if snap.facts?.length}
           <div class="facts">
             {#each snap.facts as f}
-              <div class="fact lv-{f.level ?? 'none'}"><span class="mono v" class:hl={f.level === 'warn' || f.level === 'crit'}>{f.v}</span><span class="muted k">{f.k}</span></div>
+              {@const [n, of] = f.v.split(' / ')}
+              <div class="fact lv-{f.level ?? 'none'}"><span class="mono v" class:hl={f.level === 'warn' || f.level === 'crit'}>{n}{#if of}<span class="of">/{of}</span>{/if}</span><span class="muted k">{f.k}</span></div>
             {/each}
           </div>
         {/if}
         <div class="fleet">
-          <div class="fleet-head muted"><span>Availability · 24 h</span><span class="mono">{pctTxt(snap.fleetAvail)}</span></div>
+          <div class="fleet-head"><span class="muted">Last 24 h</span><span><span class="mono pct">{pctTxt(snap.fleetAvail)}</span> <span class="muted">uptime</span></span></div>
+          <!-- healthy half-hours form one quiet ribbon; a degraded or down one stands taller in its colour -->
           <div class="strip" role="img" aria-label="Availability of all services over the last 24 hours">
-            {#each snap.fleet as b}<span class="lv-{b}"></span>{/each}
+            {#each snap.fleet as b, i}<span class="lv-{b}" title="{slot(i)} · {SLOT[b]}"></span>{/each}
           </div>
-          <div class="fleet-head muted mono small"><span>−24 h</span><span>now</span></div>
+          <div class="fleet-head muted mono small"><span>−24 h</span><span>−12 h</span><span>now</span></div>
         </div>
       </div>
 
@@ -408,22 +414,41 @@
 
   /* hero */
   .hero { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 16px; }
-  .verdict { padding: 28px; display: flex; flex-direction: column; gap: 16px; }
+  .verdict {
+    padding: 28px; display: flex; flex-direction: column; gap: 16px; container: verdict / inline-size;
+    background: radial-gradient(120% 90% at 0% 0%, var(--lv-soft), transparent 55%), var(--surface);
+  }
   .tag { display: flex; align-items: center; gap: 10px; font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--lv); }
   .halo { width: 10px; height: 10px; border-radius: 50%; background: var(--lv); box-shadow: 0 0 0 5px var(--lv-soft); }
   .verdict h1 { font-size: clamp(28px, 4vw, 40px); line-height: 1.05; font-weight: 600; letter-spacing: -0.03em; text-wrap: balance; }
   .verdict p { margin: 0; font-size: 15px; }
-  .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; margin-top: 4px; }
-  .fact { display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; border-radius: 14px; background: var(--surface-2); min-width: 0; }
-  .fact .v { font-size: 18px; font-weight: 500; letter-spacing: -0.01em; white-space: nowrap; }
+  /* stats: no boxes, hairline dividers between them */
+  .facts { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); row-gap: 14px; margin-top: 4px; padding: 14px 0; border-block: 1px solid var(--line); }
+  .fact { display: flex; flex-direction: column; gap: 4px; padding: 0 16px; min-width: 0; }
+  .fact:first-child { padding-left: 0; }
+  .fact + .fact { border-left: 1px solid var(--line); }
+  /* a narrow card: two by two, each row starting flush left */
+  @container verdict (max-width: 500px) {
+    .facts { grid-auto-flow: row; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .fact:nth-child(odd) { padding-left: 0; border-left: 0; }
+  }
+  .fact .v { font-size: 22px; font-weight: 500; letter-spacing: -0.02em; white-space: nowrap; }
   .fact .v.hl { color: var(--lv); }
-  .fact .k { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .fleet { margin-top: auto; display: flex; flex-direction: column; gap: 6px; }
-  .fleet-head { display: flex; justify-content: space-between; font-size: 12px; }
+  .fact .of { color: var(--muted); font-size: 0.7em; margin-left: 2px; }
+  .fact .k { font-size: 12px; line-height: 1.3; }
+  .fleet { margin-top: auto; display: flex; flex-direction: column; gap: 8px; }
+  .fleet-head { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; }
   .fleet-head.small { font-size: 11px; }
-  .strip { display: flex; gap: 2px; }
-  .strip span { flex: 1; height: 22px; border-radius: 3px; background: var(--lv); }
-  .strip .lv-ok { opacity: 0.85; }
+  .pct { font-size: 14px; font-weight: 500; }
+  /* one continuous rounded ribbon; problems rise above it, set apart by a hairline */
+  .strip { display: flex; align-items: flex-end; height: 20px; }
+  .strip span { flex: 1; height: 8px; background: var(--lv); transition: height 0.15s, opacity 0.15s; }
+  .strip span:first-child { border-radius: 4px 0 0 4px; }
+  .strip span:last-child { border-radius: 0 4px 4px 0; }
+  .strip .lv-ok { opacity: 0.55; }
+  .strip .lv-warn, .strip .lv-crit { height: 20px; border-radius: 3px; margin: 0 1px; }
+  .strip .lv-none { opacity: 0.6; }
+  .strip span:hover { opacity: 1; height: 20px; }
 
   .feed { padding: 22px; display: flex; flex-direction: column; gap: 8px; }
   .feed-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
@@ -551,7 +576,9 @@
     .verdict p { font-size: 13px; }
     .facts { display: none; }
     .fleet { margin-top: 4px; }
-    .strip span { height: 16px; }
+    .strip { height: 16px; }
+    .strip span { height: 6px; }
+    .strip .lv-warn, .strip .lv-crit { height: 16px; }
 
     /* sections lose their card: heading outside, rows/cards below */
     .feed, .host { padding: 0; background: none; box-shadow: none; border-radius: 0; }
