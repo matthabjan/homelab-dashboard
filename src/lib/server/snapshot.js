@@ -104,6 +104,8 @@ export function buildSnapshot(engine) {
       }
 
       const push = (a) => attention.push({ ...a, sid: s.id, service: s.name, href: s.href, ts: a.ts ?? w?.ts ?? now });
+      // a stopped container is p.down (the engine records it like a failed probe); unhealthy is only a warning
+      if (ct?.lvl === 'warn') push({ sev: 'warn', title: `${s.name} is unhealthy`, detail: 'container health check failing' });
 
       const slowMs = s.latencyWarnMs ?? th.latencyWarnMs;
       if (p.down) {

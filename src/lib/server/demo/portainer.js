@@ -1,5 +1,6 @@
-// Portainer: 25 containers, two of them carrying homepage labels (they become services).
-// "issues": music-assistant crashed and stays exited.
+// Portainer: 26 containers, two of them carrying homepage labels (they become services).
+// "issues": music-assistant crashed and stays exited; wud was `docker stop`ped (exit 0, but it should be running).
+// In both, certbot-renew is a one-shot job that finished (exit 0, no restart policy): not a failure.
 const plain = ['postgres', 'redis', 'immich-server', 'immich-ml', 'paperless', 'gotenberg', 'tika', 'jellyfin', 'sonarr', 'radarr', 'prowlarr', 'qbittorrent', 'vaultwarden',
   'nextcloud', 'mariadb', 'mosquitto', 'zigbee2mqtt', 'node-red', 'uptime-kuma', 'grafana', 'prometheus', 'loki'];
 
@@ -13,10 +14,13 @@ export default {
       'homepage.group': 'Management', 'homepage.name': 'Traefik', 'homepage.icon': 'traefik',
       'homepage.href': 'https://traefik.home.arpa', 'homepage.description': 'Reverse proxy · from container labels', 'homepage.siteMonitor': 'https://traefik.home.arpa'
     }),
-    container('wud', 'running', 'Up 3 days (healthy)', {
+    container('certbot-renew', 'exited', 'Exited (0) 6 hours ago'),
+    container('wud', scenario === 'issues' ? 'exited' : 'running', scenario === 'issues' ? 'Exited (0) 20 minutes ago' : 'Up 3 days (healthy)', {
       'homepage.group': 'Management', 'homepage.name': "What's Up Docker", 'homepage.icon': 'whats-up-docker',
       'homepage.href': 'https://wud.home.arpa', 'homepage.description': 'Image updates · container state only'
     })
   ],
-  'GET /api/endpoints/:env/docker/containers/:id/json': () => ({ RestartCount: 5 })
+  'GET /api/endpoints/:env/docker/containers/:id/json': ({ params }) => params.id.startsWith('certbot')
+    ? { RestartCount: 0, HostConfig: { RestartPolicy: { Name: 'no' } } }
+    : { RestartCount: 5, HostConfig: { RestartPolicy: { Name: 'unless-stopped' } } }
 };

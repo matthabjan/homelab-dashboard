@@ -153,7 +153,21 @@ export class Engine extends EventEmitter {
     }));
     for (const s of this.cfg.services) {
       if (s.probe || !s.container || !fresh.has(`${s.group}\0${s.name}`)) continue;
-      insertProbe(s.id, now, s.container.state === 'running' && s.container.health !== 'unhealthy', null);
+      const { state, health, exitCode } = s.container;
+      insertProbe(s.id, now, state === 'running' && health !== 'unhealthy', null);
+      // The container state is this service's probe: no second failure needed, Docker already knows.
+      const p = this.state(s.id).probe;
+      p.checked = now;
+      if (state === 'running') {
+        if (p.down) insertEvent(now, 'ok', s.id, `${s.name} recovered`, `was down since ${fmtClock(p.since)}`);
+        Object.assign(p, { fails: 0, down: false, since: null, reason: null });
+      } else {
+        p.reason = `Container ${state}${exitCode ? ` · exit ${exitCode}` : ''}`;
+        if (!p.down) {
+          Object.assign(p, { fails: 1, down: true, since: now });
+          insertEvent(now, 'crit', s.id, `${s.name} went down`, p.reason);
+        }
+      }
     }
   }
 

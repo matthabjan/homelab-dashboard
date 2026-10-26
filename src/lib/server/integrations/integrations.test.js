@@ -38,6 +38,43 @@ test('PBS reports backups made while the dashboard was restarting', async () => 
   assert.equal(after.events?.[0]?.title, 'Backups completed');
 });
 
+test('Portainer: a stopped container is a failure, a finished one-shot job is not', async () => {
+  const run = async (scenario) => {
+    const ctx = createContext({ transport: fixtureTransport(FIXTURES.portainer, { scenario }), kv: memoryKv(), settings: DEFAULT_SETTINGS, now: Date.now() });
+    return INTEGRATIONS.portainer.collect({ type: 'portainer', ...WIDGETS.portainer }, ctx);
+  };
+  const calm = await run('calm');
+  assert.equal(calm.containers?.failed, 0, 'certbot-renew exited 0 with no restart policy');
+  assert.deepEqual(calm.alerts, []);
+  const issues = await run('issues');
+  // music-assistant crashed; wud exited 0 but is `unless-stopped`
+  assert.equal(issues.containers?.failed, 2);
+  // wud is its own tile (labels, no siteMonitor), so only music-assistant alerts here
+  assert.deepEqual(issues.alerts.map((a) => a.title), ['Container music-assistant stopped']);
+  assert.equal(issues.discovered?.find((d) => d.name === "What's Up Docker")?.container.state, 'exited');
+});
+
+test('Portainer looks up a restart policy once per container', async () => {
+  const fixtures = fixtureTransport(FIXTURES.portainer, { scenario: 'issues' });
+  /** @type {string[]} */
+  const inspected = [];
+  /** @type {import('$lib/types').Transport} */
+  const transport = (url, opts) => {
+    const id = new URL(url).pathname.match(/\/containers\/([^/]+)\/json$/)?.[1];
+    if (id) inspected.push(id.replace(/0*abcdef$/, ''));
+    return fixtures(url, opts);
+  };
+  const state = {};
+  const poll = () => INTEGRATIONS.portainer.collect({ type: 'portainer', ...WIDGETS.portainer }, createContext({ transport, kv: memoryKv(), settings: DEFAULT_SETTINGS, now: Date.now(), state }));
+  await poll();
+  assert.deepEqual(inspected.sort(), ['certbot-renew', 'music-assistant', 'wud']);
+  inspected.length = 0;
+  const again = await poll();
+  // only the crashed container, for its live restart count
+  assert.deepEqual(inspected, ['music-assistant']);
+  assert.equal(again.containers?.failed, 2);
+});
+
 for (const scenario of ['issues', 'calm']) {
   test(`all integrations collect from the ${scenario} fixtures`, async (t) => {
     const shared = {};
