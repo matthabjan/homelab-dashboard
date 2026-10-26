@@ -72,6 +72,11 @@
   // phones: every service in one list, problems first, otherwise config order (sort is stable)
   const RANK = { crit: 0, warn: 1 };
   const isProblem = (level) => level in RANK;
+  // phones have no tooltips: a problem row in the services list leads with its status word ("Up · …") unless the line already says it
+  const statusWord = (t) => (isProblem(t.level) && t.status && !t.line.toLowerCase().includes(t.status.toLowerCase()) ? t.status : '');
+  const uptimeTxt = (t) => (t.uptime24 != null ? `${pctTxt(t.uptime24)} uptime in 24 h` : '');
+  // phones: the fleet ribbon slot under the finger, in place of the "Last 24 h" label
+  let fleetPick = $state(/** @type {string | null} */ (null));
   const serviceList = $derived(
     !snap ? [] : snap.groups.flatMap((g) => g.services.map((t) => ({ t, group: g.name }))).sort((a, b) => (RANK[a.t.level] ?? 2) - (RANK[b.t.level] ?? 2))
   );
@@ -214,7 +219,8 @@
       <div class="right">
         <span class="live" class:warn={stale || live === 'reconnecting'} role="status">
           <span class="pulse"></span>
-          {#if live === 'reconnecting'}Reconnecting…{:else if stale}Data {ago(snap.generatedAt)} old{:else}Live{/if}
+          <!-- phones: one short word, so the title keeps its room; the banner below says the rest -->
+          {#if live === 'reconnecting'}<span class="only-desktop">Reconnecting…</span><span class="only-phone">Retrying</span>{:else if stale}<span class="only-desktop">Data {ago(snap.generatedAt)} old</span><span class="only-phone">Stale</span>{:else}Live{/if}
           {#if snap.demo}<span class="demo">demo</span>{/if}
         </span>
         <ThemeToggle />
@@ -253,8 +259,8 @@
           </div>
         {/if}
         <div class="fleet">
-          <div class="fleet-head"><span class="muted">Last 24 h</span><span><span class="mono pct">{pctTxt(snap.fleetAvail)}</span> <span class="muted">uptime</span></span></div>
-          <Beats beats={snap.fleet} end={snap.generatedAt} label="Availability of all services over the last 24 hours" />
+          <div class="fleet-head"><span class="muted" class:picked={fleetPick} aria-live="polite">{fleetPick ?? 'Last 24 h'}</span><span><span class="mono pct">{pctTxt(snap.fleetAvail)}</span> <span class="muted">uptime</span></span></div>
+          <Beats beats={snap.fleet} end={snap.generatedAt} label="Availability of all services over the last 24 hours" onpick={(t) => (fleetPick = t)} />
           <div class="fleet-head muted mono small"><span>−24 h</span><span>−12 h</span><span>now</span></div>
         </div>
       </div>
@@ -277,7 +283,7 @@
         {#if feed.length}
           <div class="rows only-phone" id="feed-rows">
             {#each feedOpen ? feed : feed.slice(0, 3) as a}
-              <svelte:element this={a.href ? 'a' : 'div'} class="row lv-{a.sev}" class:lift={!!a.href} href={a.href} target={a.href ? target : undefined} rel={a.href ? 'noopener' : undefined}>
+              <svelte:element this={a.href ? 'a' : 'div'} class="row lv-{a.sev}" class:lift={!!a.href} class:flash={!!a.sid && flash.has(a.sid)} href={a.href} target={a.href ? target : undefined} rel={a.href ? 'noopener' : undefined}>
                 <span class="dot lv-{a.sev}"></span>
                 <span class="txt"><span class="t">{a.title}</span>{#if a.detail}<span class="d muted">{a.detail}</span>{/if}</span>
                 {#if a.href}<svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>{/if}
@@ -368,7 +374,7 @@
         <div class="sec-head"><h2>Most used</h2></div>
         <div class="pins">
           {#each snap.mostUsed as t (t.id)}
-            <a class="card pin lift lv-{t.level}" class:flash={flash.has(t.id)} class:alert={t.level === 'crit' || t.level === 'warn'} href={t.href} target={target} rel="noopener" onclick={() => opened(t.id)} aria-label="{t.name}, {t.status}">
+            <a class="card pin lift lv-{t.level}" class:flash={flash.has(t.id)} class:alert={t.level === 'crit' || t.level === 'warn'} href={t.href} target={target} rel="noopener" onclick={() => opened(t.id)} aria-label="{t.name}, {t.status}{t.lineLevel ? ', ' + t.line : ''}">
               <div class="pin-top">
                 <span class="ic big"><Icon src={t.icon} dark={t.iconDark} name={t.name} size={30} /></span>
                 <span class="dot lv-{t.level}" title={t.status}></span>
@@ -404,7 +410,7 @@
                 <span class="dot lv-{t.level}" title={t.status}></span>
                 <!-- the strip is the visual cue; the exact uptime is in its tooltip -->
                 {#if t.beats}
-                  {@const up = t.uptime24 != null ? `${pctTxt(t.uptime24)} uptime in 24 h` : ''}
+                  {@const up = uptimeTxt(t)}
                   <span class="beats"><Beats beats={t.beats} end={snap.generatedAt} note={up} label="{t.name} availability over the last 24 hours{up ? ', ' + up : ''}" /></span>
                 {/if}
               </a>
@@ -416,11 +422,17 @@
         <div class="sec-head"><h2>All services</h2><span class="muted small">{serviceList.length}{isProblem(serviceList[0]?.t.level) ? ' · problems first' : ''}</span></div>
         <div class="card list">
           {#each serviceList as { t, group } (group + '/' + t.id)}
-            <a class="srow lv-{t.level}" href={t.href} target={target} rel="noopener" onclick={() => opened(t.id)} aria-label="{t.name}, {t.status}{t.lineLevel ? ', ' + t.line : ''}, {group}">
+            {@const up = uptimeTxt(t)}
+            {@const word = statusWord(t)}
+            <a class="srow lv-{t.level}" class:flash={flash.has(t.id)} href={t.href} target={target} rel="noopener" onclick={() => opened(t.id)} aria-label="{t.name}, {t.status}, {t.line}, {group}{up ? ', ' + up : ''}">
               <span class="ic"><Icon src={t.icon} dark={t.iconDark} name={t.name} size={22} /></span>
               <span class="txt">
                 <span class="n">{t.name}</span>
-                <span class="l" class:hl={isProblem(t.level)}>{t.line}<span class="grp">{` · ${group}`}</span></span>
+                <span class="l" class:hl={isProblem(t.level)}>{#if word}<b>{word}</b>{' · '}{/if}{t.line}<span class="grp">{` · ${group}`}</span></span>
+                <!-- the strip with its exact uptime as text: the desktop tooltip has no touch equivalent. The row's label already says both -->
+                {#if t.beats}
+                  <span class="sbeats" aria-hidden="true"><Beats beats={t.beats} end={snap.generatedAt} label="" /><span class="mono">{pctTxt(t.uptime24)}</span></span>
+                {/if}
               </span>
               <span class="dot lv-{t.level}" title={t.status}></span>
             </a>
@@ -620,7 +632,7 @@
     .brand { flex: 1 1 auto; min-width: 0; }
     .brand img { width: 40px; height: 40px; border-radius: 12px; }
     .btxt { display: flex; flex-direction: column; min-width: 0; }
-    .date { font-size: 13px; font-weight: 500; line-height: 1.2; }
+    .date { font-size: 13px; font-weight: 500; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .bname { font-size: 26px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .right { flex: none; gap: 8px; }
     .live { min-height: 28px; padding: 0 10px; border-radius: 14px; background: var(--surface); box-shadow: var(--shadow); gap: 7px; }
@@ -631,8 +643,13 @@
     .verdict { padding: 20px; border-radius: 22px; gap: 12px; }
     .verdict h1 { font-size: 26px; line-height: 1.12; }
     .verdict p { font-size: 13px; }
-    .facts { display: none; }
+    /* stats: the same hairline 2×2 as a narrow desktop card, just tighter */
+    .facts { margin-top: 0; padding: 12px 0; row-gap: 12px; }
+    .fact { padding: 0 12px; gap: 2px; }
+    .fact .v { font-size: 19px; }
+    .fact .k { font-size: 11.5px; }
     .fleet { margin-top: 4px; --beats-h: 16px; }
+    .fleet-head .picked { color: var(--text); font-variant-numeric: tabular-nums; }
 
     /* sections lose their card: heading outside, rows/cards below */
     .feed, .host { padding: 0; background: none; box-shadow: none; border-radius: 0; }
@@ -642,8 +659,10 @@
     .rows { display: flex; flex-direction: column; gap: 8px; }
     .row { display: flex; align-items: center; gap: 12px; min-height: 60px; padding: 10px 14px 10px 16px; border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); }
     .row .dot { scale: 1.25; }
-    .row .t { font-size: 15px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .row .d { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    /* status text on phones: previews (feed rows, pins) wrap to two lines; the services list shows it whole */
+    .row .t, .row .d, .pline { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+    .row .t { font-size: 15px; font-weight: 500; line-height: 1.3; }
+    .row .d { font-size: 12px; line-height: 1.35; }
     .chev { flex: none; color: var(--muted); }
     .see-all { align-self: center; min-height: 44px; padding: 0 16px; border: 0; border-radius: 12px; background: none; color: var(--acc); font-size: 14px; font-weight: 500; cursor: pointer; }
     .see-all:active { background: var(--surface-2); }
@@ -660,7 +679,8 @@
     .pin { padding: 14px; gap: 12px; }
     .ic.big { width: 44px; height: 44px; border-radius: 13px; }
     .hostname, .pin-stats { display: none; }
-    .pline { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .pline { font-size: 13px; line-height: 1.35; color: var(--muted); }
+    .srow .l b { font-weight: 600; }
     /* problem text sits on the tinted card: lean toward --text so it keeps 4.5:1 */
     .pline.hl { color: color-mix(in srgb, var(--lv) 80%, var(--text)); }
 
@@ -668,11 +688,20 @@
     .list { border-radius: 18px; overflow: hidden; display: flex; flex-direction: column; }
     .srow { position: relative; display: flex; align-items: center; gap: 12px; min-height: 60px; padding: 10px 16px 10px 12px; }
     .srow + .srow::before { content: ''; position: absolute; top: 0; left: 62px; right: 0; border-top: 1px solid var(--line); }
+    .srow:first-child { border-radius: 18px 18px 0 0; }
+    .srow:last-child { border-radius: 0 0 18px 18px; }
+    .srow:only-child { border-radius: 18px; }
     .srow:active { background: var(--surface-2); }
+    /* the list clips (overflow: hidden), so a changed row is ringed inside its own edges, over the divider */
+    .srow.flash { animation-name: flash-in; }
     .srow:focus-visible { outline-offset: -2px; border-radius: 0; }
     .srow .ic { width: 38px; height: 38px; border-radius: 11px; }
     .srow .n { font-size: 15px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .srow .l { display: block; -webkit-line-clamp: none; line-clamp: none; }
     .srow .l.hl { color: var(--lv); }
+    .sbeats { display: flex; align-items: center; gap: 8px; margin-top: 5px; --beats-h: 8px; }
+    .sbeats > :global(.strip) { flex: 1; }
+    .sbeats .mono { flex: none; min-width: 6.5ch; text-align: right; font-size: 11px; color: var(--muted); }
     .grp { color: var(--muted); }
     .tabbar {
       position: fixed; left: 12px; right: 12px; bottom: max(14px, env(safe-area-inset-bottom)); z-index: 40;
@@ -688,6 +717,8 @@
     }
     .tabbar a:active, .tabbar button:active, .tabbar [aria-current] { background: var(--surface-2); color: var(--text); }
     .tabbar svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+    /* a count from old data must not look live */
+    .page:has(.banner) + .tabbar .badge { background: var(--muted); color: var(--surface); }
     .badge { position: absolute; top: 4px; right: 10px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--crit); color: #fff; font-size: 10px; display: flex; align-items: center; justify-content: center; }
   }
   :global(html) { scroll-padding-top: 12px; }
@@ -704,9 +735,14 @@
   .banner .d { font-size: 12px; color: var(--muted); }
   .banner button { min-height: 36px; padding: 0 14px; border: 0; border-radius: 10px; background: var(--surface); box-shadow: var(--shadow); font-weight: 500; cursor: pointer; }
   .page:has(.banner) :is(.hero, .vitals, .block) { filter: grayscale(0.7); opacity: 0.8; transition: filter 0.3s, opacity 0.3s; }
+  @media (max-width: 760px) {
+    .banner { padding-block: 8px; }
+    .banner button { min-height: 44px; min-width: 64px; }
+  }
   @keyframes drop { from { opacity: 0; transform: translateY(-6px); } }
 
   /* a status that just changed: one soft ring in its new colour */
   .flash { animation: flash 2.4s ease-out; }
   @keyframes flash { 0%, 30% { box-shadow: 0 0 0 3px var(--lv), var(--shadow); } }
+  @keyframes flash-in { 0%, 30% { box-shadow: inset 0 0 0 2px var(--lv); } }
 </style>
