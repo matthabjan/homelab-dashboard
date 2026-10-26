@@ -148,9 +148,9 @@
   .empty { padding: 20px 10px; color: var(--muted); text-align: center; }
   .hints { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 10px 16px; font-size: 11px; color: var(--muted); border-top: 1px solid var(--line); }
   @media (hover: none) { .hints { display: none; } }
-  /* phones: pinned under the status bar so the keyboard never covers the results */
-  @media (max-width: 760px) {
-    .scrim { padding: max(10px, env(safe-area-inset-top)) 10px 10px; }
+  /* phones, also in landscape: pinned under the status bar (and clear of the notch) so the keyboard never covers the results */
+  @media (max-width: 760px), (max-height: 500px) and (pointer: coarse) {
+    .scrim { padding: max(10px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) 10px max(10px, env(safe-area-inset-left)); }
     .panel { border-radius: 20px; }
     ul { max-height: 50dvh; }
     a { min-height: 52px; }

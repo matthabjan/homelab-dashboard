@@ -5,6 +5,19 @@
   const mono = $derived('/assets/monogram/' + encodeURIComponent(name || '?') + '.svg');
   let failed = $state(false);
   let failedDark = $state(false);
+
+  /**
+   * Calls `onfail` when the image can't load. Attached on the client rather than as `onerror`: Svelte renders that as an
+   * inline handler (to replay errors from before hydration), which the nonce CSP blocks. So a failure that already
+   * happened is caught here instead: a finished image that won't decode is broken.
+   * @param {() => void} onfail
+   * @returns {import('svelte/attachments').Attachment<HTMLImageElement>}
+   */
+  const fallback = (onfail) => (img) => {
+    if (img.complete) img.decode().catch(onfail);
+    img.addEventListener('error', onfail);
+    return () => img.removeEventListener('error', onfail);
+  };
 </script>
 
 <img
@@ -18,7 +31,7 @@
   decoding="async"
   style:width="{size}px"
   style:height="{size}px"
-  onerror={() => (failed = true)}
+  {@attach fallback(() => (failed = true))}
 />
 {#if dark && !failedDark}
   <img
@@ -31,7 +44,7 @@
     decoding="async"
     style:width="{size}px"
     style:height="{size}px"
-    onerror={() => (failedDark = true)}
+    {@attach fallback(() => (failedDark = true))}
   />
 {/if}
 
