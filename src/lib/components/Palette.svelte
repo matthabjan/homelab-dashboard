@@ -4,8 +4,8 @@
 
   /** Command palette: fuzzy search over services and bookmarks. */
   /** @import { Bookmark, Tile } from '$lib/types' */
-  /** @type {{ open?: boolean, services?: Tile[], bookmarks?: Bookmark[], pinned?: Tile[], target?: string, onopen?: (id: string) => void }} */
-  let { open = $bindable(false), services = [], bookmarks = [], pinned = [], target = '_blank', onopen } = $props();
+  /** @type {{ open?: boolean, services?: Tile[], bookmarks?: Bookmark[], mostUsed?: Tile[], target?: string, onopen?: (id: string) => void }} */
+  let { open = $bindable(false), services = [], bookmarks = [], mostUsed = [], target = '_blank', onopen } = $props();
 
   let q = $state('');
   let active = $state(0);
@@ -33,9 +33,9 @@
   const results = $derived.by(() => {
     const query = q.trim().toLowerCase();
     if (!query) {
-      const pins = pinned.map((p) => items.find((i) => i.id === p.id)).filter((i) => i !== undefined);
-      const rest = items.filter((i) => i.kind === 'service' && !pins.includes(i));
-      return [...pins, ...rest].slice(0, 9);
+      const top = mostUsed.map((t) => items.find((i) => i.id === t.id)).filter((i) => i !== undefined);
+      const rest = items.filter((i) => i.kind === 'service' && !top.includes(i));
+      return [...top, ...rest].slice(0, 9);
     }
     return items
       .map((i) => ({ i, s: score(i.hay, i.name, query) }))
@@ -95,7 +95,7 @@
         />
         <button class="esc" onclick={() => (open = false)} aria-label="Close search">esc</button>
       </div>
-      <div class="label">{q.trim() ? `${results.length} result${results.length === 1 ? '' : 's'}` : 'Pinned & services'}</div>
+      <div class="label">{q.trim() ? `${results.length} result${results.length === 1 ? '' : 's'}` : 'Most used & services'}</div>
       <ul id="palette-list" role="listbox" bind:this={list}>
         {#each results as r, i (r.id)}
           <li id={'pi-' + r.id} role="option" aria-selected={i === active}>

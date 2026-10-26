@@ -295,11 +295,11 @@
       </section>
     {/if}
 
-    {#if snap.pinned.length}
-      <section class="block" aria-label="Pinned services">
-        <div class="sec-head"><h2>Pinned</h2><span class="muted small">most used first</span></div>
+    {#if snap.mostUsed.length}
+      <section class="block" aria-label="Most used services">
+        <div class="sec-head"><h2>Most used</h2></div>
         <div class="pins">
-          {#each snap.pinned as t (t.id)}
+          {#each snap.mostUsed as t (t.id)}
             <a class="card pin lift lv-{t.level}" class:alert={t.level === 'crit' || t.level === 'warn'} href={t.href} target={target} rel="noopener" onclick={() => opened(t.id)} aria-label="{t.name}, {t.status}">
               <div class="pin-top">
                 <span class="ic big"><Icon src={t.icon} dark={t.iconDark} name={t.name} size={30} /></span>
@@ -376,7 +376,7 @@
     <button onclick={() => (paletteOpen = true)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14ZM20 20l-3.5-3.5" /></svg>Search</button>
   </nav>
 
-  <Palette bind:open={paletteOpen} services={allServices} bookmarks={snap.bookmarks} pinned={snap.pinned} {target} onopen={opened} />
+  <Palette bind:open={paletteOpen} services={allServices} bookmarks={snap.bookmarks} mostUsed={snap.mostUsed} {target} onopen={opened} />
 {/if}
 
 <style>
@@ -483,7 +483,7 @@
   .layer { position: absolute; inset: 0; }
   .dns { color: inherit; text-decoration: none; }
 
-  /* pinned */
+  /* most used */
   .block { display: flex; flex-direction: column; gap: 12px; }
   #services { display: flex; flex-direction: column; gap: 28px; }
   .sec-head { display: flex; align-items: baseline; gap: 10px; }
@@ -574,7 +574,7 @@
     .storage, .network { padding: 20px; }
     .netchart { display: none; }
 
-    /* pinned: icon, name, one status line */
+    /* most used: icon, name, one status line */
     .pins { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
     .pin { padding: 14px; gap: 12px; }
     .ic.big { width: 44px; height: 44px; border-radius: 13px; }

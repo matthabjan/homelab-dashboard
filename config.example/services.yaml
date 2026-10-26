@@ -3,7 +3,6 @@
 #                "sh-<name>" for selfh.st icons, or a full URL. Missing icon → generated monogram.
 #   iconDark:    optional variant used in dark mode
 #   siteMonitor: URL that is checked every 30 s (uptime, latency, TLS certificate)
-#   pinned:      true → shown in the "Pinned" row, ordered by how often you open it
 #   latencyWarnMs: per-service "slow" limit in ms (default: settings.yaml → thresholds.latencyWarnMs)
 #   tlsVerify:   false → accept a self-signed certificate for this service's widget API
 #                (better: trust your CA with NODE_EXTRA_CA_CERTS, see README)
@@ -15,7 +14,6 @@
         href: https://pve.home.arpa:8006
         description: Virtualization
         siteMonitor: https://pve.home.arpa:8006
-        pinned: true
         tlsVerify: false
         widget:
           type: proxmox
@@ -39,7 +37,6 @@
         href: https://opnsense.home.arpa
         description: Firewall
         siteMonitor: https://opnsense.home.arpa
-        pinned: true
         tlsVerify: false
         widget:
           type: opnsense
@@ -72,7 +69,6 @@
         href: https://adguard.home.arpa
         description: DNS and ad blocking
         siteMonitor: https://adguard.home.arpa
-        pinned: true
         widget:
           type: adguard
           url: https://adguard.home.arpa
@@ -85,7 +81,6 @@
         href: https://portainer.home.arpa
         description: Containers
         siteMonitor: https://portainer.home.arpa
-        pinned: true
         widget:
           type: portainer
           url: https://portainer.home.arpa

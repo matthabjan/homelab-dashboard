@@ -8,7 +8,7 @@ A self-hosted launcher and status page for a Proxmox-based homelab. It shows at 
 
 - **Status first.** One line at the top gives the overall state ("Everything is running." or the most important problem), followed by a list of problems ordered by severity. When nothing is wrong, that list shows recent activity instead.
 - **Host vitals.** CPU, RAM, storage and temperature of the Proxmox node, each with a 24-hour trend. Below them: storage across PVE, PBS and the NAS, WAN traffic, and DNS statistics.
-- **Launcher.** Pinned services, ordered by how often you open them, then every service in its group. Press `/` or `⌘K` / `Ctrl+K` to open a command palette.
+- **Launcher.** The services you open most, picked automatically, then every service in its group. Press `/` or `⌘K` / `Ctrl+K` to open a command palette.
 - **Checks.** Every service is checked every 30 s, which gives uptime (24 h and 7 d) and p95 latency. The dashboard also tracks TLS certificate expiry, backup age per guest, failed or unhealthy containers, SMART status and pending Proxmox updates.
 - **Live and installable.** Updates are pushed to the browser as they happen, without reloading. You can install it as an app (PWA) on phones and desktops, and it has light and dark themes.
 - **Works with gethomepage configs.** [gethomepage](https://gethomepage.dev)'s `services.yaml`, `bookmarks.yaml`, icon names and `homepage.*` container labels work as they are.

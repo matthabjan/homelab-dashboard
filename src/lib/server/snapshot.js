@@ -1,6 +1,6 @@
 // Turns engine state + history into the JSON the browser renders.
 import { resolveIcon, assetUrl } from './config.js';
-import { probeStats, uptimeSince, probeBuckets, series, recentEvents, openCounts } from './db.js';
+import { probeStats, uptimeSince, probeBuckets, series, recentEvents, openScores } from './db.js';
 import { fmtClock, fmtDuration as fmtAge, fmtHours, fmtSize } from './format.js';
 import { DEMO } from './demo.js';
 /** @import { AttentionItem, Drive, Fact, Gauge, Level, NetworkReading, Settings, Snapshot, Tile, Traffic } from '$lib/types' */
@@ -81,7 +81,6 @@ export function buildSnapshot(engine) {
   const now = Date.now();
   /** @type {AttentionItem[]} */
   const attention = [];
-  const opens = openCounts();
   /** @type {Map<string, Tile>} */
   const tiles = new Map();
 
@@ -159,8 +158,6 @@ export function buildSnapshot(engine) {
         line: line || (lvl === 'ok' ? 'Online' : ''),
         lineLevel,
         stats: (w?.stats || []).slice(0, 3),
-        pinned: s.pinned,
-        opens: opens[s.id] || 0,
         uptime24: ps?.up24 ?? null,
         uptime7: ps?.up7 ?? null,
         p95: ps?.p95 ?? null,
@@ -321,10 +318,12 @@ export function buildSnapshot(engine) {
 
   const events = recentEvents(now - 24 * H, 5).map((e) => ({ ...e, href: tiles.get(e.sid)?.href ?? null }));
 
-  const pinned = all
-    .filter((t) => t.pinned)
+  const scores = openScores(now, settings.mostUsed.halfLifeDays);
+  const mostUsed = all
+    .filter((t) => t.href && scores[t.id] > 0)
     .map((t, i) => ({ t, i }))
-    .sort((a, b) => b.t.opens - a.t.opens || a.i - b.i)
+    .sort((a, b) => scores[b.t.id] - scores[a.t.id] || a.i - b.i)
+    .slice(0, Math.max(0, settings.mostUsed.count))
     .map((x) => x.t);
 
   return {
@@ -346,7 +345,7 @@ export function buildSnapshot(engine) {
     storage,
     drives,
     network,
-    pinned,
+    mostUsed,
     groups: groups.map((g) => {
       const ts = g.services.map((s) => /** @type {Tile} */ (tiles.get(s.id))); // every service got a tile above
       const known = ts.filter((t) => t.level !== 'unknown');
