@@ -98,6 +98,8 @@ export function buildSnapshot(engine) {
       /** @type {Tile['lineLevel']} */
       let lineLevel = null;
       const ct = !s.probe && s.container ? containerStatus(s.container) : null;
+      const auto = s.icon ? null : engine.autoIcons.get(s.id);
+      const iconDark = s.iconDark ?? auto?.iconDark;
       if (ct) {
         ({ lvl, status } = ct);
         if (ct.line) { line = ct.line; lineLevel = lvl; }
@@ -153,8 +155,8 @@ export function buildSnapshot(engine) {
         description: s.description,
         href: s.href,
         host,
-        icon: resolveIcon(s.icon, s.name),
-        iconDark: s.iconDark ? resolveIcon(s.iconDark, s.name) : null,
+        icon: resolveIcon(s.icon ?? auto?.icon, s.name),
+        iconDark: iconDark ? resolveIcon(iconDark, s.name) : null,
         level: lvl,
         status: p.down ? 'Down' : status,
         line: line || (lvl === 'ok' ? 'Online' : ''),

@@ -10,6 +10,7 @@ import { readTemps } from './integrations/host.js';
 import { DEMO, SCENARIO, demoProbe, demoCert, demoTemps, seedHistory } from './demo.js';
 import { FIXTURES, fixtureTransport } from './demo/index.js';
 import { buildSnapshot } from './snapshot.js';
+import { createIconFinder, iconCandidates } from './icons.js';
 import { INTEGRATIONS, ORDER, createContext } from './integrations/index.js';
 /** @import { Config, Discovered, Service, ServiceState, Shared, Snapshot, Temps, Widget } from '$lib/types' */
 
@@ -34,6 +35,9 @@ export class Engine extends EventEmitter {
   /** @type {Temps | null} */
   temps = null;
   timers = [];
+  icons = createIconFinder({ kv });
+  /** @type {Map<string, { icon: string, iconDark: string | null }>} service id → icon found for a service without `icon` */
+  autoIcons = new Map();
   /** @type {Snapshot | null} */
   snapshot = null;
   started = false;
@@ -68,6 +72,7 @@ export class Engine extends EventEmitter {
     every(() => this.runProbes().catch((e) => console.error('[probe]', e)), iv.probe);
     every(() => this.runWidgets().catch((e) => console.error('[widgets]', e)), iv.widgets);
     every(() => this.runCerts().catch((e) => console.error('[cert]', e)), iv.cert);
+    every(() => this.findIcons().catch((e) => console.error('[icons]', e)), 3600);
     this.publish();
   }
 
@@ -190,6 +195,21 @@ export class Engine extends EventEmitter {
       this.runProbes().catch((e) => console.error('[probe]', e));
       this.runCerts().catch((e) => console.error('[cert]', e));
     }
+    this.findIcons().catch((e) => console.error('[icons]', e));
+  }
+
+  /** Look up icons for services without `icon` (by name, then container image); publishes when they changed. */
+  async findIcons() {
+    await this.icons.refresh();
+    const found = new Map();
+    for (const s of this.cfg.services) {
+      if (s.icon) continue;
+      const f = await this.icons.find(iconCandidates(s.name, s.image));
+      if (f) found.set(s.id, f);
+    }
+    if (JSON.stringify([...found]) === JSON.stringify([...this.autoIcons])) return;
+    this.autoIcons = found;
+    this.publish();
   }
 
   async runCerts() {

@@ -80,7 +80,7 @@ export async function collect(w, ctx) {
     health: c.Status?.match(/\((healthy|unhealthy|health: starting)\)/)?.[1] ?? null,
     exitCode: Number(c.Status?.match(/^Exited \((-?\d+)\)/)?.[1] ?? 0)
   });
-  const discovered = list.map((c) => { const d = fromLabels(c.Labels); return d && { ...d, container: containerOf(c) }; }).filter(Boolean)
+  const discovered = list.map((c) => { const d = fromLabels(c.Labels); return d && { ...d, container: containerOf(c), image: c.Image ?? null }; }).filter(Boolean)
     .sort((a, b) => a.weight - b.weight || a.name.localeCompare(b.name))
     .map(({ weight, ...d }) => d);
 
