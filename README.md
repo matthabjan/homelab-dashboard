@@ -11,7 +11,7 @@ A self-hosted launcher and status page for a Proxmox-based homelab. It shows at 
 - **Launcher.** The services you open most, picked automatically, then every service in its group. Press `/` or `⌘K` / `Ctrl+K` to open a command palette.
 - **Checks.** Every service is checked every 30 s, which gives uptime (24 h and 7 d), p95 latency and a 24-hour health strip on each service tile. The dashboard also tracks TLS certificate expiry, backup age per guest, failed or unhealthy containers, SMART status and pending Proxmox updates.
 - **Live and installable.** Updates are pushed to the browser as they happen, without reloading, and a service whose status changes is briefly highlighted. If updates stop (server unreachable, device offline), the page says so and greys out instead of showing old data as current. You can install it as an app (PWA) on phones and desktops, where the icon shows the number of open problems, and it has light and dark themes.
-- **Works with gethomepage configs.** [gethomepage](https://gethomepage.dev)'s `services.yaml`, `bookmarks.yaml`, icon names and `homepage.*` container labels work as they are.
+- **Works with gethomepage configs.** [gethomepage](https://gethomepage.dev)'s `services.yaml`, `bookmarks.yaml`, and icon names work as they are; its `homepage.*` container labels work once renamed to `dashboard.*`.
 
 **Integrations:** Proxmox VE · Proxmox Backup Server · OPNsense · OpenMediaVault · AdGuard Home · Portainer · FRITZ!Box
 

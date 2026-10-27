@@ -11,13 +11,13 @@ export default {
     ...plain.map((n) => container(n)),
     scenario === 'issues' ? container('music-assistant', 'exited', 'Exited (1) 1 hour ago') : container('music-assistant'),
     container('traefik', 'running', 'Up 3 days', {
-      'homepage.group': 'Management', 'homepage.name': 'Traefik', 'homepage.icon': 'traefik',
-      'homepage.href': 'https://traefik.home.arpa', 'homepage.description': 'Reverse proxy · from container labels', 'homepage.siteMonitor': 'https://traefik.home.arpa'
+      'dashboard.group': 'Management', 'dashboard.name': 'Traefik', 'dashboard.icon': 'traefik',
+      'dashboard.href': 'https://traefik.home.arpa', 'dashboard.description': 'Reverse proxy · from container labels', 'dashboard.siteMonitor': 'https://traefik.home.arpa'
     }),
     container('certbot-renew', 'exited', 'Exited (0) 6 hours ago'),
     container('wud', scenario === 'issues' ? 'exited' : 'running', scenario === 'issues' ? 'Exited (0) 20 minutes ago' : 'Up 3 days (healthy)', {
-      'homepage.group': 'Management', 'homepage.name': "What's Up Docker", 'homepage.icon': 'whats-up-docker',
-      'homepage.href': 'https://wud.home.arpa', 'homepage.description': 'Image updates · container state only'
+      'dashboard.group': 'Management', 'dashboard.name': "What's Up Docker", 'dashboard.icon': 'whats-up-docker',
+      'dashboard.href': 'https://wud.home.arpa', 'dashboard.description': 'Image updates · container state only'
     })
   ],
   'GET /api/endpoints/:env/docker/containers/:id/json': ({ params }) => params.id.startsWith('certbot')
