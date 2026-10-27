@@ -128,7 +128,7 @@ A list of groups. Each group is a list of services. This is the [gethomepage for
 |---|---|
 | `href` | Where the tile links to. |
 | `description` | Second line of the tile when the widget has nothing more specific to show. |
-| `icon` | See [Icons](#icons). Without one, a monogram is generated. |
+| `icon` | See [Icons](#icons). Without one, an icon is [picked automatically](#automatic-icons). |
 | `iconDark` | Icon used in dark mode. |
 | `siteMonitor` | URL checked every `intervals.probe` seconds, which gives up/down status, uptime and latency. Any response below 500 counts as up, including the 401 a login page returns. Two failures in a row mark the service down. `https://` URLs also get certificate-expiry checks. `probe` is accepted as an alias. |
 | `latencyWarnMs` | The *Slow* limit for this service, overriding `thresholds.latencyWarnMs`. |
@@ -152,7 +152,7 @@ Links at the bottom of the page. They can also be found in the command palette. 
           href: https://github.com/
 ```
 
-`icon` and `iconDark` work as they do for services.
+`icon` and `iconDark` work as they do for services, but a bookmark without `icon` shows a monogram (no automatic icons).
 
 ---
 
@@ -169,6 +169,15 @@ Links at the bottom of the page. They can also be found in the command palette. 
 | Path | `/icons/nas.png`, `/images/logo.png` | A file in the config folder |
 
 A local file in `config/icons/` with a matching name takes precedence over the CDN. gethomepage's `mdi-*` and `si-*` icons are not supported, and those services show a monogram instead. A monogram is also shown when an icon fails to load.
+
+### Automatic icons
+
+A service without `icon` (in `services.yaml` or as the `dashboard.icon` label) gets one from the [selfh.st](https://selfh.st/icons/) or [dashboard-icons](https://github.com/homarr-labs/dashboard-icons) collection:
+
+- The server looks up the service name (`AdGuard Home` → `adguard-home`), then, for a [labelled container](#services-from-container-labels), its image (`ghcr.io/immich-app/immich-server` → `immich-server`, then `immich`). selfh.st is checked before dashboard-icons.
+- The coloured icon is used in both themes. If it is nearly black (GitHub, LLDAP), its light variant is used in dark mode. An `iconDark` you set yourself wins.
+- Both collections' indexes are downloaded from jsDelivr once a day and kept in the database. If the server can't reach jsDelivr, services without `icon` show a monogram, and it tries again an hour later.
+- If the match is wrong, set `icon`: a file in `config/icons/` or any of the forms above.
 
 Local files can be `png`, `svg`, `webp`, `jpg`, `jpeg`, `gif` or `ico`. Local SVGs are served with a restrictive Content-Security-Policy, so scripts inside them don't run.
 
@@ -213,6 +222,7 @@ labels:
 - `dashboard.weight` sets the order within the group (lowest first, then by name).
 - A labelled service joins the `services.yaml` group with the same name, or creates a new group at the end. If `services.yaml` already defines a service with the same group and name, that one is used and the label is ignored.
 - A labelled service **without** `siteMonitor` uses the container's state as its health: running, unhealthy, restarting or exited. Each Portainer poll (`intervals.widgets`) also records that state in the service's history, so it gets an uptime figure and a 24-hour strip like a checked service; running counts as up, anything else (including unhealthy) as down. A container that isn't running raises a critical *is down* alert and logs *went down* / *recovered* in Recent activity, like a failed check; unhealthy raises a warning. It has no latency, and while Portainer is unreachable nothing is recorded.
+- Without `dashboard.icon`, an icon is [picked automatically](#automatic-icons) from the name, then the image.
 - Label values are **used literally**. `${…}` placeholders are not filled in, so a container image can't extract your secrets. Define services whose widgets need credentials in `services.yaml`.
 - Add `dashboard.ignore=true` to a container to hide it from discovery and from the container counts.
 

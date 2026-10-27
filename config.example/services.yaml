@@ -1,6 +1,7 @@
 # Same format as gethomepage's services.yaml.
 #   icon:        file name in config/icons/ (e.g. proxmox.png), a dashboard-icons name (fetched from the CDN),
-#                "sh-<name>" for selfh.st icons, or a full URL. Missing icon → generated monogram.
+#                "sh-<name>" for selfh.st icons, or a full URL. Missing icon → picked by service name from
+#                selfh.st / dashboard-icons, or a generated monogram when there's no match.
 #   iconDark:    optional variant used in dark mode
 #   siteMonitor: URL that is checked every 30 s (uptime, latency, TLS certificate)
 #   latencyWarnMs: per-service "slow" limit in ms (default: settings.yaml → thresholds.latencyWarnMs)

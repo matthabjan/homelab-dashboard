@@ -75,6 +75,8 @@ export interface Service {
   latencyWarnMs: number | null;
   widget: Widget | null;
   container?: ContainerState | null;
+  /** Image of a label-discovered container, for automatic icons. */
+  image?: string | null;
 }
 
 export interface Bookmark {
@@ -281,6 +283,7 @@ export interface Discovered {
   name: string;
   def: Record<string, any>;
   container: ContainerState;
+  image: string | null;
 }
 
 /** What collect returns. Everything after `alerts` is type-specific and read by the snapshot. */
