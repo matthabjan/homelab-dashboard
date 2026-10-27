@@ -209,7 +209,7 @@
     <header class="top">
       <a class="brand" href="/" aria-label="{snap.title} — home">
         {#if snap.logo}<img src={snap.logo} alt="" width="34" height="34" />{/if}
-        <span class="btxt"><span class="date muted only-phone">{today}</span><span class="bname">{snap.title}</span></span>
+        <span class="btxt"><span class="date muted">{today}</span><span class="bname">{snap.title}</span></span>
       </a>
       <button class="search card" onclick={() => (paletteOpen = true)} aria-label="Search or jump to a service" aria-keyshortcuts="/ Control+K Meta+K">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
@@ -301,12 +301,12 @@
       <section class="vitals" id="host" aria-label="Host vitals">
         {#if snap.host}
           <div class="card host">
-            <div class="row-head">
-              <div class="title">
-                <h2>{#if snap.host.href}<a href={snap.host.href} target={target} rel="noopener">{snap.host.name}</a>{:else}{snap.host.name}{/if}</h2>
-                <span class="muted small">{snap.host.detail}</span>
-              </div>
-            </div>
+            <h2>Host</h2>
+            <!-- what the gauges below describe: each value carries its own label -->
+            <dl class="host-facts">
+              <div><dt>Node</dt><dd>{#if snap.host.href}<a class="node" href={snap.host.href} target={target} rel="noopener">{snap.host.name}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9" /></svg></a>{:else}{snap.host.name}{/if}</dd></div>
+              {#each snap.host.facts as f (f.label)}<div><dt>{f.label}</dt><dd>{f.value}</dd></div>{/each}
+            </dl>
             <div class="gauges">
               {#each snap.host.gauges as g (g.key)}<Gauge {g} />{/each}
             </div>
@@ -336,7 +336,7 @@
                   <div class="dline">
                     <span class="mono muted off-sub">{d.meta}</span>
                     {#if d.life != null}
-                      <span class="life" title="Life left: {d.life}% of the drive's rated write endurance"><span class="muted">life</span><span class="track"><span class="fill" style:width="{Math.max(0, Math.min(100, d.life))}%"></span></span><span class="mono pct">{d.life}%</span></span>
+                      <span class="life" title="{d.life}% of the drive's rated write endurance remains"><span class="muted">Life left</span><span class="track"><span class="fill" style:width="{Math.max(0, Math.min(100, d.life))}%"></span></span><span class="mono pct">{d.life}%</span></span>
                     {/if}
                   </div>
                 </div>
@@ -469,9 +469,11 @@
 
   /* header */
   .top { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; }
-  .brand { display: flex; align-items: center; gap: 12px; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
-  .brand img { width: 34px; height: 34px; border-radius: 10px; }
-  .btxt { display: contents; }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand img { width: 40px; height: 40px; border-radius: 12px; }
+  .btxt { display: flex; flex-direction: column; min-width: 0; }
+  .date { font-size: 13px; font-weight: 500; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bname { font-size: 26px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .search {
     flex: 1 1 280px; max-width: 560px; display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 12px 0 14px;
     border: 1px solid var(--line); border-radius: 12px; color: var(--muted); cursor: pointer; text-align: left;
@@ -531,8 +533,12 @@
   /* vitals */
   .vitals { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
   .host, .storage, .network { padding: 22px; display: flex; flex-direction: column; gap: 16px; }
-  .row-head { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; }
-  .row-head .title { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .host-facts { display: flex; flex-wrap: wrap; gap: 6px 24px; margin: -6px 0 0; }
+  .host-facts div { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+  .host-facts dt { font-size: 12px; color: var(--muted); }
+  .host-facts dd { margin: 0; font-size: 13px; font-weight: 500; }
+  .host-facts .node { display: inline-flex; align-items: center; gap: 3px; }
+  .host-facts .node:hover { color: var(--acc); }
   .gauges { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
   .storage, .panel { gap: 12px; }
   .panel { display: flex; flex-direction: column; }
@@ -555,12 +561,19 @@
   .dline { display: flex; align-items: center; gap: 12px; }
   .dline .off-sub { flex: 1 1 auto; min-width: 0; }
   .life { flex: none; display: flex; align-items: center; gap: 6px; font-size: 11px; }
-  .life .track { display: block; width: 56px; height: 4px; }
+  /* fixed track and a right-aligned slot wide enough for "100%", so every drive's bar lines up */
+  .life .track { display: block; flex: none; width: 56px; height: 4px; }
+  .life .pct { min-width: 4ch; text-align: right; }
   .life .fill { display: block; }
-  .tabs { display: flex; gap: 16px; }
-  .tabs button { all: unset; cursor: pointer; font-size: 14px; font-weight: 600; color: var(--muted); }
-  .tabs button[aria-selected='true'] { color: var(--text); }
-  .tabs button:focus-visible { outline: 2px solid var(--acc); outline-offset: 3px; border-radius: 4px; }
+  /* segmented control: a recessed track with the selected view raised on it */
+  .tabs { display: inline-flex; align-self: flex-start; gap: 2px; padding: 3px; border-radius: 11px; background: var(--surface-2); }
+  .tabs button {
+    all: unset; cursor: pointer; font-size: 14px; font-weight: 600; color: var(--muted);
+    padding: 6px 16px; min-height: 22px; border-radius: 8px; transition: background-color 0.15s, color 0.15s, box-shadow 0.15s;
+  }
+  .tabs button:hover { color: var(--text); }
+  .tabs button[aria-selected='true'] { color: var(--text); background: var(--raised); box-shadow: 0 1px 3px rgba(16, 24, 40, 0.12), 0 0 0 1px var(--line); }
+  .tabs button:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
   .track { height: 6px; border-radius: 4px; background: var(--track); overflow: hidden; }
   .fill { height: 100%; border-radius: 4px; background: var(--fill); transition: width 0.6s cubic-bezier(0.2, 0.8, 0.2, 1); }
   .traffic { display: flex; flex-direction: column; gap: 8px; }
@@ -628,16 +641,13 @@
   @media (max-width: 760px) {
     /* the tab bar floats over the bottom: clear it plus the home indicator */
     .page { gap: 22px; padding-bottom: calc(110px + env(safe-area-inset-bottom)); }
-    h2, .tabs button { font-size: 17px; }
+    h2 { font-size: 17px; }
+    .tabs button { font-size: 15px; padding: 8px 18px; }
     .search, .deep, .live :global(.demo) { display: none; }
 
     /* header: logo, date over title, Live pill, theme button */
     .top { flex-wrap: nowrap; gap: 12px; }
     .brand { flex: 1 1 auto; min-width: 0; }
-    .brand img { width: 40px; height: 40px; border-radius: 12px; }
-    .btxt { display: flex; flex-direction: column; min-width: 0; }
-    .date { font-size: 13px; font-weight: 500; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .bname { font-size: 26px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .right { flex: none; gap: 8px; }
     .live { min-height: 28px; padding: 0 10px; border-radius: 14px; background: var(--surface); box-shadow: var(--shadow); gap: 7px; }
     .pulse { width: 7px; height: 7px; box-shadow: 0 0 0 3px var(--ok-soft); }

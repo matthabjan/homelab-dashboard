@@ -1,23 +1,23 @@
 // Portainer — X-API-Key, environment id in `env` (same as homepage).
 // Containers with label `dashboard.ignore=true` are skipped.
-// Containers with gethomepage labels (`homepage.group`, `homepage.name`, `homepage.href`, …) become services.
+// Containers with `dashboard.group`, `dashboard.name`, `dashboard.href`, … labels become services.
 import { trimUrl } from '../http.js';
 /** @import { Alert, Context, Widget, WidgetResult } from '$lib/types' */
 
-/** `homepage.widget.type=x` → { widget: { type: 'x' } }. Values stay literal: no ${SECRET} substitution from labels. */
+/** `dashboard.widget.type=x` → { widget: { type: 'x' } }. Values stay literal: no ${SECRET} substitution from labels. */
 function fromLabels(labels) {
   /** @type {Record<string, any>} */
   const def = {};
   for (const [k, v] of Object.entries(labels || {})) {
-    if (!k.startsWith('homepage.')) continue;
-    const parts = k.slice('homepage.'.length).split('.');
+    if (!k.startsWith('dashboard.')) continue;
+    const parts = k.slice('dashboard.'.length).split('.');
     if (parts.some((p) => p === '__proto__' || p === 'constructor' || p === 'prototype')) continue;
     let o = def;
     for (const p of parts.slice(0, -1)) o = o[p] = o[p] && typeof o[p] === 'object' ? o[p] : {};
     o[/** @type {string} */ (parts.at(-1))] = v === 'true' ? true : v === 'false' ? false : v;
   }
   if (!def.group || !def.name) return null;
-  const { group, name, weight, ...rest } = def;
+  const { group, name, weight, ignore, ...rest } = def;
   return { group: String(group), name: String(name), weight: Number(weight) || 0, def: rest };
 }
 

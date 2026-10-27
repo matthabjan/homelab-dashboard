@@ -198,19 +198,19 @@ Prefer files (option 3) over environment variables: environment variables are vi
 
 ## Services from container labels
 
-Like gethomepage, the dashboard can create tiles from `homepage.*` labels on Docker containers. It reads the labels through the [Portainer widget](integrations.md#portainer), so at least one `portainer` widget must be configured.
+The dashboard can create tiles from `dashboard.*` labels on Docker containers (gethomepage's `homepage.*` labels are not read; rename them to `dashboard.*`). It reads the labels through the [Portainer widget](integrations.md#portainer), so at least one `portainer` widget must be configured.
 
 ```yaml
 labels:
-  - homepage.group=Management
-  - homepage.name=Traefik
-  - homepage.icon=traefik
-  - homepage.href=https://traefik.home.arpa
-  - homepage.siteMonitor=https://traefik.home.arpa
+  - dashboard.group=Management
+  - dashboard.name=Traefik
+  - dashboard.icon=traefik
+  - dashboard.href=https://traefik.home.arpa
+  - dashboard.siteMonitor=https://traefik.home.arpa
 ```
 
-- `homepage.group` and `homepage.name` are required. Every other `homepage.<key>` maps to the YAML key of the same name, and nested keys use dots (`homepage.widget.type=adguard`). The values `true` and `false` become booleans.
-- `homepage.weight` sets the order within the group (lowest first, then by name).
+- `dashboard.group` and `dashboard.name` are required. Every other `dashboard.<key>` maps to the YAML key of the same name, and nested keys use dots (`dashboard.widget.type=adguard`). The values `true` and `false` become booleans.
+- `dashboard.weight` sets the order within the group (lowest first, then by name).
 - A labelled service joins the `services.yaml` group with the same name, or creates a new group at the end. If `services.yaml` already defines a service with the same group and name, that one is used and the label is ignored.
 - A labelled service **without** `siteMonitor` uses the container's state as its health: running, unhealthy, restarting or exited. Each Portainer poll (`intervals.widgets`) also records that state in the service's history, so it gets an uptime figure and a 24-hour strip like a checked service; running counts as up, anything else (including unhealthy) as down. A container that isn't running raises a critical *is down* alert and logs *went down* / *recovered* in Recent activity, like a failed check; unhealthy raises a warning. It has no latency, and while Portainer is unreachable nothing is recorded.
 - Label values are **used literally**. `${…}` placeholders are not filled in, so a container image can't extract your secrets. Define services whose widgets need credentials in `services.yaml`.

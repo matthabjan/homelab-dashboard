@@ -419,7 +419,8 @@ export interface Snapshot {
   /** 48 half-hour buckets, oldest first */
   fleet: (Level | 'none')[];
   fleetAvail: number | null;
-  host: { name: string; href: string | null; detail: string; gauges: Gauge[] } | null;
+  /** `name` is the Proxmox node; `facts` are labelled pairs shown beside it (uptime, guests) */
+  host: { name: string; href: string | null; facts: { label: string; value: string }[]; gauges: Gauge[] } | null;
   /** `off` rows (unavailable, detached, size unknown) draw `pct` as a grey bar: the last known fill, or empty */
   storage: { name: string; pct: number | null; level: Level | 'off'; sub: string; href: string | null }[];
   /** the storage card's second view; empty when no widget reports drives */
