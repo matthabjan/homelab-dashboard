@@ -200,7 +200,9 @@ export function buildSnapshot(engine) {
     host = {
       name: hw?.node ?? 'host',
       href: hostSvc?.href ?? null,
-      detail: hw ? [`up ${hw.uptime}`, `${hw.guestsRunning} of ${hw.guestsTotal} guests running`].join(' · ') : '',
+      facts: hw
+        ? [...(hw.uptime ? [{ label: 'Uptime', value: hw.uptime }] : []), { label: 'Guests', value: `${hw.guestsRunning} of ${hw.guestsTotal} running` }]
+        : [],
       gauges
     };
   }

@@ -16,6 +16,7 @@
   --surface: #ffffff;
   --surface-2: #eef0f3;
   --surface-3: #e4e8ed;
+  --raised: #ffffff;
   --line: #e2e6eb;
   --track: #e4e8ed;
   --text: #0e1116;
@@ -42,6 +43,7 @@
     --surface: #12161c;
     --surface-2: #191e26;
     --surface-3: #222833;
+    --raised: #262d38;
     --line: #222932;
     --track: #252c36;
     --text: #e8ecf1;
@@ -67,6 +69,7 @@
   --surface: #12161c;
   --surface-2: #191e26;
   --surface-3: #222833;
+  --raised: #262d38;
   --line: #222932;
   --track: #252c36;
   --text: #e8ecf1;

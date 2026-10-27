@@ -52,17 +52,6 @@ async function callBg(w, ctx, service, method) {
 }
 
 /**
- * The monitored SMART disk a file system lives on, or null (e.g. a virtual disk in a VM has no SMART).
- * Matches the parent device first, then the device itself with any partition suffix removed.
- */
-function diskOf(f, disks) {
-  const dev = f.canonicaldevicefile || f.devicefile || '';
-  const candidates = [f.parentdevicefile, dev, dev.replace(/p?\d+$/, '')].filter(Boolean);
-  // OMV's devicefile is a /dev/disk/by-id link; the plain /dev/sdX is canonicaldevicefile
-  return disks.find((d) => candidates.includes(d.canonicaldevicefile) || candidates.includes(d.devicefile)) ?? null;
-}
-
-/**
  * Drives from OMV's SMART list (only disks with monitoring on: passed-through disks; virtual disks have none).
  * Hours, wear and bytes written come from smartctl's extended output, refreshed every 10 minutes.
  * @param {Widget} w @param {Context} ctx @param {any[]} disks
@@ -117,8 +106,7 @@ export async function collect(w, ctx) {
       const total = Number(f.size), avail = Number(f.available);
       const used = Number.isFinite(avail) ? total - avail : Number(f.used);
       const dev = f.canonicaldevicefile || f.devicefile;
-      const disk = diskOf(f, disks);
-      return { name: `${f.label || (dev ? dev.replace(/^\/dev\//, '') : f.mountpoint)} · NAS`, used, total, pct: pct(used, total), sub: fmtPair(used, total) + (disk ? ` · SMART ${disk.overallstatus === 'GOOD' ? 'ok' : 'warning'}` : ''), source: 'omv' };
+      return { name: `${f.label || (dev ? dev.replace(/^\/dev\//, '') : f.mountpoint)} · NAS`, used, total, pct: pct(used, total), sub: fmtPair(used, total), source: 'omv' };
     });
   for (const s of storage) ctx.metric(`storage.omv.${s.name}`, s.pct);
   const main = [...storage].sort((a, b) => b.total - a.total)[0];
