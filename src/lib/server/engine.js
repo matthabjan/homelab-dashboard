@@ -60,7 +60,14 @@ export class Engine extends EventEmitter {
   }
 
   reload() {
-    this.base = loadConfig();
+    // loadConfig records bad files instead of throwing; anything else unexpected keeps the running config (a timer calls this)
+    try {
+      this.base = loadConfig();
+    } catch (e) {
+      console.error('[config] reload failed:', e);
+      if (this.base) return;
+      throw e;
+    }
     this.cfg = withDiscovered(this.base, this.discovered);
     for (const t of this.timers) clearInterval(t);
     this.timers = [];

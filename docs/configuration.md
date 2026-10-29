@@ -11,7 +11,7 @@ config/
 └── images/           # app icon, logo, favicon
 ```
 
-**Reloading.** Saving any `*.yaml` file in the folder reloads the config within a second. You don't need to restart, and history is kept. Files in `icons/` and `images/` are read when they are requested, but browsers cache them for up to 5 minutes. A file with a YAML syntax error is logged (`[config] services.yaml: …`) and treated as empty until you fix it.
+**Reloading.** Saving any `*.yaml` file in the folder reloads the config within a second. You don't need to restart, and history is kept. Files in `icons/` and `images/` are read when they are requested, but browsers cache them for up to 5 minutes. If a file has a YAML syntax error or the wrong structure (for example a mapping where a list of groups belongs), the dashboard keeps showing its last version that loaded and lists `services.yaml has an error` under *Needs attention*, with the line and reason. The full error, including the lines around it, is in the container log (`[config] services.yaml: …`). A malformed group or entry is skipped and reported the same way, and the rest of the file loads. Once you fix the file, the alert clears on the next save.
 
 ---
 

@@ -5,7 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import YAML from 'yaml';
-/** @import { Config, Discovered, Service, Settings } from '$lib/types' */
+/** @import { Config, ConfigProblem, Discovered, Service, Settings } from '$lib/types' */
 
 export const CONFIG_DIR = path.resolve(process.env.CONFIG_DIR || 'config');
 export const DATA_DIR = path.resolve(process.env.DATA_DIR || 'data');
@@ -93,15 +93,60 @@ function walk(v) {
   return v;
 }
 
-function readYaml(name, fallback) {
+// the last version of each file that loaded, before secret substitution: a typo keeps it in use instead of emptying the page
+const lastGood = new Map();
+
+/**
+ * Read one config file. When it can't be parsed or isn't the right shape (`expect`), the last version that
+ * loaded stays in use (or `fallback` before any did) and the problem is recorded. Its message keeps only
+ * YAML's reason and position: the excerpt of the file that follows could show a secret, so it goes to the log only.
+ * @param {string} name @param {'list' | 'map'} expect @param {any} fallback @param {ConfigProblem[]} problems
+ */
+function readYaml(name, expect, fallback, problems) {
   const file = path.join(CONFIG_DIR, name);
+  let raw;
   try {
-    return walk(YAML.parse(fs.readFileSync(file, 'utf8'))) ?? fallback;
+    raw = YAML.parse(fs.readFileSync(file, 'utf8')) ?? fallback;
+    if (expect === 'list' ? !Array.isArray(raw) : !raw || typeof raw !== 'object' || Array.isArray(raw)) {
+      throw Object.assign(new Error(expect === 'list' ? 'should be a list of groups' : 'should be a mapping of settings'), { shape: true });
+    }
+    lastGood.set(name, raw);
   } catch (e) {
-    if (e.code === 'ENOENT') return fallback;
+    if (e.code === 'ENOENT') { lastGood.delete(name); return walk(fallback); }
     console.error(`[config] ${name}: ${e.message}`);
-    return fallback;
+    const line = e.linePos?.[0]?.line;
+    const reason = e.shape || e.linePos ? e.message.split('\n')[0].replace(/ at line \d+, column \d+:?$/, '') : 'cannot be read';
+    raw = lastGood.get(name);
+    problems.push({ file: name, message: line ? `line ${line}: ${reason}` : reason, fallback: raw ? 'last' : 'none' });
+    raw ??= fallback;
   }
+  return walk(raw);
+}
+
+/**
+ * The groups of services.yaml or bookmarks.yaml as [name, entries] pairs; a malformed group or entry is skipped and recorded.
+ * @param {any[]} raw @param {string} file @param {ConfigProblem[]} problems
+ * @returns {[string, [string, any][]][]}
+ */
+function groupsOf(raw, file, problems) {
+  const skip = (message) => problems.push({ file, message, fallback: null });
+  const pair = (x) => (x && typeof x === 'object' && !Array.isArray(x) ? Object.entries(x)[0] : undefined);
+  /** @type {[string, [string, any][]][]} */
+  const out = [];
+  raw.forEach((g, i) => {
+    const [gname, items] = pair(g) ?? [];
+    if (gname == null) return skip(`entry ${i + 1} is not a group (\`- Group: [...]\`), skipped`);
+    if (items != null && !Array.isArray(items)) return skip(`group "${gname}" is not a list, skipped`);
+    /** @type {[string, any][]} */
+    const entries = [];
+    for (const it of items ?? []) {
+      const e = pair(it);
+      if (e) entries.push(e);
+      else skip(`an entry in group "${gname}" has no name, skipped`);
+    }
+    out.push([gname, entries]);
+  });
+  return out;
 }
 
 function deepMerge(base, over) {
@@ -159,17 +204,14 @@ export function withDiscovered(cfg, discovered) {
 
 /** @returns {Config} */
 export function loadConfig() {
-  const settings = deepMerge(DEFAULT_SETTINGS, readYaml('settings.yaml', {}));
-  const raw = readYaml('services.yaml', []) || [];
+  /** @type {ConfigProblem[]} */
+  const problems = [];
+  const settings = deepMerge(DEFAULT_SETTINGS, readYaml('settings.yaml', 'map', {}, problems));
   const groups = [];
   const services = [];
-  for (const g of raw) {
-    if (!g || typeof g !== 'object') continue;
-    const [gname, items] = Object.entries(g)[0];
+  for (const [gname, items] of groupsOf(readYaml('services.yaml', 'list', [], problems), 'services.yaml', problems)) {
     const group = { name: gname, services: /** @type {Service[]} */ ([]) };
-    for (const it of items || []) {
-      if (!it || typeof it !== 'object') continue;
-      const [name, def] = Object.entries(it)[0];
+    for (const [name, def] of items) {
       const svc = toService(gname, name, def, settings);
       group.services.push(svc);
       services.push(svc);
@@ -177,18 +219,14 @@ export function loadConfig() {
     groups.push(group);
   }
 
-  const rawBm = readYaml('bookmarks.yaml', []) || [];
   const bookmarks = [];
-  for (const g of rawBm) {
-    if (!g || typeof g !== 'object') continue;
-    const [gname, items] = Object.entries(g)[0];
-    for (const it of items || []) {
-      const [name, defs] = Object.entries(it)[0];
+  for (const [gname, items] of groupsOf(readYaml('bookmarks.yaml', 'list', [], problems), 'bookmarks.yaml', problems)) {
+    for (const [name, defs] of items) {
       const d = Array.isArray(defs) ? defs[0] : defs;
       if (d?.href) bookmarks.push({ group: gname, name, href: d.href, icon: d.icon ?? null, iconDark: d.iconDark ?? null });
     }
   }
-  return { settings, groups, services, bookmarks };
+  return { settings, groups, services, bookmarks, problems };
 }
 
 // ---------- icons ----------

@@ -84,6 +84,12 @@ export function buildSnapshot(engine) {
   /** @type {Map<string, Tile>} */
   const tiles = new Map();
 
+  // a config file with an error: keeping its last version is a warning, losing its content is critical
+  const shown = { last: 'showing the last working version', none: 'nothing loaded from it', null: 'the rest of the file is loaded' };
+  for (const p of engine.cfg.problems ?? []) {
+    attention.push({ sev: p.fallback === 'none' ? 'crit' : 'warn', key: `config-${p.file}-${p.message}`, title: `${p.file} has an error`, detail: `${p.message} · ${shown[String(p.fallback)]}`, ts: now });
+  }
+
   for (const g of groups) {
     for (const s of g.services) {
       const st = engine.state(s.id);

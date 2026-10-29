@@ -92,6 +92,16 @@ export interface Config {
   groups: { name: string; services: Service[] }[];
   services: Service[];
   bookmarks: Bookmark[];
+  problems: ConfigProblem[];
+}
+
+/** Something in a config file that couldn't be used as written; shown in the attention list. */
+export interface ConfigProblem {
+  file: string;
+  /** the reason and where (line, group): never the file's content, which could hold a secret */
+  message: string;
+  /** what is shown instead: the file's last version that loaded, nothing from it, or (null) the rest of the file */
+  fallback: 'last' | 'none' | null;
 }
 
 // ---------- integrations ----------
