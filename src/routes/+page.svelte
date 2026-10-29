@@ -61,17 +61,12 @@
   const target = $derived(snap?.linkTarget || '_blank');
   // this dashboard's own pages (the config view) open in place; services as settings.linkTarget says
   const linkTarget = (href) => (!href ? undefined : href.startsWith('/') ? undefined : target);
-  // phones: every service in one list, problems first, otherwise config order (sort is stable)
-  const RANK = { crit: 0, warn: 1 };
-  const isProblem = (level) => level in RANK;
+  const isProblem = (level) => level === 'crit' || level === 'warn';
   // phones have no tooltips: a problem row in the services list leads with its status word ("Up · …") unless the line already says it
   const statusWord = (t) => (isProblem(t.level) && t.status && !t.line.toLowerCase().includes(t.status.toLowerCase()) ? t.status : '');
   const uptimeTxt = (t) => (t.uptime24 != null ? `${pctTxt(t.uptime24)} uptime in 24 h` : '');
   // phones: the fleet ribbon slot under the finger, in place of the "Last 24 h" label
   let fleetPick = $state(/** @type {string | null} */ (null));
-  const serviceList = $derived(
-    !snap ? [] : snap.groups.flatMap((g) => g.services.map((t) => ({ t, group: g.name }))).sort((a, b) => (RANK[a.t.level] ?? 2) - (RANK[b.t.level] ?? 2))
-  );
   const today = $derived.by(() => {
     const d = new Date(now);
     return `${d.toLocaleDateString('en-GB', { weekday: 'long' })}, ${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`;
@@ -340,26 +335,32 @@
         </section>
       {/each}
       </section>
-      <section class="block only-phone" aria-labelledby="h-all">
-        <div class="sec-head"><h2 id="h-all">Services</h2><span class="note">{upNote}{isProblem(serviceList[0]?.t.level) ? ', problems first' : ''}</span></div>
-        <div class="card list">
-          {#each serviceList as { t, group } (group + '/' + t.id)}
-            {@const up = uptimeTxt(t)}
-            {@const word = statusWord(t)}
-            <a class="srow lv-{t.level}" class:flash={flash.has(t.id)} href={t.href} target={target} rel="noopener" onclick={() => opened(t.id)} aria-label="{t.name}, {t.status}, {t.line}, {group}{up ? ', ' + up : ''}">
-              <span class="ic"><Icon src={t.icon} dark={t.iconDark} name={t.name} size={22} /></span>
-              <span class="txt">
-                <span class="n">{t.name}</span>
-                <span class="l" class:hl={isProblem(t.level)}>{#if word}<b>{word}</b>{' · '}{/if}{t.line}<span class="grp">{` · ${group}`}</span></span>
-                <!-- the strip with its exact uptime as text, as on tiles; the row's label already says both -->
-                {#if t.beats}
-                  <span class="beats" aria-hidden="true"><Beats beats={t.beats} end={snap.generatedAt} label="" /><span class="mono">{pctTxt(t.uptime24)}</span></span>
-                {/if}
-              </span>
-              <span class="dot lv-{t.level}" title={t.status}></span>
-            </a>
-          {/each}
-        </div>
+      <!-- phones: the same groups as desktop, each an inset list; problems are already at the top, under Needs attention -->
+      <section class="block services only-phone" aria-labelledby="h-all">
+        <div class="sec-head"><h2 id="h-all">Services</h2>{#if upNote}<span class="note">{upNote}</span>{/if}</div>
+        {#each snap.groups as g (g.name)}
+          <section class="group" aria-label={g.name}>
+            <div class="grp-head"><h3>{g.name}</h3><span class="mono muted small">{g.summary}</span></div>
+            <div class="card list">
+              {#each g.services as t (t.id)}
+                {@const up = uptimeTxt(t)}
+                {@const word = statusWord(t)}
+                <a class="srow lv-{t.level}" class:flash={flash.has(t.id)} href={t.href} target={target} rel="noopener" onclick={() => opened(t.id)} aria-label="{t.name}, {t.status}, {t.line}{up ? ', ' + up : ''}">
+                  <span class="ic"><Icon src={t.icon} dark={t.iconDark} name={t.name} size={22} /></span>
+                  <span class="txt">
+                    <span class="n">{t.name}</span>
+                    <span class="l" class:hl={isProblem(t.level)}>{#if word}<b>{word}</b>{' · '}{/if}{t.line}</span>
+                    <!-- the strip with its exact uptime as text, as on tiles; the row's label already says both -->
+                    {#if t.beats}
+                      <span class="beats" aria-hidden="true"><Beats beats={t.beats} end={snap.generatedAt} label="" /><span class="mono">{pctTxt(t.uptime24)}</span></span>
+                    {/if}
+                  </span>
+                  <span class="dot lv-{t.level}" title={t.status}></span>
+                </a>
+              {/each}
+            </div>
+          </section>
+        {/each}
       </section>
     </div>
 
@@ -606,7 +607,6 @@
     .srow .l { display: block; -webkit-line-clamp: none; line-clamp: none; }
     .srow .l.hl { color: var(--lv); }
     .srow .beats { margin-top: 5px; --beats-h: 8px; }
-    .grp { color: var(--muted); }
     .tabbar {
       position: fixed; left: 12px; right: 12px; bottom: max(14px, env(safe-area-inset-bottom)); z-index: 40;
       display: flex; justify-content: space-around; padding: 6px; border-radius: 24px;
