@@ -1,6 +1,6 @@
 # Deployment
 
-The dashboard is a single container. It listens on port 3000, reads `/config`, and writes its history to `/data`. **It has no login of its own**, so always run it behind a reverse proxy that handles TLS and authentication.
+The dashboard is a single container. It listens on port 3000, reads `/config`, and writes its history to `/data`. **It has no login of its own**, so always run it behind a reverse proxy that handles TLS and authentication. It is meant for your LAN or a VPN (WireGuard, Tailscale, …): don't forward a port to it from the internet.
 
 - [Portainer stack behind Traefik](#portainer-stack-behind-traefik) (recommended)
 - [Other reverse proxies](#other-reverse-proxies)
@@ -173,6 +173,7 @@ Don't publish port 3000 on a LAN-facing interface.
 
 ## Security notes
 
+- **LAN or VPN only.** The page lists your services, their addresses and what is wrong with them. Even behind a login, keep it off the internet; reach it from outside through your VPN.
 - **No login of its own.** Access control and TLS are the reverse proxy's job. Anyone who reaches port 3000 directly, including any container on the proxy's Docker network, bypasses both. Keep that network for trusted containers.
 - **Installing the app with basic auth.** Phones fetch the manifest, app icons and service worker without credentials. That's why the example stack serves `/manifest.webmanifest`, `/service-worker.js` and `/assets/images/` without the login, but still only through the IP allowlist. These files contain only the title and the icons.
 - **Credentials** are never sent to the browser. Upstream error bodies go to the container log only, and `${…}` placeholders in container labels are not filled in.

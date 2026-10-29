@@ -1,0 +1,28 @@
+name: Integration request
+description: Suggest a widget type for another product
+labels: [integration]
+body:
+  - type: input
+    id: product
+    attributes:
+      label: Product
+      placeholder: e.g. TrueNAS SCALE
+    validations:
+      required: true
+  - type: textarea
+    id: show
+    attributes:
+      label: What should the dashboard show or alert on?
+      description: Tile stats, a panel in the vitals card, alerts (e.g. "pool degraded")
+    validations:
+      required: true
+  - type: textarea
+    id: api
+    attributes:
+      label: API
+      description: Link to the API documentation, how to authenticate, and whether a read-only account is possible
+  - type: input
+    id: homepage
+    attributes:
+      label: gethomepage widget
+      description: If gethomepage has a widget for it, its name, so field names can match

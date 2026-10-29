@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Configuration reference
+    url: https://github.com/matthabjan/homelab-dashboard/blob/main/docs/configuration.md
+    about: settings.yaml, services.yaml, bookmarks, icons and secrets
+  - name: A widget shows an error
+    url: https://github.com/matthabjan/homelab-dashboard/blob/main/docs/deployment.md#when-a-widget-fails
+    about: Common causes and how to read the container log

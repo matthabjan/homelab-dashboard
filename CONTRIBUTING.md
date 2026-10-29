@@ -63,12 +63,13 @@ Guidelines: match gethomepage's widget fields where an equivalent exists. Never 
 - `npm run check` and `npm test` must pass. CI runs them, then builds the image and smoke-tests it in demo mode.
 - Update the docs when behaviour or configuration changes.
 - Screenshots help for UI changes. Take them in demo mode, never from a real setup.
+- The README screenshots are in `docs/screenshots/`. When the UI changes visibly, retake them in demo mode: desktop at 1440×1080, phones at 390×844 with 2× pixel density (`issues` scenario in dark mode, `calm` in light mode).
 
 ## Releases (maintainers)
 
 `development` is published as `:dev`, and `main` as `:edge`.
 
-1. Bump `version` in `package.json` on `development`, and merge to `main` through a pull request.
+1. Bump `version` in `package.json` and the pinned tag in the README's compose example on `development`, and merge to `main` through a pull request.
 2. Tag `main`: `git tag vX.Y.Z && git push origin vX.Y.Z`. Publishing a release in the GitHub UI with a new `vX.Y.Z` tag on `main` works too; the workflow then keeps that release instead of creating one.
 3. The [CI workflow](.github/workflows/ci.yml) checks that the tag matches `package.json`, builds `linux/amd64` and `linux/arm64` with provenance, an SBOM and a GitHub artifact attestation, pushes `X.Y.Z`, `X.Y`, `X` and `latest` to Docker Hub, creates the GitHub Release with generated notes, and syncs this README to Docker Hub.
 
