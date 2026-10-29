@@ -44,7 +44,7 @@ services:
       XFF_DEPTH: 1
       # NODE_EXTRA_CA_CERTS: /certs/ca.pem   # trust your own CA for widget APIs
     # Credentials arrive as files in /run/secrets, so they don't show up in `docker inspect`
-    secrets: [pve_token_secret, pbs_token_secret, opnsense_key, opnsense_secret, omv_password, adguard_password, portainer_key]
+    secrets: [pve_token_secret, pbs_token_secret, opnsense_key, opnsense_secret, omv_password, adguard_password, pihole_app_password, portainer_key]
     volumes:
       - /opt/docker/dashboard/config:/config:ro   # services/settings/bookmarks + icons; reloads automatically
       - data:/data                                # uptime history (SQLite)
@@ -75,8 +75,9 @@ services:
       - traefik.http.middlewares.dashboard-headers.headers.referrerPolicy=no-referrer
       - traefik.http.middlewares.dashboard-headers.headers.permissionsPolicy=camera=(), microphone=(), geolocation=(), payment=(), usb=()
       - traefik.http.middlewares.dashboard-headers.headers.customResponseHeaders.X-Robots-Tag=noindex, nofollow
-      # manifest, icons and service worker without login, so phones can install the app (see Security)
-      - traefik.http.routers.dashboard-icons.rule=Host(`${DASHBOARD_HOST}`) && (Path(`/manifest.webmanifest`) || Path(`/service-worker.js`) || PathPrefix(`/assets/images/`))
+      # without login, still behind the allowlist: manifest, icons and service worker, so phones can install the app,
+      # and heartbeats, which bring their own token (see Security)
+      - traefik.http.routers.dashboard-icons.rule=Host(`${DASHBOARD_HOST}`) && (Path(`/manifest.webmanifest`) || Path(`/service-worker.js`) || PathPrefix(`/assets/images/`) || PathPrefix(`/api/heartbeat/`))
       - traefik.http.routers.dashboard-icons.priority=1000
       - traefik.http.routers.dashboard-icons.entrypoints=websecure
       - traefik.http.routers.dashboard-icons.tls=true
@@ -93,6 +94,7 @@ secrets:
   opnsense_secret: { environment: OPNSENSE_SECRET }
   omv_password: { environment: OMV_PASSWORD }
   adguard_password: { environment: ADGUARD_PASSWORD }
+  pihole_app_password: { environment: PIHOLE_APP_PASSWORD }
   portainer_key: { environment: PORTAINER_KEY }
 
 volumes:
@@ -107,7 +109,7 @@ Then:
 
 1. **Stack variables.** Under **Environment variables**, add every variable from [.env.example](../.env.example). For integrations you don't use, add the name with an empty value: every secret in the stack needs its variable.
 2. **Login.** Generate `DASHBOARD_AUTH_USERS` with `htpasswd -nbB admin 'your-password'` (from `apache2-utils`). In Portainer's variable editor, write every `$` in the hash as `$$`.
-3. **Config.** On the Docker host, put your config in `/opt/docker/dashboard/config`, starting from [config.example/](../config.example). The container user (UID 1000) needs read access.
+3. **Config.** On the Docker host, put your config in `/opt/docker/dashboard/config`, starting from [config.starter/](../config.starter) (or [config.example/](../config.example) for every widget). The container user (UID 1000) needs read access.
 4. **DNS.** In your local DNS, point `DASHBOARD_HOST` at Traefik (for example with an AdGuard or Pi-hole DNS rewrite). It doesn't need a public DNS record. Traefik requests a `*.<TLS_DOMAIN>` wildcard certificate, so public Certificate Transparency logs show only the wildcard, not the dashboard's name.
 5. **Deploy**, then open `https://<DASHBOARD_HOST>`. If a widget shows *Stats unavailable*, check the container log.
 
@@ -116,6 +118,30 @@ Then:
 1. Reference it in `services.yaml`, for example `password: ${GRAFANA_TOKEN}`.
 2. Add `grafana_token` to the service's `secrets:` list **and** `grafana_token: { environment: GRAFANA_TOKEN }` to the top-level `secrets:` block.
 3. Add the stack variable `GRAFANA_TOKEN` and redeploy.
+
+### Docker socket proxy
+
+The [`docker` widget](integrations.md#docker) reads a Docker host through a socket proxy, never the socket itself. Add the proxy to the stack on each host you want to watch, with only read access to containers and engine info:
+
+```yaml
+services:
+  socket-proxy:
+    image: tecnativa/docker-socket-proxy:v0.5.0
+    restart: unless-stopped
+    environment:
+      CONTAINERS: 1   # GET /containers/... (list and inspect)
+      INFO: 1         # GET /info (engine ID, so a host seen twice counts once)
+      POST: 0         # read-only: no start, stop or create
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [socket-proxy]
+
+networks:
+  socket-proxy:
+    internal: true   # no internet, no published port
+```
+
+Put the dashboard on the `socket-proxy` network too and use `url: http://socket-proxy:2375`. For another host, publish the proxy's port only to the dashboard's address (for example with a firewall rule), never to the LAN at large: anyone who reaches it can list your containers and their environment.
 
 ## Other reverse proxies
 
@@ -175,9 +201,25 @@ Don't publish port 3000 on a LAN-facing interface.
 
 - **LAN or VPN only.** The page lists your services, their addresses and what is wrong with them. Even behind a login, keep it off the internet; reach it from outside through your VPN.
 - **No login of its own.** Access control and TLS are the reverse proxy's job. Anyone who reaches port 3000 directly, including any container on the proxy's Docker network, bypasses both. Keep that network for trusted containers.
+- **Heartbeats behind basic auth.** Jobs authenticate with their [heartbeat token](configuration.md#heartbeats), not with the dashboard login, so `/api/heartbeat/` has to bypass basic auth. Keep it on the IP allowlist: jobs run on your LAN, and the endpoint isn't meant for the internet. See [Heartbeats behind basic auth](#heartbeats-behind-basic-auth).
 - **Installing the app with basic auth.** Phones fetch the manifest, app icons and service worker without credentials. That's why the example stack serves `/manifest.webmanifest`, `/service-worker.js` and `/assets/images/` without the login, but still only through the IP allowlist. These files contain only the title and the icons.
 - **Credentials** are never sent to the browser. Upstream error bodies go to the container log only, and `${…}` placeholders in container labels are not filled in.
 - Use a read-only account for each integration wherever the product allows it. See [Integrations](integrations.md).
+
+### Heartbeats behind basic auth
+
+[Heartbeat](configuration.md#heartbeats) calls carry their own token, and a job can't answer a basic-auth prompt (an `Authorization: Bearer` header would also collide with it). Serve `/api/heartbeat/` without the login, but only through the IP allowlist. The Traefik stack above already does, in the `dashboard-icons` router. With nginx:
+
+```nginx
+location /api/heartbeat/ {
+  auth_basic off;           # the heartbeat token authenticates the job
+  allow 192.168.1.0/24;     # your LAN: jobs run here, the endpoint isn't for the internet
+  deny all;
+  proxy_pass http://127.0.0.1:3000;
+  proxy_set_header Host $host;
+  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+}
+```
 
 ### TLS for widget APIs
 

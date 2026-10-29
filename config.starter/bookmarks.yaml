@@ -1,0 +1,8 @@
+# Links at the bottom of the page and in the command palette (/ or Ctrl+K).
+- Docs:
+    - Configuration:
+        - icon: github
+          href: https://github.com/matthabjan/homelab-dashboard/blob/main/docs/configuration.md
+    - Integrations:
+        - icon: github
+          href: https://github.com/matthabjan/homelab-dashboard/blob/main/docs/integrations.md

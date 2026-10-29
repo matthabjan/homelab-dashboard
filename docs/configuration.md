@@ -1,6 +1,6 @@
 # Configuration reference
 
-All configuration lives in one folder: `CONFIG_DIR`, which is `/config` in the container and `./config` when you run from a checkout. Start from [config.example/](../config.example).
+All configuration lives in one folder: `CONFIG_DIR`, which is `/config` in the container and `./config` when you run from a checkout. Start from [config.starter/](../config.starter) (what the image ships), or see every widget in [config.example/](../config.example) (the demo).
 
 ```
 config/
@@ -11,7 +11,17 @@ config/
 └── images/           # app icon, logo, favicon
 ```
 
-**Reloading.** Saving any `*.yaml` file in the folder reloads the config within a second. You don't need to restart, and history is kept. Files in `icons/` and `images/` are read when they are requested, but browsers cache them for up to 5 minutes. A file with a YAML syntax error is logged (`[config] services.yaml: …`) and treated as empty until you fix it.
+**Reloading.** Saving any `*.yaml` file in the folder reloads the config within a second. You don't need to restart, and history is kept. Files in `icons/` and `images/` are read when they are requested, but browsers cache them for up to 5 minutes. If a file has a YAML syntax error or the wrong structure (for example a mapping where a list of groups belongs), the dashboard keeps showing its last version that loaded and lists `services.yaml has an error` under *Needs attention*, with the line and reason. The full error, including the lines around it, is in the container log (`[config] services.yaml: …`). A malformed group or entry is skipped and reported the same way, and the rest of the file loads. Once you fix the file, the alert clears on the next save.
+
+**Checking what loaded.** The page **Config & status** (`/config`, linked in the footer, the command palette and every config alert) shows what the dashboard made of your files, read-only:
+
+- **Problems:** files with errors, skipped entries, secrets that aren't set (by name), heartbeats without a token, a `docker` widget on a socket path.
+- **Widgets:** each widget's type (linked to its documentation), the scheme, host and port of its `url`, a few harmless options such as `node` or `env`, whether its last poll worked, when it last succeeded, and whether it came from `services.yaml` or from container labels.
+- **Checks:** each service's check (HTTP, TCP, container state or heartbeat), its target, interval and current state.
+- **Automatic icons:** the icon picked for each service without `icon`, with a *Copy YAML* button to make it permanent.
+- **Settings:** every effective setting.
+
+It never shows usernames, passwords, keys, tokens, headers, request bodies, URL paths or queries, heartbeat tokens, or label values beyond group and name. What it shows is chosen field by field, so a new kind of secret can't slip through. Like the rest of the dashboard it is for your LAN or VPN, behind your proxy's login.
 
 ---
 
@@ -54,19 +64,35 @@ Paths are relative to the config folder (served under `/assets/`), or full `http
 
 ### `host`: the System panel
 
+The System panel shows a Proxmox node when there is a `proxmox` widget, and otherwise the machine the dashboard runs on (the **local host**): CPU, memory, disk and uptime from `/proc`, plus temperatures. The panel works without Proxmox.
+
 | Key | Default | Description |
 |---|---|---|
+| `source` | `auto` | `auto`: the Proxmox node if a `proxmox` widget exists, else the local host. `proxmox` or `local` forces one. |
+| `name` | see description | Shown as *Node*. Default: the Proxmox node's name, else the `HOST_NAME` environment variable, else `this host`. (Inside a container the hostname is the container id, so it isn't used.) |
+| `disk` | `/` | Local host: the path whose filesystem the *Disk* gauge shows. In Docker, `/` is usually the host disk that holds Docker's data. To show another disk, mount it read-only (`- /mnt/data:/mnt/data:ro`) and set `disk: /mnt/data`. |
 | `service` | first `proxmox` widget | Name of the service (as written in `services.yaml`) whose Proxmox node is shown as the host. |
 | `node` | first online node | Proxmox node to show, for clusters. A widget's own `node:` takes precedence. |
 | `temperature` | `true` | Read CPU and NVMe temperatures from the kernel (`/sys/class/hwmon`). |
 | `storage` | automatic | PVE storage shown on the System panel's *Disk* gauge. By default it is the largest local storage that holds guest disks (`images` / `rootdir` content), otherwise the root filesystem. |
 | `storages` | all | List of PVE storage names to show in the Storage panel. |
 
+What the local host shows depends on where the dashboard runs:
+
+| Environment | What it shows |
+|---|---|
+| Docker container | The host's CPU, memory and uptime. Docker doesn't give a container its own view of `/proc/stat` and `/proc/meminfo`. |
+| LXC with lxcfs (the Proxmox default) | The **container's** CPU and memory, not the node's. Proxmox users should keep the `proxmox` source. |
+| VM | The VM itself. |
+
+CPU usage is measured between two polls, so the CPU gauge shows `—` for the first minute after a start.
+
 ### `network`: the Network panel
 
 | Key | Default | Description |
 |---|---|---|
 | `service` | OPNsense, else FRITZ!Box | Name of the service whose widget provides the WAN traffic. |
+| `dns` | the first DNS widget | Name of the service whose widget (AdGuard Home or Pi-hole) provides the DNS statistics. |
 
 ### `mostUsed`
 
@@ -82,7 +108,7 @@ The *Most used* row above the groups fills itself from how often you open each s
 | Key | Default | Description |
 |---|---|---|
 | `probe` | `30` | Reachability check for every `siteMonitor`. |
-| `widgets` | `60` | Polling of widget APIs and host temperatures. |
+| `widgets` | `60` | Polling of widget APIs, the local host and temperatures. |
 | `cert` | `21600` | TLS certificate check (every 6 h). |
 
 The page shows a "stale" notice when no update has arrived for 2.5 × the longer of `probe` and `widgets`.
@@ -130,7 +156,8 @@ A list of groups. Each group is a list of services. This is the [gethomepage for
 | `description` | Second line of the tile when the widget has nothing more specific to show. |
 | `icon` | See [Icons](#icons). Without one, an icon is [picked automatically](#automatic-icons). |
 | `iconDark` | Icon used in dark mode. |
-| `siteMonitor` | URL checked every `intervals.probe` seconds, which gives up/down status, uptime and latency. Any response below 500 counts as up, including the 401 a login page returns. Two failures in a row mark the service down. `https://` URLs also get certificate-expiry checks. `probe` is accepted as an alias. |
+| `siteMonitor` | URL checked every `intervals.probe` seconds, which gives up/down status, uptime and latency. Any response below 500 counts as up, including the 401 a login page returns. Two failures in a row mark the service down. `https://` URLs also get certificate-expiry checks. `tcp://host:port` only checks that the port accepts a connection, for services without HTTP (SSH, SMB, MQTT, databases); the latency is the time to connect. `probe` is accepted as an alias. |
+| `heartbeat` | A push check for jobs, instead of `siteMonitor`. See [Heartbeats](#heartbeats). |
 | `latencyWarnMs` | The *Slow* limit for this service, overriding `thresholds.latencyWarnMs`. |
 | `tlsVerify` | `false` accepts a self-signed certificate on this service's **widget** API. It overrides the global `tlsVerify`. |
 | `widget` | Live data from the service's API. See [Integrations](integrations.md) for each `type`. |
@@ -138,6 +165,54 @@ A list of groups. Each group is a list of services. This is the [gethomepage for
 Service names should be unique within a group. A service's id is derived from its group and name, and the id is what uptime history and open counts are stored under, so **renaming a service or its group starts its history from scratch**.
 
 Widgets of a type this dashboard doesn't implement are ignored, and the tile still works.
+
+There is no ICMP ping: it needs extra privileges in the container. Check a port instead, such as `tcp://nas.home.arpa:445` (SMB), `:22` (SSH) or `:80`.
+
+### Heartbeats
+
+For jobs that run on a schedule (backups, cron jobs, scripts), the job reports to the dashboard when it ran, instead of the dashboard checking it. A heartbeat service is up while the last run is on schedule, and down when a run is overdue or the job reported a failure. Its uptime and 24-hour strip mean "on schedule".
+
+```yaml
+- Backups:
+    - Nightly restic:
+        description: Offsite copy
+        heartbeat:
+          every: 24h          # how often the job runs: 30m, 6h, 1d, 2w …
+          grace: 1h           # how late it may be; default 10% of every, at least 5m
+          token: ${HB_RESTIC} # a long random string, passed as a secret
+          backup: true        # counts in "oldest backup" and "backups overdue"
+          # id: restic        # the URL path; default: the service id (backups-nightly-restic)
+```
+
+| Key | Description |
+|---|---|
+| `every` | Expected time between runs: a number with `s`, `m`, `h`, `d` or `w`, or a number of seconds. |
+| `grace` | How long after `every` a run may arrive before it counts as missed. Default: 10% of `every`, at least 5 minutes. |
+| `token` | Required. The job sends it with each call. Generate one with `openssl rand -hex 24`. |
+| `backup` | `true` adds the job to the backup figures next to Proxmox Backup Server's: *oldest backup* and *backups overdue*. That covers restic, borg, Kopia or anything else that can call a URL. |
+| `id` | The id in the URL. Default: the service id, made from the group and name. Each id may be used once. |
+
+The job calls `/api/heartbeat/<id>` (GET or POST) when it succeeded, and `/api/heartbeat/<id>/fail` when it failed. The token goes in `Authorization: Bearer <token>` or `?token=<token>`. The answer is `ok` (200). An unknown id and a wrong token both get 404, and more than one call per second for the same id gets 429.
+
+```bash
+# at the end of a backup script
+if restic backup /data; then
+  curl -fsS -m 10 -H "Authorization: Bearer $HB" https://dash.home.arpa/api/heartbeat/backups-nightly-restic
+else
+  curl -fsS -m 10 -H "Authorization: Bearer $HB" https://dash.home.arpa/api/heartbeat/backups-nightly-restic/fail
+fi
+
+# or in one line, with the job's output for the log
+restic backup /data > /tmp/restic.log 2>&1 \
+  && curl -fsS -m 10 "https://dash.home.arpa/api/heartbeat/backups-nightly-restic?token=$HB" \
+  || curl -fsS -m 10 -H 'Content-Type: application/octet-stream' --data-binary @/tmp/restic.log "https://dash.home.arpa/api/heartbeat/backups-nightly-restic/fail?token=$HB"
+```
+
+A body sent with `/fail` is written to the container log only; the page shows when the failure was reported, never what the job said. Send it as `Content-Type: application/octet-stream` (as above): a form content type, which `curl -d` uses, is refused with 403 by the cross-site request check. A token in the URL can end up in proxy access logs, so prefer the `Authorization` header where you can.
+
+The last success and failure are stored in the database, so a restart doesn't make jobs overdue. A new heartbeat waits for its first call until `every + grace` after the dashboard first saw it, then counts as missed. A service with a `heartbeat` ignores `siteMonitor`: the heartbeat is its check.
+
+Behind a reverse proxy with basic auth, exempt `/api/heartbeat/` from the login, but keep it behind the IP allowlist: see [Deployment](deployment.md#heartbeats-behind-basic-auth).
 
 ---
 
@@ -244,6 +319,9 @@ labels:
 | `NODE_EXTRA_CA_CERTS` | none | PEM file of extra CAs to trust for widget APIs, such as your own CA. |
 | `DEMO` | none | `1` uses sample data instead of real APIs. |
 | `DEMO_SCENARIO` | `issues` | `issues` (several problems) or `calm` (everything healthy). |
+| `DEMO_CONFIG_DIR` | `/app/config.example` | The config `DEMO=1` uses while `CONFIG_DIR` is the image default `/config`, so `docker run -e DEMO=1` shows the full demo instead of the starter. |
 | `HWMON_DIR` | `/sys/class/hwmon` | Where temperatures are read from. |
+| `PROC_DIR` | `/proc` | Where the local host's CPU, memory and uptime are read from. |
+| `HOST_NAME` | none | Name of the local host, shown as *Node* when `host.name` isn't set. |
 
 `PORT`, `HOST`, `ORIGIN` and the `*_HEADER` variables come from SvelteKit's Node adapter. See [its documentation](https://svelte.dev/docs/kit/adapter-node#Environment-variables) for the rest, such as `BODY_SIZE_LIMIT` and `SHUTDOWN_TIMEOUT`.

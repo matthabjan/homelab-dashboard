@@ -15,7 +15,9 @@ npm run check                                   # type-check JS (JSDoc) and Svel
 
 To try the production build: `npm run build && DEMO=1 CONFIG_DIR=config.example npm start` (port 3000).
 
-To test against your real homelab, copy `config.example/` to `config/` and drop `DEMO=1`. `config/`, `.env`, `data/`, `secrets/` and `compose.yaml` are gitignored. **Never commit your own config, host names or secrets.**
+To test against your real homelab, copy `config.example/` to `config/` and drop `DEMO=1`.
+
+**Two config folders.** `config.example/` is the full demo: every widget, used by `DEMO=1` (also in the image, from `/app/config.example`). `config.starter/` is what the image ships in `/config` and what the README's quick start copies out. Keep the starter **generic and working with zero edits** on any Docker host: no secrets that must be set, no hosts that must exist, new features as commented examples. CI checks that the image carries it and that it starts. `config/`, `.env`, `data/`, `secrets/` and `compose.yaml` are gitignored. **Never commit your own config, host names or secrets.**
 
 ## Project layout
 

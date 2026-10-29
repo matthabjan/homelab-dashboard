@@ -52,3 +52,21 @@ export const fmtSize = (b) => (b == null ? '—' : b >= 1e12 ? `${Math.round(b /
 
 /** Power-on time: "36 h", "317 d", "3.3 y" */
 export const fmtHours = (h) => (h == null ? '—' : h < 48 ? `${h} h` : h < 8766 ? `${Math.round(h / 24)} d` : `${(h / 8766).toFixed(1)} y`);
+
+/** Bits per second: "850 kbit/s", "12.5 Mbit/s", "1.2 Gbit/s" (decimal, the way line speeds are quoted) */
+export function fmtBitrate(bps) {
+  if (bps == null || !Number.isFinite(bps)) return '—';
+  const units = ['bit/s', 'kbit/s', 'Mbit/s', 'Gbit/s', 'Tbit/s'];
+  let i = 0;
+  let v = bps;
+  while (Math.abs(v) >= 1000 && i < units.length - 1) { v /= 1000; i++; }
+  return `${v >= 100 || i === 0 ? Math.round(v) : Math.round(v * 10) / 10} ${units[i]}`;
+}
+
+/** "3 h ago", "in 2 d", "now" for a timestamp relative to `now` */
+export function fmtRelative(ts, now) {
+  if (ts == null || !Number.isFinite(ts)) return '—';
+  const d = ts - now;
+  if (Math.abs(d) < 60_000) return 'now';
+  return d < 0 ? `${fmtDuration(-d)} ago` : `in ${fmtDuration(d)}`;
+}

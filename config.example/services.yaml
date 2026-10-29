@@ -3,7 +3,9 @@
 #                "sh-<name>" for selfh.st icons, or a full URL. Missing icon → picked by service name from
 #                selfh.st / dashboard-icons, or a generated monogram when there's no match.
 #   iconDark:    optional variant used in dark mode
-#   siteMonitor: URL that is checked every 30 s (uptime, latency, TLS certificate)
+#   siteMonitor: URL that is checked every 30 s (uptime, latency, TLS certificate);
+#                tcp://host:port only checks that the port accepts connections (SSH, SMB, MQTT …)
+#   heartbeat:   a push check instead: the job calls the dashboard when it ran (see Backups below)
 #   latencyWarnMs: per-service "slow" limit in ms (default: settings.yaml → thresholds.latencyWarnMs)
 #   tlsVerify:   false → accept a self-signed certificate for this service's widget API
 #                (better: trust your CA with NODE_EXTRA_CA_CERTS, see README)
@@ -75,6 +77,15 @@
           url: https://adguard.home.arpa
           username: admin
           password: ${ADGUARD_PASSWORD}
+    - Pi-hole:
+        icon: pi-hole
+        href: https://pihole.home.arpa/admin
+        description: Second DNS resolver
+        siteMonitor: https://pihole.home.arpa/admin
+        widget:
+          type: pihole
+          url: https://pihole.home.arpa
+          key: ${PIHOLE_APP_PASSWORD}   # v6: an app password; v5: add `version: 5` and use the API token
 
 - Apps:
     - Portainer:
@@ -87,11 +98,21 @@
           url: https://portainer.home.arpa
           env: 1
           key: ${PORTAINER_KEY}
+    - docker-02:
+        icon: docker
+        description: Second Docker host, through a socket proxy
+        widget:
+          type: docker
+          url: http://docker-02.home.arpa:2375   # docker-socket-proxy, never the socket itself
     - Home Assistant:
         icon: home-assistant
         href: https://ha.home.arpa
         description: Home automation
         siteMonitor: https://ha.home.arpa
+    - Mosquitto:
+        icon: mosquitto
+        description: MQTT broker
+        siteMonitor: tcp://mqtt.home.arpa:1883
 
 - Entertainment:
     - MusicAssistant:
@@ -99,3 +120,33 @@
         href: https://music.home.arpa
         description: Music library and players
         siteMonitor: https://music.home.arpa
+    - Media server:
+        icon: jellyfin
+        href: https://media.home.arpa
+        description: Any JSON API, through the customapi widget
+        siteMonitor: https://media.home.arpa
+        widget:
+          type: customapi
+          url: https://media.home.arpa/api/status
+          # headers: { X-Api-Key: "${MEDIA_KEY}" }
+          mappings:
+            - field: sessions.active
+              label: sessions
+              format: number
+            - field: library.items
+              label: items
+              format: number
+            - field: healthy
+              label: media health
+              remap: [{ value: true, to: OK }, { value: false, to: Degraded }]
+              crit: { below: 1 }        # our addition: alerts when the server reports unhealthy
+
+- Backups:
+    - Nightly restic:
+        icon: restic
+        description: Offsite copy, reported by the job itself
+        heartbeat:
+          every: 24h              # how often the job runs: 30m, 6h, 1d …
+          grace: 1h               # default: 10% of every, at least 5m
+          token: ${HB_RESTIC}     # the job calls /api/heartbeat/backups-nightly-restic?token=…
+          backup: true            # counts in "oldest backup" and "backups overdue"

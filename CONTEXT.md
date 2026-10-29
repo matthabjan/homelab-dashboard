@@ -20,6 +20,14 @@ Terms used in the code and in design discussions.
 
 **Vitals card** — the card under the status overview with four panels behind tabs: System (the host's gauges), Storage, Drives and Network. A tab is marked with the worst level in its panel; only panels with data get a tab.
 
+**Local host** — the machine the dashboard runs on, shown in the System panel when there is no Proxmox widget (`host.source`). Its vitals come from `/proc` and `statfs` (`local.js`); in Docker that is the host, under lxcfs the container.
+
+**Heartbeat** — a push check: a scheduled job (backup, cron) calls `/api/heartbeat/<id>` when it ran, or `…/fail`. A service with a `heartbeat:` block is up while the last run is within `every + grace` and no failure came after it; the endpoint stores the last success and failure in `kv`. `backup: true` adds it to the backup figures.
+
+**Check** — how a service's up/down is found: an HTTP or TCP probe (`siteMonitor`), a container's state (label discovery), or a heartbeat.
+
+**Config view** — the read-only page `/config` (Config & status): problems, widgets, checks, automatic icons and settings, built by `config-view.js` from an allowlist so no secret can appear in it.
+
 **Storage row** — one line in the Storage panel: usage (`used`, `total`, `pct`, `sub`) or `offline` (an unavailable PVE storage, a detached removable datastore).
 
 **Drive** — a physical disk in the vitals card's Drives panel, with what SMART says about it (health, life left, temperature, power-on time, data written). Reported by PVE (host disks), OMV and PBS (disks passed into their VMs); virtual disks are skipped. Not the same as a storage row: a storage is a filesystem or pool, a drive is hardware.

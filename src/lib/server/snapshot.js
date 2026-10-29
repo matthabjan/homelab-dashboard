@@ -3,7 +3,8 @@ import { resolveIcon, assetUrl } from './config.js';
 import { probeStats, uptimeSince, probeBuckets, series, recentEvents, openScores } from './db.js';
 import { fmtClock, fmtDuration as fmtAge, fmtHours, fmtSize } from './format.js';
 import { DEMO } from './demo.js';
-/** @import { AttentionItem, Drive, Fact, Gauge, Level, NetworkReading, Settings, Snapshot, Tile, Traffic } from '$lib/types' */
+import { hostService, hostSource } from './local.js';
+/** @import { AttentionItem, BackupStatus, ContainerCounts, Drive, Heartbeat, HeartbeatState, Fact, Gauge, Level, NetworkReading, Settings, Snapshot, Tile, Traffic } from '$lib/types' */
 /** @import { Engine } from './engine.js' */
 
 const RANK = { crit: 3, warn: 2, info: 1, ok: 0 };
@@ -28,14 +29,57 @@ const firstSeen = new Map();
 const level = (v, warn, crit) => (v == null ? 'none' : v >= crit ? 'crit' : v >= warn ? 'warn' : 'ok');
 
 /**
- * Status of a label-discovered container without a siteMonitor. The Portainer widget raises its alerts.
- * @returns {{ lvl: Level, status: string, line: string | null }}
+ * A tile's status from a check other than a probe. `alert` (critical) is completed with the service name.
+ * @typedef {{ lvl: Tile['level'], status: string, line: string | null, lineLevel?: Tile['lineLevel'], alert?: { title: string, detail: string, ts: number } }} CheckStatus
+ */
+
+/**
+ * Status of a label-discovered container without a siteMonitor. The container widget raises its alerts.
+ * @returns {CheckStatus}
  */
 function containerStatus({ state, health, exitCode }) {
   if (state === 'running' && health === 'unhealthy') return { lvl: 'warn', status: 'Unhealthy', line: 'Container unhealthy' };
   if (state === 'running') return { lvl: 'ok', status: 'Up', line: null };
   if (state === 'restarting') return { lvl: 'crit', status: 'Down', line: 'Container restarting' };
   return { lvl: 'crit', status: 'Down', line: `Container ${state}${exitCode ? ` · exit ${exitCode}` : ''}` };
+}
+
+/**
+ * Status of a heartbeat service: when its job last ran, or since when it is overdue or failed.
+ * @param {Heartbeat} hb @param {HeartbeatState | null | undefined} st @param {number} now
+ * @returns {CheckStatus}
+ */
+export function heartbeatStatus(hb, st, now) {
+  const every = `every ${fmtAge(hb.every)}`;
+  if (!st || st.state === 'pending') return { lvl: 'unknown', status: 'Waiting', line: `Waiting for the first run · ${every}`, lineLevel: 'muted' };
+  const last = st.lastOk != null ? `last run ${fmtAge(now - st.lastOk)} ago` : 'never ran';
+  if (st.failed) {
+    const at = /** @type {number} */ (st.lastFail);
+    return { lvl: 'crit', status: 'Down', line: `Reported failure ${fmtClock(at)}`, alert: { title: 'reported a failure', detail: `${fmtClock(at)} · ${last}`, ts: at } };
+  }
+  if (st.state === 'down') {
+    const since = /** @type {number} */ (st.overdueSince);
+    return { lvl: 'crit', status: 'Down', line: `Overdue since ${fmtClock(since)}`, alert: { title: 'missed its run', detail: `${last} · ${every}`, ts: since } };
+  }
+  return { lvl: 'ok', status: 'Up', line: `Last run ${fmtAge(now - /** @type {number} */ (st.lastOk))} ago · ${every}`, lineLevel: null };
+}
+
+/**
+ * PBS backups plus heartbeats marked `backup: true` (restic, borg, Kopia …): overdue counts added up, the oldest age
+ * the larger one; a heartbeat that never ran has no age yet.
+ * @param {BackupStatus | undefined} pbs @param {(HeartbeatState | null)[]} beats @param {number} now
+ * @returns {BackupStatus | undefined}
+ */
+export function mergeBackups(pbs, beats, now) {
+  const known = beats.filter((b) => b && b.state !== 'pending');
+  if (!known.length) return pbs;
+  const ages = known.flatMap((b) => (b?.lastOk != null ? [now - b.lastOk] : []));
+  const oldest = [pbs?.oldestAge, ...ages].filter((a) => a != null);
+  return {
+    overdue: (pbs?.overdue ?? 0) + known.filter((b) => b?.state === 'down').length,
+    oldestAge: oldest.length ? Math.max(.../** @type {number[]} */ (oldest)) : null,
+    known: true
+  };
 }
 
 /**
@@ -84,12 +128,18 @@ export function buildSnapshot(engine) {
   /** @type {Map<string, Tile>} */
   const tiles = new Map();
 
+  // a config file with an error: keeping its last version is a warning, losing its content is critical
+  const shown = { last: 'showing the last working version', none: 'nothing loaded from it', null: 'the rest of the file is loaded' };
+  for (const p of engine.cfg.problems ?? []) {
+    attention.push({ sev: p.fallback === 'none' ? 'crit' : 'warn', key: `config-${p.file}-${p.message}`, title: `${p.file} has an error`, detail: `${p.message} · ${shown[String(p.fallback)]}`, href: '/config#problems', ts: now });
+  }
+
   for (const g of groups) {
     for (const s of g.services) {
       const st = engine.state(s.id);
       const p = st.probe;
       const w = st.widget;
-      const ps = s.probe || s.container ? stats(s.id, now) : null; // a container's state is recorded like a probe
+      const ps = s.probe || s.container || s.heartbeat ? stats(s.id, now) : null; // container and heartbeat states are recorded like probes
       const host = (() => { try { return new URL(s.href || s.probe || '').host; } catch { return ''; } })();
       /** @type {Tile['level']} */
       let lvl = s.probe ? (p.checked ? 'ok' : 'unknown') : w ? 'ok' : 'unknown';
@@ -97,20 +147,21 @@ export function buildSnapshot(engine) {
       let line = w?.line || s.description || '';
       /** @type {Tile['lineLevel']} */
       let lineLevel = null;
-      const ct = !s.probe && s.container ? containerStatus(s.container) : null;
+      const ct = !s.probe && s.container ? containerStatus(s.container) : s.heartbeat ? heartbeatStatus(s.heartbeat, st.heartbeat, now) : null;
       const auto = s.icon ? null : engine.autoIcons.get(s.id);
       const iconDark = s.iconDark ?? auto?.iconDark;
       if (ct) {
         ({ lvl, status } = ct);
-        if (ct.line) { line = ct.line; lineLevel = lvl; }
+        if (ct.line) { line = ct.line; lineLevel = ct.lineLevel !== undefined ? ct.lineLevel : lvl === 'unknown' ? 'muted' : lvl; }
       }
 
       const push = (a) => attention.push({ ...a, sid: s.id, service: s.name, href: s.href, ts: a.ts ?? w?.ts ?? now });
       // a stopped container is p.down (the engine records it like a failed probe); unhealthy is only a warning
       if (ct?.lvl === 'warn') push({ sev: 'warn', title: `${s.name} is unhealthy`, detail: 'container health check failing' });
+      if (ct?.alert) push({ sev: 'crit', ...ct.alert, title: `${s.name} ${ct.alert.title}` });
 
       const slowMs = s.latencyWarnMs ?? th.latencyWarnMs;
-      if (p.down) {
+      if (p.down && !s.heartbeat) {
         lvl = 'crit';
         status = 'Down';
         line = `Down since ${fmtClock(p.since)} · ${p.reason}`;
@@ -158,7 +209,7 @@ export function buildSnapshot(engine) {
         icon: resolveIcon(s.icon ?? auto?.icon, s.name),
         iconDark: iconDark ? resolveIcon(iconDark, s.name) : null,
         level: lvl,
-        status: p.down ? 'Down' : status,
+        status: p.down && !s.heartbeat ? 'Down' : status,
         line: line || (lvl === 'ok' ? 'Online' : ''),
         lineLevel,
         stats: (w?.stats || []).slice(0, 3),
@@ -177,9 +228,9 @@ export function buildSnapshot(engine) {
   const probed = all.filter((t) => t.level !== 'unknown');
   const up = probed.filter((t) => t.status !== 'Down').length;
 
-  // ---- host vitals ----
-  const hostSvc = engine.cfg.services.find((s) => (settings.host.service ? s.name === settings.host.service : s.widget?.type === 'proxmox'));
-  const hw = hostSvc ? engine.state(hostSvc.id).widget?.host : null;
+  // ---- host vitals: the Proxmox node, or the machine the dashboard runs on ----
+  const hostSvc = hostSource(engine.cfg) === 'proxmox' ? hostService(engine.cfg) : undefined;
+  const hw = hostSvc ? engine.state(hostSvc.id).widget?.host : engine.local;
   const since24 = now - 24 * H;
   const spark = (key) => series(key, since24, now, 48).values;
   let host = null;
@@ -188,9 +239,9 @@ export function buildSnapshot(engine) {
     /** @type {Gauge[]} */
     const gauges = [];
     if (hw) {
-      gauges.push({ key: 'cpu', label: 'CPU', val: Math.round(hw.cpu), unit: '%', pct: hw.cpu, level: level(hw.cpu, 75, 90), sub: `${hw.cpus} threads`, series: spark('host.cpu'), max: 100 });
+      gauges.push({ key: 'cpu', label: 'CPU', val: hw.cpu == null ? '—' : Math.round(hw.cpu), unit: '%', pct: hw.cpu, level: level(hw.cpu, 75, 90), sub: `${hw.cpus} threads`, series: spark('host.cpu'), max: 100 });
       gauges.push({ key: 'mem', label: 'Memory', val: (hw.mem / 1024 ** 3).toFixed(1), unit: `of ${Math.round(hw.maxmem / 1024 ** 3)} GiB`, pct: hw.memPct, level: level(hw.memPct, 80, 92), sub: `${Math.round(hw.memPct)}% used`, series: spark('host.mem'), max: 100 });
-      gauges.push({ key: 'disk', label: 'Disk', val: Math.round(hw.disk.pct ?? 0), unit: '%', pct: hw.disk.pct, level: level(hw.disk.pct, th.storageAmberPct, th.storageWarnPct), sub: hw.disk.name, series: null });
+      gauges.push({ key: 'disk', label: 'Disk', val: hw.disk.pct == null ? '—' : Math.round(hw.disk.pct), unit: '%', pct: hw.disk.pct, level: level(hw.disk.pct, th.storageAmberPct, th.storageWarnPct), sub: hw.disk.name, series: null });
     }
     if (temps?.cpu != null) {
       const span = th.tempWarnC + 15 - th.tempMinC;
@@ -200,11 +251,12 @@ export function buildSnapshot(engine) {
       for (const n of temps.nvme) if (n >= 70) attention.push({ sev: 'warn', title: `NVMe at ${Math.round(n)} °C`, detail: 'drive is running hot', href: hostSvc?.href, ts: now });
     }
     host = {
-      name: hw?.node ?? 'host',
+      name: settings.host.name || (hw?.node ?? 'host'),
       href: hostSvc?.href ?? null,
-      facts: hw
-        ? [...(hw.uptime ? [{ label: 'Uptime', value: hw.uptime }] : []), { label: 'Guests', value: `${hw.guestsRunning} of ${hw.guestsTotal} running` }]
-        : [],
+      facts: [
+        ...(hw?.uptime ? [{ label: 'Uptime', value: hw.uptime }] : []),
+        ...(hw?.guestsTotal != null ? [{ label: 'Guests', value: `${hw.guestsRunning} of ${hw.guestsTotal} running` }] : [])
+      ],
       gauges
     };
   }
@@ -253,7 +305,8 @@ export function buildSnapshot(engine) {
   const net = netPick
     ? widgets.find((x) => x.s.name === netPick && x.w.network)
     : widgets.find((x) => x.w.network && !x.w.network.fallback) || widgets.find((x) => x.w.network);
-  const dns = widgets.find((x) => x.w.dns);
+  const dnsPick = settings.network?.dns;
+  const dns = widgets.find((x) => x.w.dns && (!dnsPick || x.s.name === dnsPick));
   const lan = widgets.find((x) => x.w.lan);
   /**
    * Rates plus 24 h series for one reading, from the metrics `<key>.down` / `<key>.up`.
@@ -308,7 +361,7 @@ export function buildSnapshot(engine) {
   // ---- verdict ----
   attention.sort((a, b) => RANK[b.sev] - RANK[a.sev] || b.ts - a.ts);
   const needCount = attention.filter((a) => a.sev === 'crit' || a.sev === 'warn').length;
-  const backups = widgets.find((x) => x.w.backups)?.w.backups;
+  const backups = mergeBackups(widgets.find((x) => x.w.backups)?.w.backups, engine.cfg.services.flatMap((s) => (s.heartbeat?.backup ? [engine.state(s.id).heartbeat ?? null] : [])), now);
   const certWarn = all.filter((t) => t.cert && t.cert.days < th.certWarnDays).length;
   const subParts = [`${up} of ${probed.length} services up`];
   if (backups?.known) subParts.push(backups.overdue ? `${backups.overdue} backup${backups.overdue > 1 ? 's' : ''} overdue` : 'backups current');
@@ -320,11 +373,15 @@ export function buildSnapshot(engine) {
     ? { level: /** @type {Level} */ (top.sev), tag: `${needCount} ${needCount === 1 ? 'needs' : 'need'} attention`, title: `${top.title}.`, sub: subParts.join(' · ') }
     : { level: 'ok', tag: 'All systems normal', title: 'Everything is running.', sub: subParts.join(' · ') };
 
-  const containers = engine.shared.containers;
+  // summed over Docker engines; a host seen by both Portainer and a docker widget is one entry
+  const containers = Object.values(engine.shared.containers ?? {}).reduce(
+    (a, c) => ({ running: a.running + c.running, total: a.total + c.total, failed: a.failed + c.failed, unhealthy: a.unhealthy + c.unhealthy }),
+    /** @type {ContainerCounts} */ ({ running: 0, total: 0, failed: 0, unhealthy: 0 })
+  );
   const nextCert = all.map((t) => t.cert).filter((c) => c !== null).filter((c) => !c.selfSigned).sort((a, b) => a.days - b.days)[0];
   const facts = /** @type {(Fact | false | undefined)[]} */ ([
     { k: 'services up', v: `${up} / ${probed.length}`, level: up < probed.length ? 'crit' : null },
-    containers && { k: 'containers up', v: `${containers.running} / ${containers.total}`, level: containers.failed ? 'warn' : null },
+    containers.total > 0 && { k: 'containers up', v: `${containers.running} / ${containers.total}`, level: containers.failed ? 'warn' : null },
     backups?.oldestAge != null && { k: 'oldest backup', v: fmtAge(backups.oldestAge), level: backups.overdue ? 'warn' : null },
     nextCert && { k: 'next cert', v: `${nextCert.days} d`, level: nextCert.days < th.certWarnDays ? 'warn' : null }
   ]).filter(/** @returns {f is Fact} */ (f) => !!f);

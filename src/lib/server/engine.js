@@ -7,12 +7,14 @@ import { openDb, insertProbe, insertMetric, insertEvent, prune, kvGet, kvSet } f
 import { probe, certInfo, reasonText } from './http.js';
 import { fmtClock } from './format.js';
 import { readTemps } from './integrations/host.js';
-import { DEMO, SCENARIO, demoProbe, demoCert, demoTemps, seedHistory } from './demo.js';
+import { hostSource, readLocal } from './local.js';
+import { checkIn, createLimiter, heartbeatState, record as heartbeatRecord } from './heartbeat.js';
+import { DEMO, SCENARIO, demoProbe, demoCert, demoTemps, demoLocal, seedHistory } from './demo.js';
 import { FIXTURES, fixtureTransport } from './demo/index.js';
 import { buildSnapshot } from './snapshot.js';
 import { createIconFinder, iconCandidates } from './icons.js';
 import { INTEGRATIONS, ORDER, createContext } from './integrations/index.js';
-/** @import { Config, Discovered, Service, ServiceState, Shared, Snapshot, Temps, Widget } from '$lib/types' */
+/** @import { Config, Discovered, HostVitals, Service, ServiceState, Shared, Snapshot, Temps, Widget } from '$lib/types' */
 
 const kv = { get: kvGet, set: kvSet };
 
@@ -34,13 +36,18 @@ export class Engine extends EventEmitter {
   shared = {};
   /** @type {Temps | null} */
   temps = null;
+  /** @type {HostVitals | null} the machine the dashboard runs on, when `host.source` resolves to local */
+  local = null;
+  localState = {}; // the previous /proc/stat totals, for CPU %
   timers = [];
+  heartbeatLimit = createLimiter();
   icons = createIconFinder({ kv });
   /** @type {Map<string, { icon: string, iconDark: string | null }>} service id → icon found for a service without `icon` */
   autoIcons = new Map();
   /** @type {Snapshot | null} */
   snapshot = null;
   started = false;
+  probed = false; // the first probe round, 5 s after start
 
   start() {
     if (this.started) return;
@@ -60,8 +67,16 @@ export class Engine extends EventEmitter {
   }
 
   reload() {
-    this.base = loadConfig();
+    // loadConfig records bad files instead of throwing; anything else unexpected keeps the running config (a timer calls this)
+    try {
+      this.base = loadConfig();
+    } catch (e) {
+      console.error('[config] reload failed:', e);
+      if (this.base) return;
+      throw e;
+    }
     this.cfg = withDiscovered(this.base, this.discovered);
+    this.shared = {}; // hand-offs (container counts per engine, guest ids) refill on the next widget round, without removed services
     for (const t of this.timers) clearInterval(t);
     this.timers = [];
     const ids = new Set(this.cfg.services.map((s) => s.id));
@@ -69,7 +84,10 @@ export class Engine extends EventEmitter {
     if (DEMO) seedHistory(this.cfg.services);
     const iv = this.cfg.settings.intervals;
     const every = (fn, s) => { fn(); this.timers.push(setInterval(fn, s * 1000)); };
-    every(() => this.runProbes().catch((e) => console.error('[probe]', e)), iv.probe);
+    const probes = () => this.runProbes().catch((e) => console.error('[probe]', e));
+    // At process start the server isn't listening yet: a check of the dashboard itself would fail once on every start.
+    if (this.probed) every(probes, iv.probe);
+    else this.timers.push(setTimeout(() => { this.probed = true; every(probes, iv.probe); }, 5000));
     every(() => this.runWidgets().catch((e) => console.error('[widgets]', e)), iv.widgets);
     every(() => this.runCerts().catch((e) => console.error('[cert]', e)), iv.cert);
     every(() => this.findIcons().catch((e) => console.error('[icons]', e)), 3600);
@@ -106,6 +124,7 @@ export class Engine extends EventEmitter {
         }
       })
     );
+    this.checkHeartbeats(now);
     this.publish();
   }
 
@@ -128,10 +147,10 @@ export class Engine extends EventEmitter {
       try {
         const res = await withTimeout(INTEGRATIONS[s.widget.type].collect(s.widget, ctx), 25_000, s.widget.type);
         for (const e of res.events || []) insertEvent(now, e.sev, s.id, e.title, e.detail);
-        st.widget = { ok: true, ts: now, ...res };
+        st.widget = { ok: true, ts: now, lastOk: now, ...res };
       } catch (e) {
         const cause = e?.cause?.code ? reasonText(e.cause.code) : null;
-        st.widget = { ok: false, ts: now, error: cause && e.message === 'fetch failed' ? cause : e.message, stats: st.widget?.stats ?? [], line: null, alerts: [] };
+        st.widget = { ok: false, ts: now, lastOk: st.widget?.lastOk ?? null, error: cause && e.message === 'fetch failed' ? cause : e.message, stats: st.widget?.stats ?? [], line: null, alerts: [] };
         console.warn(`[${s.widget.type}] ${s.name}: ${st.widget.error}${e?.body ? ` — ${e.body}` : ''}`);
       }
     };
@@ -139,6 +158,12 @@ export class Engine extends EventEmitter {
     await Promise.all(list.filter((x) => !ORDER.includes(x.widget.type)).map(run));
     this.updateDiscovered(list);
     this.recordContainers(list, now);
+
+    if (hostSource(this.cfg) === 'local') {
+      this.local = DEMO ? demoLocal(settings.host) : await readLocal(settings.host, this.localState);
+      // the same keys the Proxmox widget records, so the gauges' sparklines don't care where they came from
+      if (this.local) { insertMetric('host.cpu', now, this.local.cpu); insertMetric('host.mem', now, this.local.memPct); }
+    } else this.local = null;
 
     if (settings.host.temperature) {
       this.temps = DEMO ? demoTemps() : await readTemps();
@@ -161,19 +186,56 @@ export class Engine extends EventEmitter {
       const { state, health, exitCode } = s.container;
       insertProbe(s.id, now, state === 'running' && health !== 'unhealthy', null);
       // The container state is this service's probe: no second failure needed, Docker already knows.
-      const p = this.state(s.id).probe;
-      p.checked = now;
-      if (state === 'running') {
-        if (p.down) insertEvent(now, 'ok', s.id, `${s.name} recovered`, `was down since ${fmtClock(p.since)}`);
-        Object.assign(p, { fails: 0, down: false, since: null, reason: null });
-      } else {
-        p.reason = `Container ${state}${exitCode ? ` · exit ${exitCode}` : ''}`;
-        if (!p.down) {
-          Object.assign(p, { fails: 1, down: true, since: now });
-          insertEvent(now, 'crit', s.id, `${s.name} went down`, p.reason);
-        }
+      this.mark(s, now, state === 'running' ? null : `Container ${state}${exitCode ? ` · exit ${exitCode}` : ''}`);
+    }
+  }
+
+  /**
+   * Set a service's state straight away (no second failure needed): up when `reason` is null, else down.
+   * Writes the *went down* / *recovered* events, as probes do.
+   */
+  mark(s, now, reason) {
+    const p = this.state(s.id).probe;
+    p.checked = now;
+    if (reason == null) {
+      if (p.down) insertEvent(now, 'ok', s.id, `${s.name} recovered`, `was down since ${fmtClock(p.since)}`);
+      Object.assign(p, { fails: 0, down: false, since: null, reason: null });
+    } else {
+      p.reason = reason;
+      if (!p.down) {
+        Object.assign(p, { fails: 1, down: true, since: now });
+        insertEvent(now, 'crit', s.id, `${s.name} went down`, reason);
       }
     }
+  }
+
+  /**
+   * Heartbeat services, on the probe timer: their state from what the endpoint stored. With `history`, each tick
+   * is written as probe history, so uptime and the strip mean "on schedule".
+   */
+  checkHeartbeats(now, history = true) {
+    for (const s of this.cfg.services) {
+      if (!s.heartbeat) continue;
+      const hb = heartbeatState(s.heartbeat, heartbeatRecord(kv, s.heartbeat.id, now), now);
+      this.state(s.id).heartbeat = hb;
+      if (hb.state === 'pending') continue;
+      if (history) insertProbe(s.id, now, hb.state === 'up', null);
+      this.mark(s, now, hb.state === 'up' ? null : hb.failed ? 'Reported a failure' : 'Missed its run');
+    }
+  }
+
+  /**
+   * A call to /api/heartbeat/<id>[/fail]. The status code to answer; a failure's body is logged only, never shown.
+   * @param {string} id @param {string | null} token @param {boolean} ok @param {string} [body]
+   */
+  heartbeat(id, token, ok, body) {
+    const now = Date.now();
+    const { status, service } = checkIn({ services: this.cfg.services, kv, now, allow: this.heartbeatLimit }, { id, token, ok });
+    if (!service) return status;
+    if (!ok) console.warn(`[heartbeat] ${service.name} reported a failure${body ? ` — ${body.slice(0, 500)}` : ''}`);
+    this.checkHeartbeats(now, false);
+    this.publish();
+    return status;
   }
 
   /** Rebuild cfg when the set of label-discovered services changed; a failed widget keeps its last list. */

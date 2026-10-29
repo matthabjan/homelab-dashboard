@@ -25,14 +25,17 @@ RUN apk add --no-cache tzdata
 ENV NODE_ENV=production \
     PORT=3000 \
     CONFIG_DIR=/config \
+    DEMO_CONFIG_DIR=/app/config.example \
     DATA_DIR=/data \
     NODE_OPTIONS=--disable-warning=ExperimentalWarning
 WORKDIR /app
 COPY --from=build /app/build ./build
 COPY --from=deps /app/node_modules ./node_modules
 COPY package.json ./
-# example config, used when no /config volume is mounted
-COPY config.example /config
+# starter config, used when no /config volume is mounted and copied out by the README's quick start;
+# the full demo config is what DEMO=1 shows (DEMO_CONFIG_DIR)
+COPY config.starter /config
+COPY config.example /app/config.example
 RUN mkdir -p /data && chown -R node:node /data
 USER node
 EXPOSE 3000

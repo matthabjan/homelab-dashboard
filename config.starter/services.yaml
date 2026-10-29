@@ -1,0 +1,55 @@
+# Your services, in groups (gethomepage's format). Saving this file reloads the page; no restart needed.
+# Every key: docs/configuration.md · every widget: docs/integrations.md
+# Secrets: write ${NAME} and set NAME in the environment or as a Docker secret, never the value itself.
+
+- Links:
+    - Homelab Dashboard:
+        icon: github
+        href: https://github.com/matthabjan/homelab-dashboard
+        description: This dashboard · checks itself
+        siteMonitor: http://127.0.0.1:3000/api/health
+    - Router:
+        href: http://192.168.1.1
+        description: Your router's web interface (edit the address)
+
+# Uncomment and edit what you have. Each block is a service: put it under a group like the ones above.
+#
+# - Containers:
+#     # A Docker host through a socket proxy (never the socket itself): docs/deployment.md#docker-socket-proxy
+#     - Docker:
+#         widget:
+#           type: docker
+#           url: http://socket-proxy:2375
+#
+#     # Any JSON API, with optional alert thresholds
+#     - Media server:
+#         href: https://media.example.com
+#         siteMonitor: https://media.example.com
+#         widget:
+#           type: customapi
+#           url: https://media.example.com/api/status
+#           headers: { X-Api-Key: "${MEDIA_KEY}" }
+#           mappings:
+#             - { field: sessions.active, label: sessions, format: number }
+#             - { field: healthy, label: media health, crit: { below: 1 } }
+#
+# - Network:
+#     - Pi-hole:
+#         href: https://pihole.example.com/admin
+#         siteMonitor: https://pihole.example.com/admin
+#         widget:
+#           type: pihole
+#           url: https://pihole.example.com
+#           key: ${PIHOLE_APP_PASSWORD}   # v6 app password; v5: add `version: 5` and use the API token
+#
+#     # A port instead of a web page (SSH, SMB, MQTT …): up when it accepts a connection
+#     - NAS:
+#         siteMonitor: tcp://nas.example.com:445
+#
+# - Backups:
+#     # A job reports when it ran: curl -fsS "https://<dashboard>/api/heartbeat/backups-nightly-backup?token=$TOKEN"
+#     - Nightly backup:
+#         heartbeat:
+#           every: 24h
+#           token: ${HB_NIGHTLY}
+#           backup: true

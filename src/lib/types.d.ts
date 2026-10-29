@@ -22,13 +22,16 @@ export interface Settings {
     background: string;
   };
   host: {
+    source: 'auto' | 'proxmox' | 'local';
+    name: string | null;
+    disk: string;
     service: string | null;
     node: string | null;
     temperature: boolean;
     storages: string[] | null;
     storage: string | null;
   };
-  network: { service: string | null };
+  network: { service: string | null; dns: string | null };
   mostUsed: { count: number; halfLifeDays: number };
   intervals: { probe: number; widgets: number; cert: number };
   thresholds: {
@@ -77,6 +80,39 @@ export interface Service {
   container?: ContainerState | null;
   /** Image of a label-discovered container, for automatic icons. */
   image?: string | null;
+  /** a push check: jobs call /api/heartbeat/<id>; null when absent or misconfigured */
+  heartbeat: Heartbeat | null;
+}
+
+/** A service's `heartbeat:` block, durations in ms. */
+export interface Heartbeat {
+  /** URL path and kv key; defaults to the service id */
+  id: string;
+  every: number;
+  grace: number;
+  token: string;
+  /** counts in "oldest backup" / "backups overdue" */
+  backup: boolean;
+}
+
+/** How a check finds out whether a service is up. */
+export type CheckKind = 'http' | 'tcp' | 'container' | 'heartbeat';
+
+/** What the heartbeat endpoint stored for one id (kv `heartbeat:<id>`). */
+export interface HeartbeatRecord {
+  /** when the dashboard first saw this heartbeat: a job that never reports is overdue `every + grace` after it */
+  since: number;
+  lastOk: number | null;
+  lastFail: number | null;
+}
+
+/** A heartbeat's state as the engine last computed it. */
+export interface HeartbeatState extends HeartbeatRecord {
+  state: 'up' | 'down' | 'pending';
+  /** the job reported a failure after its last success */
+  failed: boolean;
+  /** when it became overdue (down and not failed) */
+  overdueSince: number | null;
 }
 
 export interface Bookmark {
@@ -92,6 +128,16 @@ export interface Config {
   groups: { name: string; services: Service[] }[];
   services: Service[];
   bookmarks: Bookmark[];
+  problems: ConfigProblem[];
+}
+
+/** Something in a config file that couldn't be used as written; shown in the attention list. */
+export interface ConfigProblem {
+  file: string;
+  /** the reason and where (line, group): never the file's content, which could hold a secret */
+  message: string;
+  /** what is shown instead: the file's last version that loaded, nothing from it, or (null) the rest of the file */
+  fallback: 'last' | 'none' | null;
 }
 
 // ---------- integrations ----------
@@ -132,7 +178,8 @@ export interface Kv {
 export interface Shared {
   guestIds?: Set<string>;
   guestNames?: Record<string, string>;
-  containers?: ContainerCounts;
+  /** per Docker engine id (from /info), so Portainer and a docker widget on one engine count it once */
+  containers?: Record<string, ContainerCounts>;
 }
 
 /** Everything an integration may use. Built by createContext in integrations/index.js. */
@@ -196,18 +243,19 @@ export interface OfflineRow {
   pct?: number | null;
 }
 
-/** The Proxmox node shown as "host". */
+/** The machine shown as "host": the Proxmox node, or the one the dashboard runs on (local.js, no guests). */
 export interface HostVitals {
   node: string;
-  cpu: number;
+  /** null on the local host's first poll (CPU % needs two samples) */
+  cpu: number | null;
   cpus: number;
   mem: number;
   maxmem: number;
   memPct: number;
   disk: { name: string; pct: number | null; sub: string };
   uptime: string | null;
-  guestsRunning: number;
-  guestsTotal: number;
+  guestsRunning: number | null;
+  guestsTotal: number | null;
   updates: number | null;
 }
 
@@ -258,7 +306,8 @@ export interface Traffic {
 export interface DnsStats {
   queries: number;
   blockedPct: number;
-  avgMs: number;
+  /** null when the server doesn't report it (Pi-hole) */
+  avgMs: number | null;
   series: number[] | null;
   /** what the counts cover, e.g. "24 h" (AdGuard's statistics interval) */
   period: string | null;
@@ -303,6 +352,28 @@ export interface WidgetResult {
   discovered?: Discovered[];
 }
 
+/** A customapi threshold, compared on the raw value after `scale`; any matching condition counts. */
+export interface Threshold {
+  above?: number;
+  below?: number;
+  equals?: string | number | boolean;
+  not?: string | number | boolean;
+}
+
+/** One value of a customapi widget (gethomepage's mapping fields, plus `warn` / `crit`). */
+export interface CustomApiMapping {
+  /** dot path `a.b.0.c`, or the nested form `{ a: { b: c } }` */
+  field: string | Record<string, any>;
+  label?: string;
+  format?: 'text' | 'number' | 'float' | 'percent' | 'bytes' | 'bitrate' | 'duration' | 'date' | 'relativeDate' | 'size';
+  prefix?: string;
+  suffix?: string;
+  scale?: number | string;
+  remap?: { value?: any; any?: boolean; to: any }[];
+  warn?: Threshold;
+  crit?: Threshold;
+}
+
 export interface Integration {
   collect(widget: Widget, ctx: Context): Promise<WidgetResult>;
 }
@@ -326,10 +397,11 @@ export interface CertInfo {
 }
 
 /** The last collect of a service: its result, or `ok: false` with the error and the previous stats. */
-export type WidgetState = WidgetResult & { ok: boolean; ts: number; error?: string };
+export type WidgetState = WidgetResult & { ok: boolean; ts: number; error?: string; /** the last successful poll */ lastOk: number | null };
 
 export interface ServiceState {
   probe: ProbeState;
+  heartbeat?: HeartbeatState | null;
   widget: WidgetState | null;
   wstate: Record<string, any>;
   cert: CertInfo | null;
@@ -339,6 +411,52 @@ export interface Temps {
   cpu: number | null;
   nvme: number[];
   drives: number[];
+}
+
+// ---------- /config: the read-only config page ----------
+
+/** One labelled value: a widget option, a setting. */
+export interface KeyValue {
+  k: string;
+  v: string;
+}
+
+/**
+ * Everything the /config page shows, built from an allowlist (config-view.js): no credentials, headers, request
+ * bodies, URL paths or queries, heartbeat tokens, or label values beyond group and name.
+ */
+export interface ConfigView {
+  title: string;
+  demo: boolean;
+  generatedAt: number;
+  problems: { file: string; message: string; level: Level }[];
+  widgets: {
+    id: string;
+    name: string;
+    group: string;
+    type: string;
+    /** the integration's section in docs/integrations.md; null for a type this dashboard doesn't implement */
+    docs: string | null;
+    /** scheme, host and port of `url` only */
+    origin: string | null;
+    options: KeyValue[];
+    status: 'ok' | 'error' | 'never' | 'unsupported';
+    error: string | null;
+    lastOk: number | null;
+    source: string;
+  }[];
+  checks: {
+    id: string;
+    name: string;
+    group: string;
+    kind: CheckKind;
+    target: string;
+    interval: string;
+    state: string;
+    level: Level | 'unknown';
+  }[];
+  icons: { id: string; name: string; group: string; yaml: string; icon: string; iconDark: string | null }[];
+  settings: KeyValue[];
 }
 
 // ---------- snapshot: the JSON the browser renders ----------

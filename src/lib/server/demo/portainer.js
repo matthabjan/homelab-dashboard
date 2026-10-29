@@ -4,9 +4,10 @@
 const plain = ['postgres', 'redis', 'immich-server', 'immich-ml', 'paperless', 'gotenberg', 'tika', 'jellyfin', 'sonarr', 'radarr', 'prowlarr', 'qbittorrent', 'vaultwarden',
   'nextcloud', 'mariadb', 'mosquitto', 'zigbee2mqtt', 'node-red', 'uptime-kuma', 'grafana', 'prometheus', 'loki'];
 
-const container = (name, state = 'running', status = 'Up 3 days', labels = {}) => ({ Id: `${name.padEnd(12, '0')}abcdef`, Names: [`/${name}`], Image: `ghcr.io/example/${name}:latest`, State: state, Status: status, Labels: labels });
+export const container = (name, state = 'running', status = 'Up 3 days', labels = {}) => ({ Id: `${name.padEnd(12, '0')}abcdef`, Names: [`/${name}`], Image: `ghcr.io/example/${name}:latest`, State: state, Status: status, Labels: labels });
 
 export default {
+  'GET /api/endpoints/:env/docker/info': () => ({ ID: 'DEMO:PORTAINER:ENGINE', Name: 'docker-01' }),
   'GET /api/endpoints/:env/docker/containers/json': ({ scenario }) => [
     ...plain.map((n) => container(n)),
     scenario === 'issues' ? container('music-assistant', 'exited', 'Exited (1) 1 hour ago') : container('music-assistant'),

@@ -16,8 +16,11 @@ A widget adds live data to a service: tile stats, panels in the vitals card and 
 | [`opnsense`](#opnsense) | OPNsense | API key + secret | ✅ scoped privileges |
 | [`openmediavault`](#openmediavault) | OpenMediaVault | User + password | ❌ admin required |
 | [`adguard`](#adguard-home) | AdGuard Home | User + password | ❌ |
+| [`pihole`](#pi-hole) | Pi-hole | App password (v6), API token (v5) | ❌ |
 | [`portainer`](#portainer) | Portainer | API key | ✅ Business Edition only |
+| [`docker`](#docker) | Docker Engine | none (socket proxy) | ✅ the proxy's allowlist |
 | [`fritzbox`](#fritzbox) | FRITZ!Box | none (UPnP) | n/a |
+| [`customapi`](#custom-api) | any JSON API | headers, Basic auth or none | depends on the API |
 
 ---
 
@@ -172,6 +175,30 @@ widget:
 
 ---
 
+## Pi-hole
+
+Provides the **DNS** part of the Network panel (queries and block rate over 24 hours) when it is the first DNS widget, or when `network.dns` names it. With AdGuard Home and Pi-hole both configured, each tile shows its own numbers.
+
+```yaml
+widget:
+  type: pihole
+  url: https://pihole.home.arpa
+  key: ${PIHOLE_APP_PASSWORD}   # v6: app password; v5: API token
+  # version: 5                  # Pi-hole v5 (default: 6)
+```
+
+**Account.** Pi-hole has no read-only role.
+- **v6:** create an **app password** under *Settings → Web interface / API → Advanced settings → Configure app password*, so the dashboard doesn't use your login password. The dashboard logs in once and reuses that session until it expires, because Pi-hole limits the number of concurrent sessions. Without a password set on Pi-hole, leave `key` out.
+- **v5:** the API token from *Settings → API / Web interface → Show API token*.
+
+**Alerts**
+
+| Severity | When |
+|---|---|
+| warning | Blocking is disabled. |
+
+---
+
 ## Portainer
 
 Provides **container counts**, alerts for failed and unhealthy containers, and the container labels used for [label discovery](configuration.md#services-from-container-labels).
@@ -200,6 +227,24 @@ Containers that exited with code 0 under restart policy `no` or `on-failure` cou
 
 ---
 
+## Docker
+
+The same as [Portainer](#portainer) (container counts, alerts, [label discovery](configuration.md#services-from-container-labels)), straight from a Docker host's Engine API without Portainer. Use one `docker` widget per host.
+
+```yaml
+widget:
+  type: docker
+  url: http://socket-proxy:2375   # a docker-socket-proxy, see Deployment
+```
+
+**Why a socket proxy.** Mounting `/var/run/docker.sock` into a container gives it root on the host, even read-only: the API can start a privileged container. So the widget only takes an `http(s)://` URL. A `unix://` URL or a socket path is reported as a config problem. Put [tecnativa/docker-socket-proxy](https://github.com/Tecnativa/docker-socket-proxy) in front of the socket, allow only `CONTAINERS` and `INFO`, and keep it on an internal network. See [Deployment → Docker socket proxy](deployment.md#docker-socket-proxy).
+
+**Counting.** The *containers up* figure adds up all Docker hosts. A host that both Portainer and a `docker` widget see (same engine ID from `/info`) is counted once, and a label-discovered service appears once.
+
+**Alerts:** as for [Portainer](#portainer).
+
+---
+
 ## FRITZ!Box
 
 Provides internet status and line speed on the tile. It also provides **WAN traffic** when no OPNsense widget is configured, or when `network.service` selects it.
@@ -219,6 +264,60 @@ The widget talks TR-064 to port **49000**, or **49443** if `url` is `https://`, 
 | Severity | When |
 |---|---|
 | critical | The internet connection isn't `Connected`. |
+
+---
+
+## Custom API
+
+Shows values from any HTTP endpoint that answers JSON, as tile stats, with optional thresholds that raise alerts. The fields are [gethomepage's `customapi`](https://gethomepage.dev/widgets/services/customapi/), so existing blocks work as they are.
+
+```yaml
+widget:
+  type: customapi
+  url: https://media.home.arpa/api/status
+  # method: GET                      # or POST
+  # headers: { X-Api-Key: "${MEDIA_KEY}" }
+  # requestBody: { query: status }   # an object is sent as JSON
+  # username: dashboard              # Basic auth
+  # password: ${MEDIA_PASSWORD}
+  # refreshInterval: 300000          # ms; at least intervals.widgets
+  mappings:
+    - field: sessions.active         # dot path; list items by index: streams.0.user
+      label: sessions
+      format: number
+    - field: { library: items }      # gethomepage's nested form works too
+      label: items
+      format: number
+    - field: healthy
+      label: media health
+      remap: [{ value: true, to: OK }, { value: false, to: Degraded }]
+      crit: { below: 1 }             # ours: alert when the value crosses a threshold
+```
+
+**Mapping keys**
+
+| Key | Meaning |
+|---|---|
+| `field` | Where the value is: a dot path (`a.b.0.c`) or the nested form `{ a: { b: c } }`. |
+| `label` | The stat's label. Default: the last key of `field`. A threshold alert starts with it ("media health is Degraded"), so for a mapping with thresholds, pick a label that says what it belongs to. |
+| `format` | `text` (default), `number`, `float`, `percent`, `bytes`, `bitrate` (bits/s), `duration` (seconds), `date`, `relativeDate`, `size` (length of a list or object). |
+| `prefix`, `suffix` | Text before and after the value. |
+| `scale` | Multiply numbers, for example `100` or `"1/1024"`. |
+| `remap` | Replace values: `[{ value: 1, to: up }, { any: true, to: down }]`. The first match wins. |
+| `warn`, `crit` | Thresholds: `{ above: n }`, `{ below: n }`, `{ equals: v }` or `{ not: v }`. They are compared with the value after `scale` and before `remap`. A boolean counts as 0 or 1. |
+
+The tile shows the stats in mapping order; the first mapping is the tile's line. `display` is accepted and ignored. A widget with thresholds only raises alerts: the service's status (Up, Down) stays its reachability check.
+
+**Account.** Whatever the API needs. Prefer a read-only token in `headers`, passed as a secret.
+
+**Alerts**
+
+| Severity | When |
+|---|---|
+| critical / warning | A mapping crosses its `crit` / `warn` threshold: "Media health is Degraded", with the threshold in the detail. |
+| warning | A mapping's `field` isn't in the response. The stat shows `—`. |
+
+If the response isn't JSON (a login page, for example), the tile shows *Stats unavailable · Response is not JSON*, and the start of the response goes to the container log.
 
 ---
 
