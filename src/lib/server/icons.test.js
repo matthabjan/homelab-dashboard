@@ -11,7 +11,8 @@ const FILES = {
   [`${SH}/index.json`]: [
     { Reference: 'traefik', SVG: 'Yes', Light: 'Yes' },
     { Reference: 'lldap', SVG: 'Yes', Light: 'Yes' },
-    { Reference: 'ddns-updater', SVG: 'No', Light: 'No' }
+    { Reference: 'ddns-updater', SVG: 'No', Light: 'No' },
+    { Reference: 'music-assistant', SVG: 'Yes', Light: 'No' }
   ],
   [`${DI}/metadata.json`]: {
     traefik: { base: 'svg' },
@@ -40,9 +41,18 @@ function finder(files = FILES) {
 }
 
 test('candidates: service name, then image repo with and without a -server suffix', () => {
-  assert.deepEqual(iconCandidates("What's Up Docker", 'ghcr.io/immich-app/immich-server:v2@sha256:ab'), ['whats-up-docker', 'immich-server', 'immich']);
+  assert.deepEqual(iconCandidates("What's Up Docker", 'ghcr.io/immich-app/immich-server:v2@sha256:ab'), ['whats-up-docker', 'immich-server', 'immich', 'whats-up', 'whats']);
   assert.deepEqual(iconCandidates('Jellyfin', 'lscr.io/linuxserver/jellyfin:latest'), ['jellyfin']);
   assert.deepEqual(iconCandidates('Media', 'sha256:0123'), ['media']);
+});
+
+test('candidates: then the widget type, then the leading words of the name', () => {
+  assert.deepEqual(iconCandidates('Proxmox VE', null, 'proxmox'), ['proxmox-ve', 'proxmox']);
+  assert.deepEqual(iconCandidates('Proxmox PBS', null, 'proxmoxbackupserver'), ['proxmox-pbs', 'proxmox-backup-server', 'proxmox']);
+  assert.deepEqual(iconCandidates('OPNsense Firewall', null, 'opnsense'), ['opnsense-firewall', 'opnsense']);
+  assert.deepEqual(iconCandidates('TP-Link Deco X50'), ['tp-link-deco-x50', 'tp-link-deco', 'tp-link']);
+  assert.deepEqual(iconCandidates('MusicAssistant'), ['musicassistant', 'music-assistant', 'music']);
+  assert.deepEqual(iconCandidates('Stats', null, 'customapi'), ['stats']);
 });
 
 test('luminance: brightest paint wins, unpainted is black', () => {
@@ -65,6 +75,13 @@ test('dashboard-icons: the variant that is actually light, whatever it is called
   assert.deepEqual(await icons.find(['vaultwarden']), { icon: `${DI}/svg/vaultwarden.svg`, iconDark: `${DI}/svg/vaultwarden-light.svg` });
   assert.deepEqual(await icons.find(['media', 'whats-up-docker']), { icon: `${DI}/png/whats-up-docker.png`, iconDark: null });
   assert.equal(await icons.find(['nothing']), null);
+});
+
+test('names match with or without hyphens', async () => {
+  const { icons } = finder();
+  await icons.refresh();
+  assert.equal((await icons.find(['musicassistant']))?.icon, `${SH}/svg/music-assistant.svg`);
+  assert.equal((await icons.find(['whatsupdocker']))?.icon, `${DI}/png/whats-up-docker.png`);
 });
 
 test('indexes are fetched once a day; an unreachable CDN means no automatic icons, retried later', async () => {

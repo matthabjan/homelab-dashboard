@@ -260,13 +260,13 @@ export class Engine extends EventEmitter {
     this.findIcons().catch((e) => console.error('[icons]', e));
   }
 
-  /** Look up icons for services without `icon` (by name, then container image); publishes when they changed. */
+  /** Look up icons for services without `icon` (by name, container image, widget type); publishes when they changed. */
   async findIcons() {
     await this.icons.refresh();
     const found = new Map();
     for (const s of this.cfg.services) {
       if (s.icon) continue;
-      const f = await this.icons.find(iconCandidates(s.name, s.image));
+      const f = await this.icons.find(iconCandidates(s.name, s.image, s.widget?.type));
       if (f) found.set(s.id, f);
     }
     if (JSON.stringify([...found]) === JSON.stringify([...this.autoIcons])) return;

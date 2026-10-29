@@ -1,5 +1,5 @@
-// Automatic icons for services without `icon`: the service name, then the container image, is looked up in the
-// selfh.st and dashboard-icons indexes (refreshed daily, kept in kv). The coloured icon is used in both themes;
+// Automatic icons for services without `icon`: the service name, the container image, the widget type, then the
+// name's leading words are looked up in the selfh.st and dashboard-icons indexes (refreshed daily, kept in kv). The coloured icon is used in both themes;
 // when it is nearly black, a light variant of it becomes the dark-theme icon.
 // Variant names can't be trusted for that: in dashboard-icons `lldap-dark` is the light one, `proxmox-light` too.
 import { request } from './http.js';
@@ -11,16 +11,23 @@ const DI = 'https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons';
 const DAY = 86_400_000;
 const RETRY = 3600_000;
 
+/** Widget types whose icon has another name. */
+const TYPE_ICONS = { proxmoxbackupserver: 'proxmox-backup-server', adguard: 'adguard-home', pihole: 'pi-hole', customapi: null };
+
 /**
  * Names to look up, best first: the service name, then the image (`ghcr.io/immich-app/immich-server:v2` →
- * `immich-server`, `immich`). The image owner is skipped: `linuxserver` would match linuxserver's logo.
- * @param {string} name @param {string | null} [image]
+ * `immich-server`, `immich`), the widget type, and last the name's leading words (`Proxmox VE` → `proxmox`).
+ * The image owner is skipped: `linuxserver` would match linuxserver's logo.
+ * @param {string} name @param {string | null} [image] @param {string | null} [type]
  */
-export function iconCandidates(name, image) {
-  const out = [slug(name.replace(/['’]/g, ''))];
+export function iconCandidates(name, image, type) {
+  const words = name.replace(/['’]/g, '').replace(/([a-z])([A-Z])/g, '$1 $2').split(/\s+/).filter(Boolean);
+  const out = [slug(name.replace(/['’]/g, '')), slug(words.join(' '))];
   const repo = image && !image.startsWith('sha256:') ? image.split('@')[0].split('/').at(-1)?.split(':')[0] : null;
   if (repo) out.push(slug(repo), slug(repo).replace(/-(server|app|web|ce|ee|oss)$/, ''));
-  return [...new Set(out.filter(Boolean))];
+  if (type) out.push(type in TYPE_ICONS ? TYPE_ICONS[/** @type {keyof TYPE_ICONS} */ (type)] : type);
+  for (let n = words.length - 1; n > 0; n--) out.push(slug(words.slice(0, n).join(' ')));
+  return [...new Set(out.filter((c) => !!c))];
 }
 
 /** Brightest colour an SVG paints with, 0–1 (relative luminance). Unpainted shapes are black. */
@@ -91,7 +98,23 @@ export function createIconFinder({ kv, transport = request, now = Date.now }) {
     }
   }
 
+  /** @type {{ for: object | null, map: Map<string, string> }} name without hyphens → name (`musicassistant`) */
+  const loose = { for: null, map: new Map() };
+  const compact = (/** @type {string} */ n) => n.replace(/-/g, '');
+
+  /** Exact name, else the same name spelled with or without hyphens. */
+  function resolve(name) {
+    if (!index || index.sh[name] || index.di[name]) return name;
+    if (loose.for !== index) {
+      loose.for = index;
+      loose.map = new Map();
+      for (const n of [...Object.keys(index.sh), ...Object.keys(index.di)]) if (!loose.map.has(compact(n))) loose.map.set(compact(n), n);
+    }
+    return loose.map.get(compact(name)) ?? name;
+  }
+
   async function lookup(name) {
+    name = resolve(name);
     const sh = index?.sh[name];
     if (sh) {
       const [ext, light] = sh;
