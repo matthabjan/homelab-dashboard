@@ -249,8 +249,8 @@ A local file in `config/icons/` with a matching name takes precedence over the C
 
 A service without `icon` (in `services.yaml` or as the `dashboard.icon` label) gets one from the [selfh.st](https://selfh.st/icons/) or [dashboard-icons](https://github.com/homarr-labs/dashboard-icons) collection:
 
-- The server looks up the service name (`AdGuard Home` → `adguard-home`), then, for a [labelled container](#services-from-container-labels), its image (`ghcr.io/immich-app/immich-server` → `immich-server`, then `immich`). selfh.st is checked before dashboard-icons.
-- The coloured icon is used in both themes. If it is nearly black (GitHub, LLDAP), its light variant is used in dark mode. An `iconDark` you set yourself wins.
+- The server looks up, in this order: the service name (`AdGuard Home` → `adguard-home`); for a [labelled container](#services-from-container-labels), its image (`ghcr.io/immich-app/immich-server` → `immich-server`, then `immich`); the widget type (`proxmoxbackupserver` → `proxmox-backup-server`); and last the name's leading words (`OPNsense Firewall` → `opnsense`). Names match with or without hyphens (`MusicAssistant` finds `music-assistant`). selfh.st is checked before dashboard-icons.
+- If the icon has a light variant, that is used in dark mode: selfh.st's `-light` icon, or dashboard-icons' brightest variant (measured, since its names aren't reliable). An `iconDark` you set yourself wins.
 - Both collections' indexes are downloaded from jsDelivr once a day and kept in the database. If the server can't reach jsDelivr, services without `icon` show a monogram, and it tries again an hour later.
 - If the match is wrong, set `icon`: a file in `config/icons/` or any of the forms above.
 
@@ -297,7 +297,7 @@ labels:
 - `dashboard.weight` sets the order within the group (lowest first, then by name).
 - A labelled service joins the `services.yaml` group with the same name, or creates a new group at the end. If `services.yaml` already defines a service with the same group and name, that one is used and the label is ignored.
 - A labelled service **without** `siteMonitor` uses the container's state as its health: running, unhealthy, restarting or exited. Each Portainer poll (`intervals.widgets`) also records that state in the service's history, so it gets an uptime figure and a 24-hour strip like a checked service; running counts as up, anything else (including unhealthy) as down. A container that isn't running raises a critical *is down* alert and logs *went down* / *recovered* in Recent activity, like a failed check; unhealthy raises a warning. It has no latency, and while Portainer is unreachable nothing is recorded.
-- Without `dashboard.icon`, an icon is [picked automatically](#automatic-icons) from the name, then the image.
+- Without `dashboard.icon`, an icon is [picked automatically](#automatic-icons) from the name and the image.
 - Label values are **used literally**. `${…}` placeholders are not filled in, so a container image can't extract your secrets. Define services whose widgets need credentials in `services.yaml`.
 - Add `dashboard.ignore=true` to a container to hide it from discovery and from the container counts.
 
