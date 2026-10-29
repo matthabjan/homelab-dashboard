@@ -194,11 +194,12 @@
       <div class="right">
         <span class="live" class:warn={stale || live === 'reconnecting'} role="status">
           <span class="pulse"></span>
-          <!-- phones: one short word, so the title keeps its room; the banner below says the rest -->
-          {#if live === 'reconnecting'}<span class="only-desktop">Reconnecting…</span><span class="only-phone">Retrying</span>{:else if stale}<span class="only-desktop">Data {ago(snap.generatedAt)} old</span><span class="only-phone">Stale</span>{:else}Live{/if}
+          <!-- phones: just the dot while live, one short word when not, so the title keeps its room; the banner below says the rest -->
+          {#if live === 'reconnecting'}<span class="only-desktop">Reconnecting…</span><span class="only-phone">Retrying</span>{:else if stale}<span class="only-desktop">Data {ago(snap.generatedAt)} old</span><span class="only-phone">Stale</span>{:else}<span class="live-word">Live</span>{/if}
           {#if snap.demo}<span class="demo">demo</span>{/if}
         </span>
-        <a class="cfg" href="/config" aria-label={configLabel} title={configLabel}>
+        <!-- phones show it only when the config has problems; otherwise the footer, the palette and config alerts lead there -->
+        <a class="cfg" class:quiet={!snap.configProblems} href="/config" aria-label={configLabel} title={configLabel}>
           {@render sliders()}
           {#if snap.configProblems}<span class="cfg-badge mono" aria-hidden="true">{snap.configProblems}</span>{/if}
         </a>
@@ -543,12 +544,16 @@
     .page { gap: 22px; padding-bottom: calc(110px + env(safe-area-inset-bottom)); }
     .search, .deep, .live :global(.demo) { display: none; }
     .cfg { width: 44px; height: 44px; border-radius: 14px; background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+    .cfg.quiet { display: none; }
 
-    /* header: logo, date over title, Live pill, theme button */
+    /* header: logo, date over title, live dot, theme button; a long title wraps to a second line instead of being cut */
     .top { flex-wrap: nowrap; gap: 12px; }
     .brand { flex: 1 1 auto; min-width: 0; }
     .right { flex: none; gap: 8px; }
     .live { min-height: 28px; padding: 0 10px; border-radius: 14px; background: var(--surface); box-shadow: var(--shadow); gap: 7px; }
+    .live:not(.warn) { min-width: 28px; padding: 0; justify-content: center; }
+    .live-word { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+    .bname { font-size: 24px; line-height: 1.12; white-space: normal; text-wrap: balance; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
     .pulse { width: 7px; height: 7px; box-shadow: 0 0 0 3px var(--ok-soft); }
     .live.warn .pulse { box-shadow: 0 0 0 3px var(--warn-soft); }
 
