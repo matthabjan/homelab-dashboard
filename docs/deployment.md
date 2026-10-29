@@ -109,7 +109,7 @@ Then:
 
 1. **Stack variables.** Under **Environment variables**, add every variable from [.env.example](../.env.example). For integrations you don't use, add the name with an empty value: every secret in the stack needs its variable.
 2. **Login.** Generate `DASHBOARD_AUTH_USERS` with `htpasswd -nbB admin 'your-password'` (from `apache2-utils`). In Portainer's variable editor, write every `$` in the hash as `$$`.
-3. **Config.** On the Docker host, put your config in `/opt/docker/dashboard/config`, starting from [config.example/](../config.example). The container user (UID 1000) needs read access.
+3. **Config.** On the Docker host, put your config in `/opt/docker/dashboard/config`, starting from [config.starter/](../config.starter) (or [config.example/](../config.example) for every widget). The container user (UID 1000) needs read access.
 4. **DNS.** In your local DNS, point `DASHBOARD_HOST` at Traefik (for example with an AdGuard or Pi-hole DNS rewrite). It doesn't need a public DNS record. Traefik requests a `*.<TLS_DOMAIN>` wildcard certificate, so public Certificate Transparency logs show only the wildcard, not the dashboard's name.
 5. **Deploy**, then open `https://<DASHBOARD_HOST>`. If a widget shows *Stats unavailable*, check the container log.
 

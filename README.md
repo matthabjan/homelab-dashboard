@@ -4,20 +4,21 @@
 [![Docker Hub](https://img.shields.io/docker/v/matthabjan/homelab-dashboard?sort=semver&label=docker%20hub)](https://hub.docker.com/r/matthabjan/homelab-dashboard)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-A self-hosted launcher and status page for a Proxmox-based homelab. It shows at a glance whether everything is OK and gets you to your services quickly. For detailed metrics, link out to a tool such as [Pulse](https://github.com/rcourtman/Pulse).
+A self-hosted launcher and status page for a homelab on **any Docker host**. It shows at a glance whether everything is OK and gets you to your services quickly. Proxmox VE, Proxmox Backup Server, OPNsense, OpenMediaVault, AdGuard Home or Pi-hole, Portainer or Docker, and FRITZ!Box add more detail when you have them. For detailed metrics, link out to a tool such as [Pulse](https://github.com/rcourtman/Pulse).
 
 It is made for your **LAN or VPN** (WireGuard, Tailscale, …): it has no login of its own and is not meant to be reachable from the internet.
 
 ![Dashboard in dark mode: the overall status, the problems that need attention, host vitals and the most used services](docs/screenshots/desktop-dark.png)
 
 - **Status first.** One line at the top gives the overall state ("Everything is running." or the most important problem), followed by a list of problems ordered by severity. When nothing is wrong, that list shows recent activity instead.
-- **Vitals.** One card with four tabs: **System** (CPU, RAM, main disk and temperature of the Proxmox node, or without Proxmox of the machine the dashboard runs on, each with a 24-hour trend), **Storage** (how full the storage across PVE, PBS and the NAS is), **Drives** (SMART health of the physical disks) and **Network** (WAN and LAN traffic, DNS statistics). A tab whose panel has a warning is marked, so nothing hides behind a closed tab.
+- **Vitals.** One card with four tabs: **System** (CPU, RAM, main disk and temperature of the Proxmox node or the machine the dashboard runs on, each with a 24-hour trend), **Storage** (how full the storage across PVE, PBS and the NAS is), **Drives** (SMART health of the physical disks) and **Network** (WAN and LAN traffic, DNS statistics). A tab whose panel has a warning is marked, so nothing hides behind a closed tab.
 - **Launcher.** The services you open most, picked automatically, then every service in its group. Press `/` or `⌘K` / `Ctrl+K` to open a command palette.
 - **Checks.** Every service is checked every 30 s, which gives uptime (24 h and 7 d), p95 latency and a 24-hour health strip on each service tile. The dashboard also tracks TLS certificate expiry, backup age per guest, failed or unhealthy containers, SMART status and pending Proxmox updates.
 - **Live and installable.** Updates are pushed to the browser as they happen, without reloading, and a service whose status changes is briefly highlighted. If updates stop (server unreachable, device offline), the page says so and greys out instead of showing old data as current. You can install it as an app (PWA) on phones and desktops, where the icon shows the number of open problems, and it has light and dark themes.
+- **Works without Proxmox.** On a plain Docker host you still get the machine's own vitals, your containers (through a read-only socket proxy), values from any JSON API with thresholds that raise alerts, `tcp://` checks for services without a web page, and heartbeats: backup and cron jobs report when they ran, and a missed or failed run becomes an alert.
 - **Works with gethomepage configs.** [gethomepage](https://gethomepage.dev)'s `services.yaml`, `bookmarks.yaml`, and icon names work as they are; its `homepage.*` container labels work once renamed to `dashboard.*`.
 
-**Integrations:** Proxmox VE · Proxmox Backup Server · OPNsense · OpenMediaVault · AdGuard Home · Pi-hole · Portainer · Docker · FRITZ!Box · any JSON API
+**Integrations:** Proxmox VE · Proxmox Backup Server · OPNsense · OpenMediaVault · AdGuard Home · Pi-hole · Portainer · Docker · FRITZ!Box · any JSON API (`customapi`)
 
 **Not included:** notifications (it shows problems but doesn't send them; pair it with a monitor that alerts, such as Uptime Kuma, for that), user accounts, and editing the configuration in the browser. A read-only **Config & status** page shows what loaded, which widgets work and any missing secrets, without ever showing their values.
 
@@ -39,7 +40,7 @@ docker run --rm -p 3000:3000 -e DEMO=1 matthabjan/homelab-dashboard:latest
 
 Open <http://localhost:3000>. Add `-e DEMO_SCENARIO=calm` to see a homelab where everything is healthy.
 
-To run it with your own services, copy the example config out of the image, edit `config/services.yaml`, and start it with Docker Compose:
+To run it with your own services, copy the starter config out of the image, edit `config/services.yaml`, and start it with Docker Compose. The starter works as it is: the host's vitals, a self-check and two links, plus commented examples for Docker, Pi-hole, a JSON API, a `tcp://` check and a heartbeat. The full demo config is in [config.example/](config.example) if you want to see every widget.
 
 ```bash
 mkdir -p config && docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/config:/seed" matthabjan/homelab-dashboard:latest cp -r /config/. /seed/
@@ -66,7 +67,7 @@ volumes:
 docker compose up -d
 ```
 
-Settings, services, bookmarks and secrets are described in [Configuration](docs/configuration.md), and each widget's least-privilege account in [Integrations](docs/integrations.md).
+Settings, services, bookmarks and secrets are described in [Configuration](docs/configuration.md), and each widget's least-privilege account in [Integrations](docs/integrations.md). The page **Config & status** (`/config`, linked in the footer) shows what loaded, which widgets work, and any problem in your files.
 
 The app has **no login of its own**. Keep it on your LAN or VPN and never forward a port to it from the internet. To open it beyond localhost, put it behind a reverse proxy that handles TLS and authentication, for example Traefik with an IP allowlist and basic auth. See [Deployment](docs/deployment.md).
 

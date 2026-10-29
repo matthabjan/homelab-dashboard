@@ -38,13 +38,14 @@ Domain terms (service, widget, integration, ctx, transport, fixture, scenario, s
 
 ## Adding or changing an integration
 
-Every type must exist in three places or `integrations.test.js` fails: `INTEGRATIONS` (integrations/index.js), `FIXTURES` (demo/index.js), and `WIDGETS` in the test. Fixtures should cover both scenarios (`issues` triggers the alerts, `calm` is healthy). Also update `config.example/services.yaml` and `docs/integrations.md` (least-privilege account, options, alerts). Match gethomepage widget field names. Alert text is shown to every viewer: never put credentials or upstream bodies in it — throw short messages and attach the body as `err.body` (logged only).
+Every type must exist in three places or `integrations.test.js` fails: `INTEGRATIONS` (integrations/index.js), `FIXTURES` (demo/index.js), and `WIDGETS` in the test. Fixtures should cover both scenarios (`issues` triggers the alerts, `calm` is healthy). Also update `config.example/services.yaml` (and a commented example in `config.starter/services.yaml` if it's useful without Proxmox) and `docs/integrations.md` (least-privilege account, options, alerts). Match gethomepage widget field names. Alert text is shown to every viewer: never put credentials or upstream bodies in it — throw short messages and attach the body as `err.body` (logged only).
 
 ## Conventions
 
 - Plain JS with JSDoc types checked in strict mode (`jsconfig.json`); add shared shapes to `types.d.ts`, use `/** @import … */`. Svelte 5 runes.
 - Runtime dependencies are only `yaml` and `undici`; avoid adding more.
 - CSP is nonce-based (`svelte.config.js`): no inline scripts or `javascript:` URLs. The service worker must never intercept page loads or `/api/*` (basic auth prompts).
+- **Two configs:** `config.example/` is the full demo (`DEMO=1`; in the image at `/app/config.example`, picked via `DEMO_CONFIG_DIR`); `config.starter/` is the image's `/config` and must work with zero edits on any Docker host (CI checks it).
 - **This repo is public.** Examples, fixtures, docs and screenshots use generic names only (`*.home.arpa`, `example.com`, demo mode) — never the maintainer's real hosts, IPs or setup. Local `config/`, `.env`, `compose*.yaml`, `secrets/`, `data/` are gitignored.
 - Docs: `README.md` (also synced to Docker Hub on release, so keep it standalone), `docs/configuration.md`, `docs/deployment.md`, `docs/integrations.md`, `CONTRIBUTING.md`. Update them when behavior or config changes.
 

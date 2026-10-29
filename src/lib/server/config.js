@@ -9,7 +9,10 @@ import { dockerUrlOk } from './integrations/docker.js';
 /** @import { Config, ConfigProblem, Discovered, Heartbeat, Service, Settings } from '$lib/types' */
 
 export const DEMO = !!process.env.DEMO && process.env.DEMO !== '0';
-export const CONFIG_DIR = path.resolve(process.env.CONFIG_DIR || 'config');
+// The image ships a starter config in /config and the full demo config in DEMO_CONFIG_DIR (/app/config.example):
+// `docker run -e DEMO=1` shows the demo, unless CONFIG_DIR points elsewhere.
+const configDir = path.resolve(process.env.CONFIG_DIR || 'config');
+export const CONFIG_DIR = DEMO && process.env.DEMO_CONFIG_DIR && configDir === '/config' ? path.resolve(process.env.DEMO_CONFIG_DIR) : configDir;
 export const DATA_DIR = path.resolve(process.env.DATA_DIR || 'data');
 const SECRETS_DIR = process.env.SECRETS_DIR || '/run/secrets';
 

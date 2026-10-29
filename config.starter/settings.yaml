@@ -1,0 +1,8 @@
+# Starter config: works as it is on any Docker host. Every setting: docs/configuration.md
+# https://github.com/matthabjan/homelab-dashboard/blob/main/docs/configuration.md
+title: Homelab
+
+host:
+  source: auto     # the System panel: a Proxmox node once you add a proxmox widget, until then this machine
+  # name: docker-01  # shown as Node (inside a container the hostname is just its id)
+  # disk: /          # whose filesystem the Disk gauge shows; mount another one read-only to show it

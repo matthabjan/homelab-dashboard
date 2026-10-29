@@ -1,6 +1,6 @@
 # Configuration reference
 
-All configuration lives in one folder: `CONFIG_DIR`, which is `/config` in the container and `./config` when you run from a checkout. Start from [config.example/](../config.example).
+All configuration lives in one folder: `CONFIG_DIR`, which is `/config` in the container and `./config` when you run from a checkout. Start from [config.starter/](../config.starter) (what the image ships), or see every widget in [config.example/](../config.example) (the demo).
 
 ```
 config/
@@ -208,7 +208,7 @@ restic backup /data > /tmp/restic.log 2>&1 \
   || curl -fsS -m 10 -H 'Content-Type: application/octet-stream' --data-binary @/tmp/restic.log "https://dash.home.arpa/api/heartbeat/backups-nightly-restic/fail?token=$HB"
 ```
 
-A body sent with `/fail` is written to the container log only; the page shows when the failure was reported, never what the job said. A token in the URL can end up in proxy access logs, so prefer the `Authorization` header where you can.
+A body sent with `/fail` is written to the container log only; the page shows when the failure was reported, never what the job said. Send it as `Content-Type: application/octet-stream` (as above): a form content type, which `curl -d` uses, is refused with 403 by the cross-site request check. A token in the URL can end up in proxy access logs, so prefer the `Authorization` header where you can.
 
 The last success and failure are stored in the database, so a restart doesn't make jobs overdue. A new heartbeat waits for its first call until `every + grace` after the dashboard first saw it, then counts as missed. A service with a `heartbeat` ignores `siteMonitor`: the heartbeat is its check.
 
@@ -319,6 +319,7 @@ labels:
 | `NODE_EXTRA_CA_CERTS` | none | PEM file of extra CAs to trust for widget APIs, such as your own CA. |
 | `DEMO` | none | `1` uses sample data instead of real APIs. |
 | `DEMO_SCENARIO` | `issues` | `issues` (several problems) or `calm` (everything healthy). |
+| `DEMO_CONFIG_DIR` | `/app/config.example` | The config `DEMO=1` uses while `CONFIG_DIR` is the image default `/config`, so `docker run -e DEMO=1` shows the full demo instead of the starter. |
 | `HWMON_DIR` | `/sys/class/hwmon` | Where temperatures are read from. |
 | `PROC_DIR` | `/proc` | Where the local host's CPU, memory and uptime are read from. |
 | `HOST_NAME` | none | Name of the local host, shown as *Node* when `host.name` isn't set. |

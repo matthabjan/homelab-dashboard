@@ -47,6 +47,7 @@ export class Engine extends EventEmitter {
   /** @type {Snapshot | null} */
   snapshot = null;
   started = false;
+  probed = false; // the first probe round, 5 s after start
 
   start() {
     if (this.started) return;
@@ -83,7 +84,10 @@ export class Engine extends EventEmitter {
     if (DEMO) seedHistory(this.cfg.services);
     const iv = this.cfg.settings.intervals;
     const every = (fn, s) => { fn(); this.timers.push(setInterval(fn, s * 1000)); };
-    every(() => this.runProbes().catch((e) => console.error('[probe]', e)), iv.probe);
+    const probes = () => this.runProbes().catch((e) => console.error('[probe]', e));
+    // At process start the server isn't listening yet: a check of the dashboard itself would fail once on every start.
+    if (this.probed) every(probes, iv.probe);
+    else this.timers.push(setTimeout(() => { this.probed = true; every(probes, iv.probe); }, 5000));
     every(() => this.runWidgets().catch((e) => console.error('[widgets]', e)), iv.widgets);
     every(() => this.runCerts().catch((e) => console.error('[cert]', e)), iv.cert);
     every(() => this.findIcons().catch((e) => console.error('[icons]', e)), 3600);
