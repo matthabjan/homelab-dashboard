@@ -309,8 +309,9 @@ export function loadConfig() {
 }
 
 // ---------- icons ----------
-const CDN_DASHBOARD = 'https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons';
-const CDN_SELFHST = 'https://cdn.jsdelivr.net/gh/selfhst/icons';
+// Pinned to the branch: without a version jsDelivr may serve an old release or a copy cached for days.
+export const CDN_DASHBOARD = 'https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons@main';
+export const CDN_SELFHST = 'https://cdn.jsdelivr.net/gh/selfhst/icons@main';
 
 function localIcon(name) {
   const dir = path.join(CONFIG_DIR, 'icons');

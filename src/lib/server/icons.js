@@ -3,11 +3,9 @@
 // the icon has a light variant, that becomes the dark-theme icon. selfh.st marks it in its index; for dashboard-icons
 // the brightest variant is taken, as names can't be trusted: there `lldap-dark` is the light one.
 import { request } from './http.js';
-import { slug } from './config.js';
+import { CDN_DASHBOARD as DI, CDN_SELFHST as SH, slug } from './config.js';
 /** @import { Kv, Transport } from '$lib/types' */
 
-const SH = 'https://cdn.jsdelivr.net/gh/selfhst/icons';
-const DI = 'https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons';
 const DAY = 86_400_000;
 const RETRY = 3600_000;
 
