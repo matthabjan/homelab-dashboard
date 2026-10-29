@@ -250,7 +250,7 @@ A local file in `config/icons/` with a matching name takes precedence over the C
 A service without `icon` (in `services.yaml` or as the `dashboard.icon` label) gets one from the [selfh.st](https://selfh.st/icons/) or [dashboard-icons](https://github.com/homarr-labs/dashboard-icons) collection:
 
 - The server looks up, in this order: the service name (`AdGuard Home` → `adguard-home`); for a [labelled container](#services-from-container-labels), its image (`ghcr.io/immich-app/immich-server` → `immich-server`, then `immich`); the widget type (`proxmoxbackupserver` → `proxmox-backup-server`); and last the name's leading words (`OPNsense Firewall` → `opnsense`). Names match with or without hyphens (`MusicAssistant` finds `music-assistant`). selfh.st is checked before dashboard-icons.
-- If the icon has a light variant, that is used in dark mode: selfh.st's `-light` icon, or dashboard-icons' brightest variant (measured, since its names aren't reliable). An `iconDark` you set yourself wins.
+- The icon itself is used in both themes. Only where it would vanish, a variant takes its place: a nearly black icon (GitHub, LLDAP) gets its light variant in dark mode, a nearly white one its dark variant in light mode. Variants are picked by their colours, since dashboard-icons' variant names aren't reliable. An `iconDark` you set yourself wins.
 - Both collections' indexes are downloaded from jsDelivr once a day and kept in the database. If the server can't reach jsDelivr, services without `icon` show a monogram, and it tries again an hour later.
 - If the match is wrong, set `icon`: a file in `config/icons/` or any of the forms above.
 

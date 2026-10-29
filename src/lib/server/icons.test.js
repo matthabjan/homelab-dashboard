@@ -9,8 +9,9 @@ const DI = 'https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons@main';
 /** @type {Record<string, any>} */
 const FILES = {
   [`${SH}/index.json`]: [
-    { Reference: 'traefik', SVG: 'Yes', Light: 'Yes' },
-    { Reference: 'lldap', SVG: 'Yes', Light: 'Yes' },
+    { Reference: 'traefik', SVG: 'Yes', Light: 'Yes', Dark: 'Yes' },
+    { Reference: 'lldap', SVG: 'Yes', Light: 'Yes', Dark: 'No' },
+    { Reference: 'umami', SVG: 'Yes', Light: 'No', Dark: 'Yes' },
     { Reference: 'ddns-updater', SVG: 'No', Light: 'No' },
     { Reference: 'ghost', SVG: 'No', Light: 'Yes' },
     { Reference: 'music-assistant', SVG: 'Yes', Light: 'No' }
@@ -20,8 +21,16 @@ const FILES = {
     'whats-up-docker': { base: 'png' },
     vaultwarden: { base: 'svg', colors: { light: 'vaultwarden-light', dark: 'vaultwarden' } },
     proxmox: { base: 'svg', colors: { dark: 'proxmox', light: 'proxmox-light' } },
-    gitea: { base: 'svg', colors: { dark: 'gitea-dark' } }
+    gitea: { base: 'svg', colors: { dark: 'gitea-dark' } },
+    nas: { base: 'svg', colors: { light: 'nas-light', dark: 'nas' } }
   },
+  [`${SH}/svg/traefik.svg`]: '<svg><path style="fill:#24a1c1"/></svg>',
+  [`${SH}/svg/lldap.svg`]: '<svg><path style="fill:#212529"/></svg>',
+  [`${SH}/svg/lldap-light.svg`]: '<svg><path style="fill:#fff"/></svg>',
+  [`${SH}/svg/umami.svg`]: '<svg><path fill="white"/></svg>',
+  [`${SH}/svg/umami-dark.svg`]: '<svg><path fill="#111"/></svg>',
+  [`${DI}/svg/nas.svg`]: '<svg><path fill="#f5f5f5"/></svg>',
+  [`${DI}/svg/nas-light.svg`]: '<svg><path fill="#222"/></svg>',
   [`${DI}/svg/vaultwarden.svg`]: '<svg><path d="M0"/></svg>',
   [`${DI}/svg/vaultwarden-light.svg`]: '<svg><path fill="#fafafa"/></svg>',
   [`${DI}/svg/proxmox.svg`]: '<svg><path fill="#e57000"/><path fill="#000"/></svg>',
@@ -60,26 +69,29 @@ test('candidates: then the widget type, then the leading words of the name', () 
   assert.deepEqual(iconCandidates('Stats', null, 'customapi'), ['stats']);
 });
 
-test('luminance: brightest paint wins, unpainted is black', () => {
-  assert.equal(svgLuminance('<svg><path d="M0"/></svg>'), 0);
-  assert.ok(svgLuminance('<path fill="#212529"/><path fill="#fff"/>') > 0.9);
-  assert.ok(svgLuminance('<stop stop-color="#e57000"/>') > 0.2);
+test('luminance: darkest and brightest paint, unpainted is black', () => {
+  assert.deepEqual(svgLuminance('<svg><path d="M0"/></svg>'), { min: 0, max: 0 });
+  const l = svgLuminance('<path fill="#212529"/><path fill="#fff"/>');
+  assert.ok(l.min < 0.05 && l.max > 0.9);
+  assert.ok(svgLuminance('<stop stop-color="#e57000"/>').max > 0.2);
 });
 
-test('selfh.st first; its light variant, when it has one, is the dark-mode icon', async () => {
-  const { icons, calls } = finder();
+test('selfh.st first; the icon itself in both themes unless it would vanish in one', async () => {
+  const { icons } = finder();
   await icons.refresh();
-  assert.deepEqual(await icons.find(['traefik']), { icon: `${SH}/svg/traefik.svg`, iconDark: `${SH}/svg/traefik-light.svg` });
-  assert.deepEqual(await icons.find(['ghost']), { icon: `${SH}/png/ghost.png`, iconDark: `${SH}/png/ghost-light.png` });
+  assert.deepEqual(await icons.find(['traefik']), { icon: `${SH}/svg/traefik.svg`, iconDark: null });
+  assert.deepEqual(await icons.find(['lldap']), { icon: `${SH}/svg/lldap.svg`, iconDark: `${SH}/svg/lldap-light.svg` });
+  assert.deepEqual(await icons.find(['umami']), { icon: `${SH}/svg/umami-dark.svg`, iconDark: `${SH}/svg/umami.svg` });
+  assert.deepEqual(await icons.find(['ghost']), { icon: `${SH}/png/ghost.png`, iconDark: null });
   assert.deepEqual(await icons.find(['ddns-updater']), { icon: `${SH}/png/ddns-updater.png`, iconDark: null });
-  assert.equal(calls.length, 2); // the index says so, no icon is fetched
 });
 
-test('dashboard-icons: the brightest variant, whatever it is called, if brighter than the icon', async () => {
+test('dashboard-icons: variants judged by colour, whatever they are called', async () => {
   const { icons } = finder();
   await icons.refresh();
   assert.deepEqual(await icons.find(['vaultwarden']), { icon: `${DI}/svg/vaultwarden.svg`, iconDark: `${DI}/svg/vaultwarden-light.svg` });
-  assert.deepEqual(await icons.find(['proxmox']), { icon: `${DI}/svg/proxmox.svg`, iconDark: `${DI}/svg/proxmox-light.svg` });
+  assert.deepEqual(await icons.find(['nas']), { icon: `${DI}/svg/nas-light.svg`, iconDark: `${DI}/svg/nas.svg` });
+  assert.deepEqual(await icons.find(['proxmox']), { icon: `${DI}/svg/proxmox.svg`, iconDark: null });
   assert.deepEqual(await icons.find(['gitea']), { icon: `${DI}/svg/gitea.svg`, iconDark: null });
   assert.deepEqual(await icons.find(['media', 'whats-up-docker']), { icon: `${DI}/png/whats-up-docker.png`, iconDark: null });
   assert.equal(await icons.find(['nothing']), null);

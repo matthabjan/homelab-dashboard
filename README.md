@@ -98,7 +98,7 @@ Pin an exact version in production so that it only updates when you choose to.
 
 ## Tech
 
-SvelteKit 2 / Svelte 5 on Node 24 (Node adapter). History is stored in the built-in `node:sqlite`. The only other runtime dependencies are `yaml` and `undici`. The fonts are self-hosted [Geist](https://vercel.com/font) (SIL Open Font License, see [static/fonts/OFL.txt](static/fonts/OFL.txt)). Service logos are not bundled: they load from [dashboard-icons](https://github.com/homarr-labs/dashboard-icons), [selfh.st icons](https://selfh.st/icons/) or your own files. Services without an icon get one matched by name, with its light variant in dark mode.
+SvelteKit 2 / Svelte 5 on Node 24 (Node adapter). History is stored in the built-in `node:sqlite`. The only other runtime dependencies are `yaml` and `undici`. The fonts are self-hosted [Geist](https://vercel.com/font) (SIL Open Font License, see [static/fonts/OFL.txt](static/fonts/OFL.txt)). Service logos are not bundled: they load from [dashboard-icons](https://github.com/homarr-labs/dashboard-icons), [selfh.st icons](https://selfh.st/icons/) or your own files. Services without an icon get one matched by name, with a light or dark variant where the icon would otherwise vanish.
 
 ## License
 
