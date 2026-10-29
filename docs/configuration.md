@@ -85,7 +85,7 @@ What the local host shows depends on where the dashboard runs:
 | LXC with lxcfs (the Proxmox default) | The **container's** CPU and memory, not the node's. Proxmox users should keep the `proxmox` source. |
 | VM | The VM itself. |
 
-CPU usage is measured between two polls, so the CPU gauge shows `—` for the first minute after a start.
+CPU usage is measured between two polls, so the CPU gauge shows `—` for the first minute after a start. The local host's disk raises a warning (*Disk / is 91% full*) at `thresholds.storageWarnPct`, as a storage row does.
 
 ### `network`: the Network panel
 

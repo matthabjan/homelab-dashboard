@@ -31,7 +31,7 @@
 #           headers: { X-Api-Key: "${MEDIA_KEY}" }
 #           mappings:
 #             - { field: sessions.active, label: sessions, format: number }
-#             - { field: healthy, label: media health, crit: { below: 1 } }
+#             - { field: healthy, label: health, crit: { below: 1 } }
 #
 # - Network:
 #     - Pi-hole:

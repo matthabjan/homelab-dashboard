@@ -7,6 +7,7 @@ A widget adds live data to a service: tile stats, panels in the vitals card and 
 - **Use a dedicated read-only account** wherever the product supports one. Don't reuse an admin login.
 - **Use `https://` URLs.** Over `http://`, credentials cross the network in plain text.
 - **Pass credentials as secrets** (`${NAME}`). See [Configuration → Secrets](configuration.md#secrets-and-variables).
+- A widget's alerts start with the service's name in the attention list ("Pi-hole: Blocking is disabled"), unless they already name it. On the service's own tile they don't.
 - Each widget has 25 s per poll. If a call fails, the tile shows *Stats unavailable* with a short reason, keeps its last stats, and the full error goes to the container log.
 
 | Type | Product | Auth | Read-only possible |
@@ -289,7 +290,7 @@ widget:
       label: items
       format: number
     - field: healthy
-      label: media health
+      label: health
       remap: [{ value: true, to: OK }, { value: false, to: Degraded }]
       crit: { below: 1 }             # ours: alert when the value crosses a threshold
 ```
@@ -299,7 +300,7 @@ widget:
 | Key | Meaning |
 |---|---|
 | `field` | Where the value is: a dot path (`a.b.0.c`) or the nested form `{ a: { b: c } }`. |
-| `label` | The stat's label. Default: the last key of `field`. A threshold alert starts with it ("media health is Degraded"), so for a mapping with thresholds, pick a label that says what it belongs to. |
+| `label` | The stat's label. Default: the last key of `field`. A threshold alert is "{label} is {value}", after the service name. |
 | `format` | `text` (default), `number`, `float`, `percent`, `bytes`, `bitrate` (bits/s), `duration` (seconds), `date`, `relativeDate`, `size` (length of a list or object). |
 | `prefix`, `suffix` | Text before and after the value. |
 | `scale` | Multiply numbers, for example `100` or `"1/1024"`. |
@@ -314,7 +315,7 @@ The tile shows the stats in mapping order; the first mapping is the tile's line.
 
 | Severity | When |
 |---|---|
-| critical / warning | A mapping crosses its `crit` / `warn` threshold: "Media health is Degraded", with the threshold in the detail. |
+| critical / warning | A mapping crosses its `crit` / `warn` threshold: "Media server: Health is Degraded", with the threshold in the detail. |
 | warning | A mapping's `field` isn't in the response. The stat shows `—`. |
 
 If the response isn't JSON (a login page, for example), the tile shows *Stats unavailable · Response is not JSON*, and the start of the response goes to the container log.
