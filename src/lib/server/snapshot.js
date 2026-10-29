@@ -39,7 +39,7 @@ function containerStatus({ state, health, exitCode }) {
 }
 
 /**
- * A drive's row in the Drives view, and what is wrong with it (each problem becomes an alert).
+ * A drive's row in the Drives panel, and what is wrong with it (each problem becomes an alert).
  * @param {Drive} d @param {string} where @param {Settings['thresholds']} th
  */
 function driveStatus(d, where, th) {
@@ -190,7 +190,7 @@ export function buildSnapshot(engine) {
     if (hw) {
       gauges.push({ key: 'cpu', label: 'CPU', val: Math.round(hw.cpu), unit: '%', pct: hw.cpu, level: level(hw.cpu, 75, 90), sub: `${hw.cpus} threads`, series: spark('host.cpu'), max: 100 });
       gauges.push({ key: 'mem', label: 'Memory', val: (hw.mem / 1024 ** 3).toFixed(1), unit: `of ${Math.round(hw.maxmem / 1024 ** 3)} GiB`, pct: hw.memPct, level: level(hw.memPct, 80, 92), sub: `${Math.round(hw.memPct)}% used`, series: spark('host.mem'), max: 100 });
-      gauges.push({ key: 'disk', label: 'Storage', val: Math.round(hw.disk.pct ?? 0), unit: '%', pct: hw.disk.pct, level: level(hw.disk.pct, th.storageAmberPct, th.storageWarnPct), sub: hw.disk.name, series: null });
+      gauges.push({ key: 'disk', label: 'Disk', val: Math.round(hw.disk.pct ?? 0), unit: '%', pct: hw.disk.pct, level: level(hw.disk.pct, th.storageAmberPct, th.storageWarnPct), sub: hw.disk.name, series: null });
     }
     if (temps?.cpu != null) {
       const span = th.tempWarnC + 15 - th.tempMinC;

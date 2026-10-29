@@ -52,17 +52,17 @@ Paths are relative to the config folder (served under `/assets/`), or full `http
 | `favicon` | `images/favicon.ico` | Browser tab icon. |
 | `background` | `#0A0D12` | Splash-screen and title-bar colour of the installed app. |
 
-### `host`: the Host card
+### `host`: the System panel
 
 | Key | Default | Description |
 |---|---|---|
 | `service` | first `proxmox` widget | Name of the service (as written in `services.yaml`) whose Proxmox node is shown as the host. |
 | `node` | first online node | Proxmox node to show, for clusters. A widget's own `node:` takes precedence. |
 | `temperature` | `true` | Read CPU and NVMe temperatures from the kernel (`/sys/class/hwmon`). |
-| `storage` | automatic | PVE storage shown on the host's storage gauge. By default it is the largest local storage that holds guest disks (`images` / `rootdir` content), otherwise the root filesystem. |
-| `storages` | all | List of PVE storage names to show in the Storage card. |
+| `storage` | automatic | PVE storage shown on the System panel's *Disk* gauge. By default it is the largest local storage that holds guest disks (`images` / `rootdir` content), otherwise the root filesystem. |
+| `storages` | all | List of PVE storage names to show in the Storage panel. |
 
-### `network`: the Network card
+### `network`: the Network panel
 
 | Key | Default | Description |
 |---|---|---|

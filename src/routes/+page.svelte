@@ -1,8 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import Icon from '$lib/components/Icon.svelte';
-  import Gauge from '$lib/components/Gauge.svelte';
-  import Sparkline from '$lib/components/Sparkline.svelte';
+  import Vitals from '$lib/components/Vitals.svelte';
   import ThemeToggle from '$lib/components/ThemeToggle.svelte';
   import Palette from '$lib/components/Palette.svelte';
   import Beats from '$lib/components/Beats.svelte';
@@ -16,23 +15,6 @@
   let paletteOpen = $state(false);
   let feedOpen = $state(false); // phones: attention list expanded past the first 3
   let section = $state('top'); // phones: tab bar item for the section in view
-  // storage card: usage or drives. Remembered per browser as a convenience, so storage errors are ignored
-  let storageView = $state('storage');
-  onMount(() => {
-    try { if (localStorage.getItem('storageView') === 'drives') storageView = 'drives'; } catch {}
-  });
-  function showStorage(view) {
-    storageView = view;
-    try { localStorage.setItem('storageView', view); } catch {}
-  }
-  // arrow keys move between the two tabs (roving tabindex)
-  function tabKey(e) {
-    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
-    e.preventDefault();
-    const next = storageView === 'storage' ? 'drives' : 'storage';
-    showStorage(next);
-    document.getElementById(`tab-${next}`)?.focus();
-  }
 
   const allServices = $derived(snap ? snap.groups.flatMap((g) => g.services) : []);
   const stale = $derived(snap && now - snap.generatedAt > snap.staleAfter);
@@ -131,7 +113,7 @@
 
   // tab bar highlight: the last section whose top has passed a line at 30% of the viewport
   function watchSections() {
-    const ids = ['attention', 'host', 'services'];
+    const ids = ['attention', 'system', 'services'];
     const spy = new IntersectionObserver(() => {
       const line = innerHeight * 0.3;
       let best = 'top', bestTop = -Infinity;
@@ -178,27 +160,7 @@
     info: 'M12 16v-4M12 8h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z',
     ok: 'M20 6 9 17l-5-5'
   };
-  const fmtRate = (v) => (v == null ? '—' : v >= 100 ? Math.round(v) : v.toFixed(1));
-  const fmtNum = (n) => (n == null ? '—' : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(n >= 1e4 ? 0 : 1) + 'k' : String(n));
 </script>
-
-{#snippet traffic(t, what, downWord, upWord, height)}
-  <!-- one traffic reading: where it comes from, the current rates, then the recent chart -->
-  {@const down = (t.seriesDown ?? []).filter((v) => v != null)}
-  <div class="traffic">
-    <div class="net-row">
-      <span class="net-src"><span class="net-what">{what}</span><span class="muted">{t.source}{down.length > 1 ? ` · ${t.spanH ?? 24} h` : ''}</span></span>
-      <span class="net-vals mono"><span style:color="var(--acc)">{fmtRate(t.down)}</span> <span class="muted">{downWord}</span> <span style:color="var(--acc-2)">{fmtRate(t.up)}</span> <span class="muted">{upWord} Mbit/s</span></span>
-    </div>
-    <!-- a fresh metric has fewer than two points: no chart, so no blank space either -->
-    {#if down.length > 1}
-      <div class="netchart" style:height="{height}px">
-        <div class="layer"><Sparkline values={t.seriesDown} color="var(--acc)" area {height} min={0} label="{what} {downWord}, last {t.spanH ?? 24} hours" /></div>
-        <div class="layer"><Sparkline values={t.seriesUp} color="var(--acc-2)" {height} min={0} max={Math.max(1, ...down) * 1.1} /></div>
-      </div>
-    {/if}
-  </div>
-{/snippet}
 
 <svelte:window onkeydown={onKey} />
 
@@ -297,75 +259,9 @@
       </div>
     </section>
 
-    {#if snap.host || snap.storage.length || snap.network}
-      <section class="vitals" id="host" aria-label="Host vitals">
-        {#if snap.host}
-          <div class="card host">
-            <h2>Host</h2>
-            <!-- what the gauges below describe: each value carries its own label -->
-            <dl class="host-facts">
-              <div><dt>Node</dt><dd>{#if snap.host.href}<a class="node" href={snap.host.href} target={target} rel="noopener">{snap.host.name}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9" /></svg></a>{:else}{snap.host.name}{/if}</dd></div>
-              {#each snap.host.facts as f (f.label)}<div><dt>{f.label}</dt><dd>{f.value}</dd></div>{/each}
-            </dl>
-            <div class="gauges">
-              {#each snap.host.gauges as g (g.key)}<Gauge {g} />{/each}
-            </div>
-          </div>
-        {/if}
-        {#if snap.storage.length}
-          <div class="card storage">
-            {#if snap.drives.length}
-              <div class="tabs" role="tablist" aria-label="Storage card">
-                {#each [['storage', 'Storage'], ['drives', 'Drives']] as [id, name]}
-                  <button role="tab" id="tab-{id}" aria-selected={storageView === id} aria-controls="storage-panel" tabindex={storageView === id ? 0 : -1} onclick={() => showStorage(id)} onkeydown={tabKey}>{name}</button>
-                {/each}
-              </div>
-            {:else}
-              <h2>Storage</h2>
-            {/if}
-            <div class="panel" id="storage-panel" role={snap.drives.length ? 'tabpanel' : undefined} aria-labelledby={snap.drives.length ? `tab-${storageView}` : undefined}>
-            {#if storageView === 'drives' && snap.drives.length}
-              {#each snap.drives as d}
-                <!-- a drive in two lines: model, temperature and SMART verdict; what it is and where, and its life left as a labelled bar. The rest is in the tooltip -->
-                <div class="bar drive lv-{d.lifeLevel}" title="{d.name} · {d.meta} · {d.detail}">
-                  <div class="bar-head">
-                    <span class="name">{d.name}</span>
-                    {#each d.facts as f}<span class="dfact mono" class:lv-warn={f.level === 'warn'}>{f.v}{f.k ? ` ${f.k}` : ''}</span>{/each}
-                    <span class="dstatus lv-{d.level}">{d.status}</span>
-                  </div>
-                  <div class="dline">
-                    <span class="mono muted off-sub">{d.meta}</span>
-                    {#if d.life != null}
-                      <span class="life" title="{d.life}% of the drive's rated write endurance remains"><span class="muted">Life left</span><span class="track"><span class="fill" style:width="{Math.max(0, Math.min(100, d.life))}%"></span></span><span class="mono pct">{d.life}%</span></span>
-                    {/if}
-                  </div>
-                </div>
-              {/each}
-            {:else}
-            {#each snap.storage as s}
-              <!-- an off row (unavailable, detached) is grey: its reason in the sub column, the bar at the last known fill -->
-              <div class="bar lv-{s.level}" title="{s.name} · {s.sub}">
-                <div class="bar-head"><span class="name">{s.name}</span><span class="mono muted sub">{s.sub}</span><span class="mono pct">{s.pct != null ? `${Math.round(s.pct)}%` : '—'}</span></div>
-                <div class="track"><div class="fill" style:width="{Math.min(100, s.pct ?? 0)}%"></div></div>
-              </div>
-            {/each}
-            {/if}
-            </div>
-          </div>
-        {/if}
-        {#if snap.network}
-          <div class="card network">
-            <h2>Network</h2>
-            {#if snap.network.source}{@render traffic(snap.network, 'WAN', 'down', 'up', 48)}{/if}
-            {#if snap.network.lan}{@render traffic(snap.network.lan, 'LAN', 'in', 'out', 32)}{/if}
-            {#if snap.network.dns}
-              <a class="net-row dns" href={snap.network.dns.href} target={target} rel="noopener">
-                <span class="net-src"><span class="net-what">DNS</span><span class="muted">{snap.network.dns.name}{snap.network.dns.period ? ` · ${snap.network.dns.period}` : ''}</span></span>
-                <span class="net-vals mono">{fmtNum(snap.network.dns.queries)} <span class="muted">queries</span> {snap.network.dns.blockedPct.toFixed(1)}% <span class="muted">blocked</span></span>
-              </a>
-            {/if}
-          </div>
-        {/if}
+    {#if snap.host || snap.storage.length || snap.drives.length || snap.network}
+      <section class="vitals" id="system" aria-label="System vitals">
+        <Vitals host={snap.host} storage={snap.storage} drives={snap.drives} network={snap.network} {target} />
       </section>
     {/if}
 
@@ -453,7 +349,7 @@
   <nav class="tabbar" aria-label="Sections">
     <a href="#top" aria-current={current('top')}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z" /></svg>Home</a>
     <a href="#attention" class="bell" aria-current={current('attention')}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0" /></svg>Alerts{#if snap.needCount}<span class="badge mono">{snap.needCount}</span>{/if}</a>
-    {#if snap.host || snap.storage.length || snap.network}<a href="#host" aria-current={current('host')}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h18v6H3zM3 14h18v6H3zM7 7h.01M7 17h.01" /></svg>Host</a>{/if}
+    {#if snap.host || snap.storage.length || snap.drives.length || snap.network}<a href="#system" aria-current={current('system')}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h18v6H3zM3 14h18v6H3zM7 7h.01M7 17h.01" /></svg>System</a>{/if}
     <a href="#services" aria-current={current('services')}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" /></svg>Services</a>
     <button onclick={() => (paletteOpen = true)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14ZM20 20l-3.5-3.5" /></svg>Search</button>
   </nav>
@@ -530,64 +426,6 @@
   .empty { margin: auto 0; text-align: center; }
   .more { margin: 2px 0 0; text-align: right; }
 
-  /* vitals */
-  .vitals { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
-  .host, .storage, .network { padding: 22px; display: flex; flex-direction: column; gap: 16px; }
-  .host-facts { display: flex; flex-wrap: wrap; gap: 6px 24px; margin: -6px 0 0; }
-  .host-facts div { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
-  .host-facts dt { font-size: 12px; color: var(--muted); }
-  .host-facts dd { margin: 0; font-size: 13px; font-weight: 500; }
-  .host-facts .node { display: inline-flex; align-items: center; gap: 3px; }
-  .host-facts .node:hover { color: var(--acc); }
-  .gauges { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
-  .storage, .panel { gap: 12px; }
-  .panel { display: flex; flex-direction: column; }
-  .bar { --fill: var(--acc); display: flex; flex-direction: column; gap: 5px; }
-  .bar.lv-warn, .bar.lv-crit { --fill: var(--lv); }
-  .bar-head { display: flex; align-items: baseline; gap: 8px; font-size: 13px; }
-  .bar-head .name { flex: 0 1 auto; max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .bar-head .sub { flex: 1 1 auto; min-width: 0; text-align: right; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .bar-head .pct { flex: none; }
-  .bar.lv-warn .pct, .bar.lv-crit .pct { color: var(--lv); }
-  .bar.lv-off { --fill: color-mix(in srgb, var(--muted) 50%, transparent); }
-  .bar.lv-off .name, .bar.lv-off .pct { color: var(--muted); }
-  .off-sub { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .drive { gap: 4px; }
-  .drive + .drive { padding-top: 10px; border-top: 1px solid var(--track); }
-  .drive .name { flex: 1 1 auto; max-width: none; }
-  .dstatus { flex: none; font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 999px; color: var(--lv); background: var(--lv-soft); }
-  .dfact { flex: none; font-size: 11px; color: var(--muted); white-space: nowrap; }
-  .dfact.lv-warn { color: var(--lv); }
-  .dline { display: flex; align-items: center; gap: 12px; }
-  .dline .off-sub { flex: 1 1 auto; min-width: 0; }
-  .life { flex: none; display: flex; align-items: center; gap: 6px; font-size: 11px; }
-  /* fixed track and a right-aligned slot wide enough for "100%", so every drive's bar lines up */
-  .life .track { display: block; flex: none; width: 56px; height: 4px; }
-  .life .pct { min-width: 4ch; text-align: right; }
-  .life .fill { display: block; }
-  /* segmented control: a recessed track with the selected view raised on it */
-  .tabs { display: inline-flex; align-self: flex-start; gap: 2px; padding: 3px; border-radius: 11px; background: var(--surface-2); }
-  .tabs button {
-    all: unset; cursor: pointer; font-size: 14px; font-weight: 600; color: var(--muted);
-    padding: 6px 16px; min-height: 22px; border-radius: 8px; transition: background-color 0.15s, color 0.15s, box-shadow 0.15s;
-  }
-  .tabs button:hover { color: var(--text); }
-  .tabs button[aria-selected='true'] { color: var(--text); background: var(--raised); box-shadow: 0 1px 3px rgba(16, 24, 40, 0.12), 0 0 0 1px var(--line); }
-  .tabs button:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
-  .track { height: 6px; border-radius: 4px; background: var(--track); overflow: hidden; }
-  .fill { height: 100%; border-radius: 4px; background: var(--fill); transition: width 0.6s cubic-bezier(0.2, 0.8, 0.2, 1); }
-  .traffic { display: flex; flex-direction: column; gap: 8px; }
-  /* WAN, LAN and DNS separated by a rule; spare height (a taller card sets the row) stays below them */
-  .traffic + .traffic, .traffic + .dns { padding-top: 14px; border-top: 1px solid var(--track); }
-  /* always two lines (where it comes from, then the values): one line only fits the shorter sources, so blocks would differ */
-  .net-row { display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
-  .net-src { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
-  .net-what { font-weight: 600; }
-  .net-vals { white-space: nowrap; }
-  .net-vals > :not(.muted) { font-size: 15px; font-weight: 500; }
-  .netchart { position: relative; }
-  .layer { position: absolute; inset: 0; }
-  .dns { color: inherit; text-decoration: none; }
 
   /* most used */
   .block { display: flex; flex-direction: column; gap: 12px; }
@@ -631,18 +469,13 @@
   /* bottom tab bar (phones) */
   .tabbar { display: none; }
 
-  @media (max-width: 1180px) {
-    .vitals { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-    .vitals .host { grid-column: 1 / -1; }
-  }
   @media (max-width: 860px) {
-    .hero, .vitals { grid-template-columns: minmax(0, 1fr); }
+    .hero { grid-template-columns: minmax(0, 1fr); }
   }
   @media (max-width: 760px) {
     /* the tab bar floats over the bottom: clear it plus the home indicator */
     .page { gap: 22px; padding-bottom: calc(110px + env(safe-area-inset-bottom)); }
     h2 { font-size: 17px; }
-    .tabs button { font-size: 15px; padding: 8px 18px; }
     .search, .deep, .live :global(.demo) { display: none; }
 
     /* header: logo, date over title, Live pill, theme button */
@@ -666,10 +499,8 @@
     .fleet-head .picked { color: var(--text); font-variant-numeric: tabular-nums; }
 
     /* sections lose their card: heading outside, rows/cards below */
-    .feed, .host { padding: 0; background: none; box-shadow: none; border-radius: 0; }
-    .feed { gap: 10px; }
+    .feed { padding: 0; gap: 10px; background: none; box-shadow: none; border-radius: 0; }
     .feed-head { margin-bottom: 0; }
-    .host { gap: 12px; }
     .rows { display: flex; flex-direction: column; gap: 8px; }
     .row { display: flex; align-items: center; gap: 12px; min-height: 60px; padding: 10px 14px 10px 16px; border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); }
     .row .dot { scale: 1.25; }
@@ -680,13 +511,6 @@
     .chev { flex: none; color: var(--muted); }
     .see-all { align-self: center; min-height: 44px; padding: 0 16px; border: 0; border-radius: 12px; background: none; color: var(--acc); font-size: 14px; font-weight: 500; cursor: pointer; }
     .see-all:active { background: var(--surface-2); }
-
-    .gauges { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-
-    /* host, storage and network stay together as one section */
-    .vitals { gap: 12px; }
-    .storage, .network { padding: 20px; }
-    .netchart { display: none; }
 
     /* most used: icon, name, one status line */
     .pins { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }

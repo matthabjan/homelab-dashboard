@@ -173,7 +173,7 @@ export interface Stat {
   level?: string | null;
 }
 
-/** One line in the storage card: usage, or `offline` (an unavailable or detached storage). */
+/** One line in the Storage panel: usage, or `offline` (an unavailable or detached storage). */
 export type StorageRow = UsageRow | OfflineRow;
 
 export interface UsageRow {
@@ -244,7 +244,7 @@ export interface Drive extends Omit<SmartReading, 'failing'> {
   health: 'ok' | 'failing' | 'unknown';
 }
 
-/** Current rates plus their 24 h series, as the network card draws them. */
+/** Current rates plus their 24 h series, as the Network panel draws them. */
 export interface Traffic {
   source: string | null;
   href: string | null;
@@ -426,7 +426,7 @@ export interface Snapshot {
   host: { name: string; href: string | null; facts: { label: string; value: string }[]; gauges: Gauge[] } | null;
   /** `off` rows (unavailable, detached, size unknown) draw `pct` as a grey bar: the last known fill, or empty */
   storage: { name: string; pct: number | null; level: Level | 'off'; sub: string; href: string | null }[];
-  /** the storage card's second view; empty when no widget reports drives */
+  /** the vitals card's Drives panel; empty when no widget reports drives */
   drives: {
     name: string;
     meta: string;
