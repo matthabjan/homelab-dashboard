@@ -527,6 +527,10 @@ export interface Gauge {
 export interface Snapshot {
   generatedAt: number;
   demo: boolean;
+  /** the dashboard's own version (package.json), for the footer */
+  version: string | null;
+  /** how many config problems /config lists: the badge on its header button */
+  configProblems: number;
   title: string;
   linkTarget: string;
   deepLink: Settings['deepLink'];

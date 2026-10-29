@@ -5,9 +5,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-// CONFIG_DIR is read when config.js is imported
+// CONFIG_DIR and DATA_DIR are read when config.js is imported
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dashboard-config-view-'));
 process.env.CONFIG_DIR = dir;
+process.env.DATA_DIR = path.join(dir, 'data');
 process.env.SECRETS_DIR = path.join(dir, 'secrets');
 delete process.env.DEMO;
 const { loadConfig, withDiscovered } = await import('./config.js');
@@ -133,4 +134,16 @@ test('origin and icon helpers', () => {
   assert.equal(originOf('unix:///var/run/docker.sock'), 'unix:');
   assert.equal(originOf('not a url'), null);
   assert.equal(iconName('https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/jellyfin.png'), 'jellyfin.png');
+});
+
+test('config problems show as one alert per file, linking to the list', async () => {
+  const { buildSnapshot } = await import('./snapshot.js');
+  const engine = fakeEngine();
+  engine.autoIcons = new Map();
+  engine.shared = {};
+  engine.temps = null;
+  engine.local = null;
+  const items = buildSnapshot(engine).attention.filter((a) => a.key?.startsWith('config-'));
+  assert.deepEqual(items.map((a) => [a.sev, a.title, a.href]), [['warn', 'services.yaml has 2 problems', '/config#problems']]);
+  assert.match(items[0].detail ?? '', /, and 1 more$/);
 });

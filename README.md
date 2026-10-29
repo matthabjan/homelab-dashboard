@@ -50,7 +50,7 @@ mkdir -p config && docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/config:/s
 # compose.yaml
 services:
   dashboard:
-    image: matthabjan/homelab-dashboard:0.1.1 # pin a version, update deliberately
+    image: matthabjan/homelab-dashboard:0.1.2 # pin a version, update deliberately
     restart: unless-stopped
     ports:
       - 127.0.0.1:3000:3000 # localhost only; reach it from the LAN or VPN through a reverse proxy
@@ -67,7 +67,7 @@ volumes:
 docker compose up -d
 ```
 
-Settings, services, bookmarks and secrets are described in [Configuration](docs/configuration.md), and each widget's least-privilege account in [Integrations](docs/integrations.md). The page **Config & status** (`/config`, linked in the footer) shows what loaded, which widgets work, and any problem in your files.
+Settings, services, bookmarks and secrets are described in [Configuration](docs/configuration.md), and each widget's least-privilege account in [Integrations](docs/integrations.md). The page **Config & status** (`/config`, the sliders button in the header) shows what loaded, which widgets work, and any problem in your files.
 
 The app has **no login of its own**. Keep it on your LAN or VPN and never forward a port to it from the internet. To open it beyond localhost, put it behind a reverse proxy that handles TLS and authentication, for example Traefik with an IP allowlist and basic auth. See [Deployment](docs/deployment.md).
 
