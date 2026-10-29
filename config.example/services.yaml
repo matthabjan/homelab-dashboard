@@ -137,7 +137,7 @@
               label: items
               format: number
             - field: healthy
-              label: media health
+              label: health
               remap: [{ value: true, to: OK }, { value: false, to: Degraded }]
               crit: { below: 1 }        # our addition: alerts when the server reports unhealthy
 
