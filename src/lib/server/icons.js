@@ -65,8 +65,11 @@ export function createIconFinder({ kv, transport = request, now = Date.now }) {
   /** @type {Map<string, Promise<{ icon: string, iconDark: string | null } | null>>} */
   const found = new Map();
 
+  // errors name the URL and the cause: undici's own message is just "fetch failed"
   const get = async (url) => {
-    const res = await transport(url, { insecure: false, timeout: 15_000 });
+    const res = await transport(url, { insecure: false, timeout: 15_000 }).catch((e) => {
+      throw new Error(`${url}: ${e.cause?.code ?? e.message}`);
+    });
     if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`);
     return res;
   };
