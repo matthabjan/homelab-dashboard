@@ -6,7 +6,7 @@ import { fromAttributes, fromNvmeText, isVirtual, kindOf, slowly, toDrive } from
 /** @import { Alert, Context, Drive, NetworkReading, Widget, WidgetResult } from '$lib/types' */
 
 /**
- * The node's storages for the storage card (filtered by host.storages, unavailable ones kept as `down`)
+ * The node's storages for the Storage panel (filtered by host.storages, unavailable ones kept as `down`)
  * and `main`, the one on the host gauge: host.storage if set, else where the guest disks live
  * (local-zfs / local-lvm), not whatever storage is largest.
  */

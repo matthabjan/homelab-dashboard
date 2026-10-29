@@ -1,6 +1,6 @@
 # Integrations
 
-A widget adds live data to a service: tile stats, cards on the page and alerts. Configure it under the service's `widget:` key in `services.yaml`. The fields match [gethomepage](https://gethomepage.dev/widgets/), so existing widget blocks work as they are.
+A widget adds live data to a service: tile stats, panels in the vitals card and alerts. Configure it under the service's `widget:` key in `services.yaml`. The fields match [gethomepage](https://gethomepage.dev/widgets/), so existing widget blocks work as they are.
 
 **General rules**
 
@@ -23,7 +23,7 @@ A widget adds live data to a service: tile stats, cards on the page and alerts. 
 
 ## Proxmox VE
 
-Provides the **Host** card (CPU, memory, storage, uptime, guests), the PVE rows in **Storage**, the host NIC traffic (LAN in and out) in **Network**, the host's physical disks in [**Drives**](#drives), and guest ids that the PBS widget uses to judge backup age.
+Provides the **System** panel (CPU, memory, disk, uptime, guests), the PVE rows in **Storage**, the host NIC traffic (LAN in and out) in **Network**, the host's physical disks in [**Drives**](#drives), and guest ids that the PBS widget uses to judge backup age.
 
 ```yaml
 widget:
@@ -105,7 +105,7 @@ proxmox-backup-manager acl update /system/disks Audit --auth-id 'dashboard@pbs!d
 
 ## OPNsense
 
-Provides **WAN traffic** for the Network card, and firewall CPU on the tile.
+Provides **WAN traffic** for the Network panel, and firewall CPU on the tile.
 
 ```yaml
 widget:
@@ -151,7 +151,7 @@ Only disks with SMART monitoring enabled in OMV are checked. Virtual disks have 
 
 ## AdGuard Home
 
-Provides the **DNS** part of the Network card: queries, block rate, average response time and a 24-hour query chart.
+Provides the **DNS** part of the Network panel: queries, block rate, average response time and a 24-hour query chart.
 
 ```yaml
 widget:
@@ -224,7 +224,7 @@ The widget talks TR-064 to port **49000**, or **49443** if `url` is `https://`, 
 
 ## Drives
 
-The storage card switches between **Storage** (how full each storage is) and **Drives** (how healthy the physical disks are). The switch appears as soon as a widget reports drives, and each browser remembers the last choice.
+The vitals card has a **Drives** panel next to **Storage**: Storage shows how full each storage is, Drives how healthy the physical disks are. The tab appears as soon as a widget reports drives, and each browser remembers the open tab.
 
 | Source | Drives |
 |---|---|

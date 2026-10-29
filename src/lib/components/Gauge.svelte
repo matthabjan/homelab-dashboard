@@ -26,7 +26,7 @@
   </div>
 </div>
 
-<!-- phones: compact card (no ring, no sparkline); the two variants switch by media query -->
+<!-- a narrow card: compact tile (no ring, no sparkline); the two variants switch by the vitals card's width -->
 <div class="mini lv-{g.level}" role="img" aria-label="{g.label} {g.val} {g.unit}{g.sub ? ', ' + g.sub : ''}">
   <div class="mini-head"><span class="label">{g.label}</span><span class="mono sub">{g.sub ?? ''}</span></div>
   <div class="mini-val"><span class="mono">{g.val}</span><span class="mono unit">{g.unit}</span></div>
@@ -50,12 +50,21 @@
   .spark { width: 100%; height: 24px; }
 
   .mini { display: none; }
-  @media (max-width: 760px) {
+  /* a wide card: ring on the left, label and trend beside it, so the row stays low */
+  @container vitals (min-width: 880px) {
+    .gauge { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto auto 1fr; column-gap: 16px; row-gap: 2px; align-items: start; padding: 12px 16px 12px 12px; }
+    .ring { grid-row: 1 / 4; align-self: center; width: 76px; height: 76px; }
+    .ring svg { width: 100%; height: 100%; }
+    .label { font-size: 13px; margin-top: 4px; }
+    .spark { align-self: end; height: 28px; }
+  }
+  /* a narrow card (phones): compact tile, no ring, no sparkline */
+  @container vitals (max-width: 519.98px) {
     .gauge { display: none; }
     .mini {
       --arc: var(--acc);
       display: flex; flex-direction: column; gap: 6px; min-width: 0;
-      padding: 14px; border-radius: 16px; background: var(--surface); box-shadow: var(--shadow);
+      padding: 12px 14px; border-radius: 14px; background: var(--surface-2);
     }
     .mini.lv-warn, .mini.lv-crit { --arc: var(--lv); }
     .mini-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
