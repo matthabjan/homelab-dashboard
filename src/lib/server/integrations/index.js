@@ -9,10 +9,11 @@ import * as portainer from './portainer.js';
 import * as openmediavault from './openmediavault.js';
 import * as docker from './docker.js';
 import * as pihole from './pihole.js';
+import * as customapi from './customapi.js';
 /** @import { Context, Integration } from '$lib/types' */
 
 /** @type {Record<string, Integration>} */
-export const INTEGRATIONS = { proxmox, proxmoxbackupserver: pbs, opnsense, fritzbox, adguard, portainer, openmediavault, docker, pihole };
+export const INTEGRATIONS = { proxmox, proxmoxbackupserver: pbs, opnsense, fritzbox, adguard, portainer, openmediavault, docker, pihole, customapi };
 export const ORDER = ['proxmox']; // runs first: provides guest ids for backup freshness
 
 /**

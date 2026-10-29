@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Self-hosted homelab status page and launcher (SvelteKit 2 / Svelte 5, Node adapter, Node ≥ 22.13, image ships Node 24). Reads gethomepage-compatible YAML, polls Proxmox VE, PBS, OPNsense, OpenMediaVault, AdGuard Home, Pi-hole, Portainer, Docker (socket proxy) and FRITZ!Box, and pushes one JSON snapshot to browsers over SSE.
+Self-hosted homelab status page and launcher (SvelteKit 2 / Svelte 5, Node adapter, Node ≥ 22.13, image ships Node 24). Reads gethomepage-compatible YAML, polls Proxmox VE, PBS, OPNsense, OpenMediaVault, AdGuard Home, Pi-hole, Portainer, Docker (socket proxy), FRITZ!Box and any JSON API (`customapi`), and pushes one JSON snapshot to browsers over SSE.
 
 ## Commands
 

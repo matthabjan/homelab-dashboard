@@ -319,6 +319,28 @@ export interface WidgetResult {
   discovered?: Discovered[];
 }
 
+/** A customapi threshold, compared on the raw value after `scale`; any matching condition counts. */
+export interface Threshold {
+  above?: number;
+  below?: number;
+  equals?: string | number | boolean;
+  not?: string | number | boolean;
+}
+
+/** One value of a customapi widget (gethomepage's mapping fields, plus `warn` / `crit`). */
+export interface CustomApiMapping {
+  /** dot path `a.b.0.c`, or the nested form `{ a: { b: c } }` */
+  field: string | Record<string, any>;
+  label?: string;
+  format?: 'text' | 'number' | 'float' | 'percent' | 'bytes' | 'bitrate' | 'duration' | 'date' | 'relativeDate' | 'size';
+  prefix?: string;
+  suffix?: string;
+  scale?: number | string;
+  remap?: { value?: any; any?: boolean; to: any }[];
+  warn?: Threshold;
+  crit?: Threshold;
+}
+
 export interface Integration {
   collect(widget: Widget, ctx: Context): Promise<WidgetResult>;
 }

@@ -20,6 +20,7 @@ A widget adds live data to a service: tile stats, panels in the vitals card and 
 | [`portainer`](#portainer) | Portainer | API key | ✅ Business Edition only |
 | [`docker`](#docker) | Docker Engine | none (socket proxy) | ✅ the proxy's allowlist |
 | [`fritzbox`](#fritzbox) | FRITZ!Box | none (UPnP) | n/a |
+| [`customapi`](#custom-api) | any JSON API | headers, Basic auth or none | depends on the API |
 
 ---
 
@@ -263,6 +264,60 @@ The widget talks TR-064 to port **49000**, or **49443** if `url` is `https://`, 
 | Severity | When |
 |---|---|
 | critical | The internet connection isn't `Connected`. |
+
+---
+
+## Custom API
+
+Shows values from any HTTP endpoint that answers JSON, as tile stats, with optional thresholds that raise alerts. The fields are [gethomepage's `customapi`](https://gethomepage.dev/widgets/services/customapi/), so existing blocks work as they are.
+
+```yaml
+widget:
+  type: customapi
+  url: https://media.home.arpa/api/status
+  # method: GET                      # or POST
+  # headers: { X-Api-Key: "${MEDIA_KEY}" }
+  # requestBody: { query: status }   # an object is sent as JSON
+  # username: dashboard              # Basic auth
+  # password: ${MEDIA_PASSWORD}
+  # refreshInterval: 300000          # ms; at least intervals.widgets
+  mappings:
+    - field: sessions.active         # dot path; list items by index: streams.0.user
+      label: sessions
+      format: number
+    - field: { library: items }      # gethomepage's nested form works too
+      label: items
+      format: number
+    - field: healthy
+      label: health
+      remap: [{ value: true, to: OK }, { value: false, to: Degraded }]
+      crit: { below: 1 }             # ours: alert when the value crosses a threshold
+```
+
+**Mapping keys**
+
+| Key | Meaning |
+|---|---|
+| `field` | Where the value is: a dot path (`a.b.0.c`) or the nested form `{ a: { b: c } }`. |
+| `label` | The stat's label. Default: the last key of `field`. |
+| `format` | `text` (default), `number`, `float`, `percent`, `bytes`, `bitrate` (bits/s), `duration` (seconds), `date`, `relativeDate`, `size` (length of a list or object). |
+| `prefix`, `suffix` | Text before and after the value. |
+| `scale` | Multiply numbers, for example `100` or `"1/1024"`. |
+| `remap` | Replace values: `[{ value: 1, to: up }, { any: true, to: down }]`. The first match wins. |
+| `warn`, `crit` | Thresholds: `{ above: n }`, `{ below: n }`, `{ equals: v }` or `{ not: v }`. They are compared with the value after `scale` and before `remap`. A boolean counts as 0 or 1. |
+
+The tile shows the stats in mapping order; the first mapping is the tile's line. `display` is accepted and ignored. A widget with thresholds only raises alerts: the service's status (Up, Down) stays its reachability check.
+
+**Account.** Whatever the API needs. Prefer a read-only token in `headers`, passed as a secret.
+
+**Alerts**
+
+| Severity | When |
+|---|---|
+| critical / warning | A mapping crosses its `crit` / `warn` threshold: "Health is Degraded", with the threshold in the detail. |
+| warning | A mapping's `field` isn't in the response. The stat shows `—`. |
+
+If the response isn't JSON (a login page, for example), the tile shows *Stats unavailable · Response is not JSON*, and the start of the response goes to the container log.
 
 ---
 

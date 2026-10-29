@@ -9,10 +9,11 @@ import portainer from './portainer.js';
 import openmediavault from './openmediavault.js';
 import docker from './docker.js';
 import pihole from './pihole.js';
+import customapi from './customapi.js';
 
 /** @import { Fixtures, Transport } from '$lib/types' */
 
-export const FIXTURES = { proxmox, proxmoxbackupserver, opnsense, fritzbox, adguard, portainer, openmediavault, docker, pihole };
+export const FIXTURES = { proxmox, proxmoxbackupserver, opnsense, fritzbox, adguard, portainer, openmediavault, docker, pihole, customapi };
 
 const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 

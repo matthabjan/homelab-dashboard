@@ -114,3 +114,23 @@
         href: https://music.home.arpa
         description: Music library and players
         siteMonitor: https://music.home.arpa
+    - Media server:
+        icon: jellyfin
+        href: https://media.home.arpa
+        description: Any JSON API, through the customapi widget
+        siteMonitor: https://media.home.arpa
+        widget:
+          type: customapi
+          url: https://media.home.arpa/api/status
+          # headers: { X-Api-Key: "${MEDIA_KEY}" }
+          mappings:
+            - field: sessions.active
+              label: sessions
+              format: number
+            - field: library.items
+              label: items
+              format: number
+            - field: healthy
+              label: health
+              remap: [{ value: true, to: OK }, { value: false, to: Degraded }]
+              crit: { below: 1 }        # our addition: alerts when the server reports unhealthy
