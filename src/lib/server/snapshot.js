@@ -1,4 +1,5 @@
 // Turns engine state + history into the JSON the browser renders.
+import fs from 'node:fs';
 import { resolveIcon, assetUrl } from './config.js';
 import { probeStats, uptimeSince, probeBuckets, series, recentEvents, openScores } from './db.js';
 import { fmtClock, fmtDuration as fmtAge, fmtHours, fmtSize } from './format.js';
@@ -8,6 +9,8 @@ import { hostService, hostSource } from './local.js';
 /** @import { Engine } from './engine.js' */
 
 const RANK = { crit: 3, warn: 2, info: 1, ok: 0 };
+// shown in the footer; package.json sits in the working directory in the image (/app) and in a checkout
+const VERSION = (() => { try { return String(JSON.parse(fs.readFileSync('package.json', 'utf8')).version); } catch { return null; } })();
 const H = 3600_000;
 const MIN_SLOW_SAMPLES = 10; // ~5 min of probes before a service can be called slow
 
@@ -133,8 +136,20 @@ export function buildSnapshot(engine) {
 
   // a config file with an error: keeping its last version is a warning, losing its content is critical
   const shown = { last: 'showing the last working version', none: 'nothing loaded from it', null: 'the rest of the file is loaded' };
-  for (const p of engine.cfg.problems ?? []) {
-    attention.push({ sev: p.fallback === 'none' ? 'crit' : 'warn', key: `config-${p.file}-${p.message}`, title: `${p.file} has an error`, detail: `${p.message} · ${shown[String(p.fallback)]}`, href: '/config#problems', ts: now });
+  // one alert per file, however many problems it has: /config lists each of them
+  /** @type {Map<string, import('$lib/types').ConfigProblem[]>} */
+  const byFile = new Map();
+  for (const p of engine.cfg.problems ?? []) byFile.set(p.file, [...(byFile.get(p.file) ?? []), p]);
+  for (const [file, list] of byFile) {
+    const [first] = list;
+    attention.push({
+      sev: list.some((p) => p.fallback === 'none') ? 'crit' : 'warn',
+      key: `config-${file}`,
+      title: list.length === 1 ? `${file} has an error` : `${file} has ${list.length} problems`,
+      detail: list.length === 1 ? `${first.message} · ${shown[String(first.fallback)]}` : `${first.message}, and ${list.length - 1} more`,
+      href: '/config#problems',
+      ts: now
+    });
   }
 
   for (const g of groups) {
@@ -407,6 +422,8 @@ export function buildSnapshot(engine) {
   return {
     generatedAt: now,
     demo: DEMO,
+    version: VERSION,
+    configProblems: (engine.cfg.problems ?? []).length,
     title: settings.title,
     linkTarget: settings.linkTarget,
     deepLink: settings.deepLink,

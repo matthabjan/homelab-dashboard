@@ -89,7 +89,8 @@
         {/each}
       </div>
     {:else if active}
-      <h2>{active.name}</h2>
+      <!-- one panel: no tabs, just its name (the section header above says "Vitals") -->
+      <span class="solo">{active.name}</span>
     {/if}
     <!-- what the open panel shows; System labels each value -->
     {#if view === 'system' && host}
@@ -159,7 +160,7 @@
 <style>
   /* panels lay out by the card's width, not the viewport's, so they look the same wherever the card is */
   .vitals-card { container: vitals / inline-size; padding: 22px; display: flex; flex-direction: column; gap: 16px; }
-  h2 { font-size: 14px; font-weight: 600; }
+  .solo { font-size: 14px; font-weight: 600; }
   .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
   /* tabs on the left, what the open panel shows on the right; the context wraps below when it doesn't fit */
@@ -257,7 +258,6 @@
   /* the smallest phones: a label and its dot must still fit a quarter of the card */
   @container vitals (max-width: 299.98px) { .tabs button { font-size: 13px; padding-inline: 0; gap: 3px; } }
   @media (max-width: 760px) {
-    h2 { font-size: 17px; }
     .vitals-card { padding: 16px; border-radius: 22px; gap: 14px; }
     /* phones: each panel only as tall as it needs */
     .panel.off { display: none; }
