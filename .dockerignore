@@ -21,3 +21,6 @@ certs
 *.key
 *.htpasswd
 .htpasswd
+
+# README screenshots
+docs/screenshots

@@ -1,0 +1,40 @@
+name: Bug report
+description: Something doesn't work or looks wrong
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please remove passwords, tokens, API keys, public IPs and hostnames you don't want to share from everything you paste below.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Image tag or `version` from package.json
+      placeholder: 0.0.12
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+      description: Screenshots help, especially for layout problems. Say which browser and screen size (desktop, phone portrait or landscape).
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: How to reproduce
+      description: Can you reproduce it in demo mode (`docker run --rm -p 3000:3000 -e DEMO=1 matthabjan/homelab-dashboard`)?
+  - type: textarea
+    id: config
+    attributes:
+      label: Relevant config
+      description: The affected service from services.yaml, with secrets removed
+      render: yaml
+  - type: textarea
+    id: logs
+    attributes:
+      label: Container log
+      description: "`docker logs dashboard`, the lines around the problem"
+      render: text
