@@ -1,7 +1,7 @@
 // Automatic icons for services without `icon`: the service name, the container image, the widget type, then the
-// name's leading words are looked up in the selfh.st and dashboard-icons indexes (refreshed daily, kept in kv). The coloured icon is used in both themes;
-// when it is nearly black, a light variant of it becomes the dark-theme icon.
-// Variant names can't be trusted for that: in dashboard-icons `lldap-dark` is the light one, `proxmox-light` too.
+// name's leading words are looked up in the selfh.st and dashboard-icons indexes (refreshed daily, kept in kv). When
+// the icon has a light variant, that becomes the dark-theme icon. selfh.st marks it in its index; for dashboard-icons
+// the brightest variant is taken, as names can't be trusted: there `lldap-dark` is the light one.
 import { request } from './http.js';
 import { slug } from './config.js';
 /** @import { Kv, Transport } from '$lib/types' */
@@ -48,8 +48,6 @@ export function svgLuminance(svg) {
   return max;
 }
 
-const DARK = 0.2;
-
 /**
  * @param {{ kv: Kv, transport?: Transport, now?: () => number }} opts
  */
@@ -57,8 +55,8 @@ export function createIconFinder({ kv, transport = request, now = Date.now }) {
   /** @type {{ ts: number, sh: Record<string, [string, number]>, di: Record<string, string[]> } | null} */
   let index = kv.get('icons.index');
   let tried = 0;
-  /** @type {Map<string, Promise<boolean | null>>} url → is it nearly black (null: unknown) */
-  const dark = new Map();
+  /** @type {Map<string, Promise<number | null>>} url → brightest colour (null: unknown) */
+  const bright = new Map();
   /** @type {Map<string, Promise<{ icon: string, iconDark: string | null } | null>>} */
   const found = new Map();
 
@@ -68,14 +66,14 @@ export function createIconFinder({ kv, transport = request, now = Date.now }) {
     return res;
   };
 
-  // A failed check counts as "not dark" for now and forgets the lookups that used it, so the next run retries.
-  const isDark = (url) => {
-    if (!dark.has(url)) dark.set(url, get(url).then((r) => r.text()).then((svg) => svgLuminance(svg) < DARK, () => {
-      dark.delete(url);
+  // A failed check means "no light variant" for now and forgets the lookups that used it, so the next run retries.
+  const luminance = (url) => {
+    if (!bright.has(url)) bright.set(url, get(url).then((r) => r.text()).then(svgLuminance, () => {
+      bright.delete(url);
       found.clear();
       return null;
     }));
-    return /** @type {Promise<boolean | null>} */ (dark.get(url));
+    return /** @type {Promise<number | null>} */ (bright.get(url));
   };
 
   /** Fetch both indexes when older than a day; a failure keeps the old ones and retries after an hour. */
@@ -92,7 +90,7 @@ export function createIconFinder({ kv, transport = request, now = Date.now }) {
       };
       kv.set('icons.index', index);
       found.clear();
-      dark.clear();
+      bright.clear();
     } catch (e) {
       console.warn(`[icons] index not updated: ${e.message}`);
     }
@@ -119,15 +117,21 @@ export function createIconFinder({ kv, transport = request, now = Date.now }) {
     if (sh) {
       const [ext, light] = sh;
       const icon = `${SH}/${ext}/${name}.${ext}`;
-      return { icon, iconDark: light && ext === 'svg' && (await isDark(icon)) ? `${SH}/svg/${name}-light.svg` : null };
+      return { icon, iconDark: light ? `${SH}/${ext}/${name}-light.${ext}` : null };
     }
     const di = index?.di[name];
     if (!di) return null;
     const [ext, ...variants] = di;
     const icon = `${DI}/${ext}/${name}.${ext}`;
-    if (ext !== 'svg' || !variants.length || !(await isDark(icon))) return { icon, iconDark: null };
-    for (const v of variants) if ((await isDark(`${DI}/svg/${v}.svg`)) === false) return { icon, iconDark: `${DI}/svg/${v}.svg` };
-    return { icon, iconDark: null };
+    if (ext !== 'svg' || !variants.length) return { icon, iconDark: null };
+    let best = await luminance(icon);
+    let iconDark = null;
+    if (best === null) return { icon, iconDark };
+    for (const v of variants) {
+      const l = await luminance(`${DI}/svg/${v}.svg`);
+      if (l !== null && l > best) [best, iconDark] = [l, `${DI}/svg/${v}.svg`];
+    }
+    return { icon, iconDark };
   }
 
   return {
