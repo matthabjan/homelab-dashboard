@@ -4,7 +4,7 @@ build
 .svelte-kit
 
 # your own setup — copy config.example/ to config/ and .env.example to .env
-config/
+/config/
 .env
 .env.*
 !.env.example
