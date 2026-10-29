@@ -290,7 +290,7 @@
 
     {#if snap.mostUsed.length}
       <section class="block" aria-labelledby="h-most">
-        <div class="sec-head"><h2 id="h-most">Most used</h2><span class="note">by how often you open them</span></div>
+        <div class="sec-head"><h2 id="h-most">Most used</h2></div>
         <div class="pins">
           {#each snap.mostUsed as t (t.id)}
             <a class="card pin lift lv-{t.level}" class:flash={flash.has(t.id)} class:alert={t.level === 'crit' || t.level === 'warn'} href={t.href} target={target} rel="noopener" onclick={() => opened(t.id)} aria-label="{t.name}, {t.status}{t.lineLevel ? ', ' + t.line : ''}">
