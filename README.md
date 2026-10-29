@@ -19,7 +19,7 @@ It is made for your **LAN or VPN** (WireGuard, Tailscale, …): it has no login 
 
 **Integrations:** Proxmox VE · Proxmox Backup Server · OPNsense · OpenMediaVault · AdGuard Home · Pi-hole · Portainer · Docker · FRITZ!Box · any JSON API
 
-**Not included:** notifications (it shows problems but doesn't send them; pair it with a monitor that alerts, such as Uptime Kuma, for that), user accounts, and editing the configuration in the browser.
+**Not included:** notifications (it shows problems but doesn't send them; pair it with a monitor that alerts, such as Uptime Kuma, for that), user accounts, and editing the configuration in the browser. A read-only **Config & status** page shows what loaded, which widgets work and any missing secrets, without ever showing their values.
 
 ## Screenshots
 

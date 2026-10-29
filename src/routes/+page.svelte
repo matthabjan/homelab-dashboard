@@ -51,6 +51,8 @@
     return list.filter((x) => !seen.has(x.title) && seen.add(x.title));
   }
   const target = $derived(snap?.linkTarget || '_blank');
+  // this dashboard's own pages (the config view) open in place; services as settings.linkTarget says
+  const linkTarget = (href) => (!href ? undefined : href.startsWith('/') ? undefined : target);
   // phones: every service in one list, problems first, otherwise config order (sort is stable)
   const RANK = { crit: 0, warn: 1 };
   const isProblem = (level) => level in RANK;
@@ -233,7 +235,7 @@
           <span class="muted small">{snap.needCount ? 'most severe first' : 'last 24 h'}</span>
         </div>
         {#each feed.slice(0, 5) as a}
-          <svelte:element this={a.href ? 'a' : 'div'} class="item only-desktop lv-{a.sev}" class:lift={!!a.href} href={a.href} target={a.href ? target : undefined} rel={a.href ? 'noopener' : undefined}>
+          <svelte:element this={a.href ? 'a' : 'div'} class="item only-desktop lv-{a.sev}" class:lift={!!a.href} href={a.href} target={linkTarget(a.href)} rel={a.href ? 'noopener' : undefined}>
             <span class="ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={ICONS[a.sev] ?? ICONS.info} /></svg></span>
             <span class="txt"><span class="t">{a.title}</span>{#if a.detail}<span class="d muted">{a.detail}</span>{/if}</span>
             <span class="mono muted small when">{ago(a.ts)}</span>
@@ -245,7 +247,7 @@
         {#if feed.length}
           <div class="rows only-phone" id="feed-rows">
             {#each feedOpen ? feed : feed.slice(0, 3) as a}
-              <svelte:element this={a.href ? 'a' : 'div'} class="row lv-{a.sev}" class:lift={!!a.href} class:flash={!!a.sid && flash.has(a.sid)} href={a.href} target={a.href ? target : undefined} rel={a.href ? 'noopener' : undefined}>
+              <svelte:element this={a.href ? 'a' : 'div'} class="row lv-{a.sev}" class:lift={!!a.href} class:flash={!!a.sid && flash.has(a.sid)} href={a.href} target={linkTarget(a.href)} rel={a.href ? 'noopener' : undefined}>
                 <span class="dot lv-{a.sev}"></span>
                 <span class="txt"><span class="t">{a.title}</span>{#if a.detail}<span class="d muted">{a.detail}</span>{/if}</span>
                 {#if a.href}<svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>{/if}
@@ -344,6 +346,7 @@
         {/each}
       </footer>
     {/if}
+    <footer class="foot muted"><a href="/config">Config & status</a></footer>
   </div>
 
   <nav class="tabbar" aria-label="Sections">
@@ -465,6 +468,10 @@
   /* links */
   .links { display: flex; flex-wrap: wrap; gap: 8px; }
   .link { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 14px 0 10px; border-radius: 10px; font-size: 13px; }
+
+  .foot { font-size: 12px; margin-top: -12px; }
+  .foot a { text-decoration: underline; text-underline-offset: 2px; text-decoration-color: var(--line); }
+  .foot a:hover { color: var(--text); }
 
   /* bottom tab bar (phones) */
   .tabbar { display: none; }

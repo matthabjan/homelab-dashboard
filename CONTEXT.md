@@ -26,6 +26,8 @@ Terms used in the code and in design discussions.
 
 **Check** — how a service's up/down is found: an HTTP or TCP probe (`siteMonitor`), a container's state (label discovery), or a heartbeat.
 
+**Config view** — the read-only page `/config` (Config & status): problems, widgets, checks, automatic icons and settings, built by `config-view.js` from an allowlist so no secret can appear in it.
+
 **Storage row** — one line in the Storage panel: usage (`used`, `total`, `pct`, `sub`) or `offline` (an unavailable PVE storage, a detached removable datastore).
 
 **Drive** — a physical disk in the vitals card's Drives panel, with what SMART says about it (health, life left, temperature, power-on time, data written). Reported by PVE (host disks), OMV and PBS (disks passed into their VMs); virtual disks are skipped. Not the same as a storage row: a storage is a filesystem or pool, a drive is hardware.

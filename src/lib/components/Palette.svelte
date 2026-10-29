@@ -16,7 +16,9 @@
 
   const items = $derived([
     ...services.map((s) => ({ kind: 'service', id: s.id, name: s.name, sub: s.host || s.group, href: s.href, icon: s.icon, iconDark: s.iconDark, level: s.level, hay: `${s.name} ${s.host} ${s.group} ${s.description}`.toLowerCase() })),
-    ...bookmarks.map((b) => ({ kind: 'link', id: 'bm-' + b.name, name: b.name, sub: b.group, href: b.href, icon: b.icon, iconDark: b.iconDark, level: null, hay: `${b.name} ${b.group} ${b.href}`.toLowerCase() }))
+    ...bookmarks.map((b) => ({ kind: 'link', id: 'bm-' + b.name, name: b.name, sub: b.group, href: b.href, icon: b.icon, iconDark: b.iconDark, level: null, hay: `${b.name} ${b.group} ${b.href}`.toLowerCase() })),
+    // this dashboard's own pages
+    { kind: 'page', id: 'page-config', name: 'Config & status', sub: 'problems, widgets, checks', href: '/config', icon: null, iconDark: null, level: null, hay: 'config status settings problems widgets checks secrets icons' }
   ]);
 
   function score(hay, name, query) {
@@ -58,7 +60,8 @@
     if (!item?.href) return;
     if (item.kind === 'service') onopen?.(item.id);
     open = false;
-    window.open(item.href, newTab ? '_blank' : target, 'noopener');
+    if (item.kind === 'page' && !newTab) location.assign(item.href);
+    else window.open(item.href, newTab ? '_blank' : target, 'noopener');
   }
 
   function key(e) {
@@ -101,13 +104,16 @@
           <li id={'pi-' + r.id} role="option" aria-selected={i === active}>
             <a
               href={r.href}
-              target={target}
+              target={r.kind === 'page' ? undefined : target}
               rel="noopener"
               class:active={i === active}
               onmousemove={() => (active = i)}
               onclick={() => { if (r.kind === 'service') onopen?.(r.id); open = false; }}
             >
-              <span class="ic"><Icon src={r.icon} dark={r.iconDark} name={r.name} size={22} /></span>
+              <span class="ic">
+                {#if r.icon}<Icon src={r.icon} dark={r.iconDark} name={r.name} size={22} />
+                {:else}<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0" /><circle cx="16" cy="6" r="2" /><circle cx="10" cy="12" r="2" /><circle cx="18" cy="18" r="2" /></svg>{/if}
+              </span>
               <span class="name">{r.name}</span>
               <span class="mono sub">{r.sub}</span>
               {#if r.level}<span class="dot lv-{r.level}"></span>{/if}

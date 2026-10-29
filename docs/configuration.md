@@ -13,6 +13,16 @@ config/
 
 **Reloading.** Saving any `*.yaml` file in the folder reloads the config within a second. You don't need to restart, and history is kept. Files in `icons/` and `images/` are read when they are requested, but browsers cache them for up to 5 minutes. If a file has a YAML syntax error or the wrong structure (for example a mapping where a list of groups belongs), the dashboard keeps showing its last version that loaded and lists `services.yaml has an error` under *Needs attention*, with the line and reason. The full error, including the lines around it, is in the container log (`[config] services.yaml: …`). A malformed group or entry is skipped and reported the same way, and the rest of the file loads. Once you fix the file, the alert clears on the next save.
 
+**Checking what loaded.** The page **Config & status** (`/config`, linked in the footer, the command palette and every config alert) shows what the dashboard made of your files, read-only:
+
+- **Problems:** files with errors, skipped entries, secrets that aren't set (by name), heartbeats without a token, a `docker` widget on a socket path.
+- **Widgets:** each widget's type (linked to its documentation), the scheme, host and port of its `url`, a few harmless options such as `node` or `env`, whether its last poll worked, when it last succeeded, and whether it came from `services.yaml` or from container labels.
+- **Checks:** each service's check (HTTP, TCP, container state or heartbeat), its target, interval and current state.
+- **Automatic icons:** the icon picked for each service without `icon`, with a *Copy YAML* button to make it permanent.
+- **Settings:** every effective setting.
+
+It never shows usernames, passwords, keys, tokens, headers, request bodies, URL paths or queries, heartbeat tokens, or label values beyond group and name. What it shows is chosen field by field, so a new kind of secret can't slip through. Like the rest of the dashboard it is for your LAN or VPN, behind your proxy's login.
+
 ---
 
 ## `settings.yaml`

@@ -143,10 +143,10 @@ export class Engine extends EventEmitter {
       try {
         const res = await withTimeout(INTEGRATIONS[s.widget.type].collect(s.widget, ctx), 25_000, s.widget.type);
         for (const e of res.events || []) insertEvent(now, e.sev, s.id, e.title, e.detail);
-        st.widget = { ok: true, ts: now, ...res };
+        st.widget = { ok: true, ts: now, lastOk: now, ...res };
       } catch (e) {
         const cause = e?.cause?.code ? reasonText(e.cause.code) : null;
-        st.widget = { ok: false, ts: now, error: cause && e.message === 'fetch failed' ? cause : e.message, stats: st.widget?.stats ?? [], line: null, alerts: [] };
+        st.widget = { ok: false, ts: now, lastOk: st.widget?.lastOk ?? null, error: cause && e.message === 'fetch failed' ? cause : e.message, stats: st.widget?.stats ?? [], line: null, alerts: [] };
         console.warn(`[${s.widget.type}] ${s.name}: ${st.widget.error}${e?.body ? ` — ${e.body}` : ''}`);
       }
     };

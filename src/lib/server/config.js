@@ -71,11 +71,20 @@ const readSecret = (file) => {
   try { return fs.readFileSync(file, 'utf8').trim(); } catch { return null; }
 };
 
+// names of the secrets a load couldn't find, per file (loadConfig turns them into problems)
+/** @type {Map<string, Set<string>>} */
+let missing = new Map();
+let reading = '';
+
 /** NAME from the environment, else from the file in NAME_FILE, else from the Docker secret /run/secrets/name. */
 function secret(key) {
   if (process.env[key] != null) return process.env[key];
   const v = readSecret(process.env[key + '_FILE'] || path.join(SECRETS_DIR, key.toLowerCase()));
-  if (v == null) console.warn(`[config] ${key} is not set (env, ${key}_FILE or ${path.join(SECRETS_DIR, key.toLowerCase())})`);
+  if (v == null) {
+    console.warn(`[config] ${key} is not set (env, ${key}_FILE or ${path.join(SECRETS_DIR, key.toLowerCase())})`);
+    if (!missing.has(reading)) missing.set(reading, new Set());
+    missing.get(reading)?.add(key);
+  }
   return v ?? '';
 }
 
@@ -86,7 +95,12 @@ function substitute(str) {
     const full = m.includes('HOMEPAGE_VAR_') ? 'HOMEPAGE_VAR_' + key : key;
     if (m.includes('HOMEPAGE_FILE_')) {
       const file = process.env['HOMEPAGE_FILE_' + key];
-      return (file && readSecret(file)) ?? '';
+      const v = file ? readSecret(file) : null;
+      if (v == null) {
+        if (!missing.has(reading)) missing.set(reading, new Set());
+        missing.get(reading)?.add('HOMEPAGE_FILE_' + key);
+      }
+      return v ?? '';
     }
     return process.env[full] ?? secret(key);
   });
@@ -110,6 +124,7 @@ const lastGood = new Map();
  */
 function readYaml(name, expect, fallback, problems) {
   const file = path.join(CONFIG_DIR, name);
+  reading = name;
   let raw;
   try {
     raw = YAML.parse(fs.readFileSync(file, 'utf8')) ?? fallback;
@@ -256,6 +271,7 @@ export function withDiscovered(cfg, discovered) {
 export function loadConfig() {
   /** @type {ConfigProblem[]} */
   const problems = [];
+  missing = new Map();
   const settings = deepMerge(DEFAULT_SETTINGS, readYaml('settings.yaml', 'map', {}, problems));
   const groups = [];
   const services = [];
@@ -281,6 +297,10 @@ export function loadConfig() {
       const d = Array.isArray(defs) ? defs[0] : defs;
       if (d?.href) bookmarks.push({ group: gname, name, href: d.href, icon: d.icon ?? null, iconDark: d.iconDark ?? null });
     }
+  }
+  // by name only, never a value; the demo sets no secrets, its fixtures need none
+  if (!DEMO) {
+    for (const [file, keys] of missing) for (const key of keys) problems.push({ file, message: `secret ${key} is not set`, fallback: null });
   }
   return { settings, groups, services, bookmarks, problems };
 }

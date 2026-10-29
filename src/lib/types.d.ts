@@ -397,7 +397,7 @@ export interface CertInfo {
 }
 
 /** The last collect of a service: its result, or `ok: false` with the error and the previous stats. */
-export type WidgetState = WidgetResult & { ok: boolean; ts: number; error?: string };
+export type WidgetState = WidgetResult & { ok: boolean; ts: number; error?: string; /** the last successful poll */ lastOk: number | null };
 
 export interface ServiceState {
   probe: ProbeState;
@@ -411,6 +411,52 @@ export interface Temps {
   cpu: number | null;
   nvme: number[];
   drives: number[];
+}
+
+// ---------- /config: the read-only config page ----------
+
+/** One labelled value: a widget option, a setting. */
+export interface KeyValue {
+  k: string;
+  v: string;
+}
+
+/**
+ * Everything the /config page shows, built from an allowlist (config-view.js): no credentials, headers, request
+ * bodies, URL paths or queries, heartbeat tokens, or label values beyond group and name.
+ */
+export interface ConfigView {
+  title: string;
+  demo: boolean;
+  generatedAt: number;
+  problems: { file: string; message: string; level: Level }[];
+  widgets: {
+    id: string;
+    name: string;
+    group: string;
+    type: string;
+    /** the integration's section in docs/integrations.md; null for a type this dashboard doesn't implement */
+    docs: string | null;
+    /** scheme, host and port of `url` only */
+    origin: string | null;
+    options: KeyValue[];
+    status: 'ok' | 'error' | 'never' | 'unsupported';
+    error: string | null;
+    lastOk: number | null;
+    source: string;
+  }[];
+  checks: {
+    id: string;
+    name: string;
+    group: string;
+    kind: CheckKind;
+    target: string;
+    interval: string;
+    state: string;
+    level: Level | 'unknown';
+  }[];
+  icons: { id: string; name: string; group: string; yaml: string; icon: string; iconDark: string | null }[];
+  settings: KeyValue[];
 }
 
 // ---------- snapshot: the JSON the browser renders ----------
