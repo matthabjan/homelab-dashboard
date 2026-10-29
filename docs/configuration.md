@@ -82,6 +82,7 @@ CPU usage is measured between two polls, so the CPU gauge shows `—` for the fi
 | Key | Default | Description |
 |---|---|---|
 | `service` | OPNsense, else FRITZ!Box | Name of the service whose widget provides the WAN traffic. |
+| `dns` | the first DNS widget | Name of the service whose widget (AdGuard Home or Pi-hole) provides the DNS statistics. |
 
 ### `mostUsed`
 

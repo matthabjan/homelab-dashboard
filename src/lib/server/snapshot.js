@@ -4,7 +4,7 @@ import { probeStats, uptimeSince, probeBuckets, series, recentEvents, openScores
 import { fmtClock, fmtDuration as fmtAge, fmtHours, fmtSize } from './format.js';
 import { DEMO } from './demo.js';
 import { hostService, hostSource } from './local.js';
-/** @import { AttentionItem, Drive, Fact, Gauge, Level, NetworkReading, Settings, Snapshot, Tile, Traffic } from '$lib/types' */
+/** @import { AttentionItem, ContainerCounts, Drive, Fact, Gauge, Level, NetworkReading, Settings, Snapshot, Tile, Traffic } from '$lib/types' */
 /** @import { Engine } from './engine.js' */
 
 const RANK = { crit: 3, warn: 2, info: 1, ok: 0 };
@@ -261,7 +261,8 @@ export function buildSnapshot(engine) {
   const net = netPick
     ? widgets.find((x) => x.s.name === netPick && x.w.network)
     : widgets.find((x) => x.w.network && !x.w.network.fallback) || widgets.find((x) => x.w.network);
-  const dns = widgets.find((x) => x.w.dns);
+  const dnsPick = settings.network?.dns;
+  const dns = widgets.find((x) => x.w.dns && (!dnsPick || x.s.name === dnsPick));
   const lan = widgets.find((x) => x.w.lan);
   /**
    * Rates plus 24 h series for one reading, from the metrics `<key>.down` / `<key>.up`.
@@ -328,11 +329,15 @@ export function buildSnapshot(engine) {
     ? { level: /** @type {Level} */ (top.sev), tag: `${needCount} ${needCount === 1 ? 'needs' : 'need'} attention`, title: `${top.title}.`, sub: subParts.join(' · ') }
     : { level: 'ok', tag: 'All systems normal', title: 'Everything is running.', sub: subParts.join(' · ') };
 
-  const containers = engine.shared.containers;
+  // summed over Docker engines; a host seen by both Portainer and a docker widget is one entry
+  const containers = Object.values(engine.shared.containers ?? {}).reduce(
+    (a, c) => ({ running: a.running + c.running, total: a.total + c.total, failed: a.failed + c.failed, unhealthy: a.unhealthy + c.unhealthy }),
+    /** @type {ContainerCounts} */ ({ running: 0, total: 0, failed: 0, unhealthy: 0 })
+  );
   const nextCert = all.map((t) => t.cert).filter((c) => c !== null).filter((c) => !c.selfSigned).sort((a, b) => a.days - b.days)[0];
   const facts = /** @type {(Fact | false | undefined)[]} */ ([
     { k: 'services up', v: `${up} / ${probed.length}`, level: up < probed.length ? 'crit' : null },
-    containers && { k: 'containers up', v: `${containers.running} / ${containers.total}`, level: containers.failed ? 'warn' : null },
+    containers.total > 0 && { k: 'containers up', v: `${containers.running} / ${containers.total}`, level: containers.failed ? 'warn' : null },
     backups?.oldestAge != null && { k: 'oldest backup', v: fmtAge(backups.oldestAge), level: backups.overdue ? 'warn' : null },
     nextCert && { k: 'next cert', v: `${nextCert.days} d`, level: nextCert.days < th.certWarnDays ? 'warn' : null }
   ]).filter(/** @returns {f is Fact} */ (f) => !!f);

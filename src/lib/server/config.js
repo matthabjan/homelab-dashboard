@@ -5,6 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import YAML from 'yaml';
+import { dockerUrlOk } from './integrations/docker.js';
 /** @import { Config, ConfigProblem, Discovered, Service, Settings } from '$lib/types' */
 
 export const CONFIG_DIR = path.resolve(process.env.CONFIG_DIR || 'config');
@@ -40,7 +41,8 @@ export const DEFAULT_SETTINGS = {
     storage: null // PVE storage on the host gauge; null = the largest local one holding guest disks, else root
   },
   network: {
-    service: null // service whose widget provides WAN traffic (default: OPNsense, else FRITZ!Box)
+    service: null, // service whose widget provides WAN traffic (default: OPNsense, else FRITZ!Box)
+    dns: null // service whose widget provides DNS statistics (default: the first one that reports them)
   },
   mostUsed: {
     count: 4, // tiles in the "Most used" row; 0 hides it
@@ -216,6 +218,9 @@ export function loadConfig() {
     const group = { name: gname, services: /** @type {Service[]} */ ([]) };
     for (const [name, def] of items) {
       const svc = toService(gname, name, def, settings);
+      if (svc.widget?.type === 'docker' && !dockerUrlOk(svc.widget.url)) {
+        problems.push({ file: 'services.yaml', message: `"${name}": a docker widget needs an http(s):// url (a socket proxy, see docs/integrations.md#docker)`, fallback: null });
+      }
       group.services.push(svc);
       services.push(svc);
     }

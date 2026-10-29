@@ -75,6 +75,15 @@
           url: https://adguard.home.arpa
           username: admin
           password: ${ADGUARD_PASSWORD}
+    - Pi-hole:
+        icon: pi-hole
+        href: https://pihole.home.arpa/admin
+        description: Second DNS resolver
+        siteMonitor: https://pihole.home.arpa/admin
+        widget:
+          type: pihole
+          url: https://pihole.home.arpa
+          key: ${PIHOLE_APP_PASSWORD}   # v6: an app password; v5: add `version: 5` and use the API token
 
 - Apps:
     - Portainer:
@@ -87,6 +96,12 @@
           url: https://portainer.home.arpa
           env: 1
           key: ${PORTAINER_KEY}
+    - docker-02:
+        icon: docker
+        description: Second Docker host, through a socket proxy
+        widget:
+          type: docker
+          url: http://docker-02.home.arpa:2375   # docker-socket-proxy, never the socket itself
     - Home Assistant:
         icon: home-assistant
         href: https://ha.home.arpa

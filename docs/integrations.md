@@ -16,7 +16,9 @@ A widget adds live data to a service: tile stats, panels in the vitals card and 
 | [`opnsense`](#opnsense) | OPNsense | API key + secret | ✅ scoped privileges |
 | [`openmediavault`](#openmediavault) | OpenMediaVault | User + password | ❌ admin required |
 | [`adguard`](#adguard-home) | AdGuard Home | User + password | ❌ |
+| [`pihole`](#pi-hole) | Pi-hole | App password (v6), API token (v5) | ❌ |
 | [`portainer`](#portainer) | Portainer | API key | ✅ Business Edition only |
+| [`docker`](#docker) | Docker Engine | none (socket proxy) | ✅ the proxy's allowlist |
 | [`fritzbox`](#fritzbox) | FRITZ!Box | none (UPnP) | n/a |
 
 ---
@@ -172,6 +174,30 @@ widget:
 
 ---
 
+## Pi-hole
+
+Provides the **DNS** part of the Network panel (queries and block rate over 24 hours) when it is the first DNS widget, or when `network.dns` names it. With AdGuard Home and Pi-hole both configured, each tile shows its own numbers.
+
+```yaml
+widget:
+  type: pihole
+  url: https://pihole.home.arpa
+  key: ${PIHOLE_APP_PASSWORD}   # v6: app password; v5: API token
+  # version: 5                  # Pi-hole v5 (default: 6)
+```
+
+**Account.** Pi-hole has no read-only role.
+- **v6:** create an **app password** under *Settings → Web interface / API → Advanced settings → Configure app password*, so the dashboard doesn't use your login password. The dashboard logs in once and reuses that session until it expires, because Pi-hole limits the number of concurrent sessions. Without a password set on Pi-hole, leave `key` out.
+- **v5:** the API token from *Settings → API / Web interface → Show API token*.
+
+**Alerts**
+
+| Severity | When |
+|---|---|
+| warning | Blocking is disabled. |
+
+---
+
 ## Portainer
 
 Provides **container counts**, alerts for failed and unhealthy containers, and the container labels used for [label discovery](configuration.md#services-from-container-labels).
@@ -197,6 +223,24 @@ widget:
 | warning | A container's health check reports `unhealthy`. |
 
 Containers that exited with code 0 under restart policy `no` or `on-failure` count as finished jobs, not failures. A container that is its own tile through [label discovery](configuration.md#services-from-container-labels) without `siteMonitor` gets no alert here: its tile reports it. Add the label `dashboard.ignore=true` to hide a container entirely.
+
+---
+
+## Docker
+
+The same as [Portainer](#portainer) (container counts, alerts, [label discovery](configuration.md#services-from-container-labels)), straight from a Docker host's Engine API without Portainer. Use one `docker` widget per host.
+
+```yaml
+widget:
+  type: docker
+  url: http://socket-proxy:2375   # a docker-socket-proxy, see Deployment
+```
+
+**Why a socket proxy.** Mounting `/var/run/docker.sock` into a container gives it root on the host, even read-only: the API can start a privileged container. So the widget only takes an `http(s)://` URL. A `unix://` URL or a socket path is reported as a config problem. Put [tecnativa/docker-socket-proxy](https://github.com/Tecnativa/docker-socket-proxy) in front of the socket, allow only `CONTAINERS` and `INFO`, and keep it on an internal network. See [Deployment → Docker socket proxy](deployment.md#docker-socket-proxy).
+
+**Counting.** The *containers up* figure adds up all Docker hosts. A host that both Portainer and a `docker` widget see (same engine ID from `/info`) is counted once, and a label-discovered service appears once.
+
+**Alerts:** as for [Portainer](#portainer).
 
 ---
 

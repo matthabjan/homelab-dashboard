@@ -31,7 +31,7 @@ export interface Settings {
     storages: string[] | null;
     storage: string | null;
   };
-  network: { service: string | null };
+  network: { service: string | null; dns: string | null };
   mostUsed: { count: number; halfLifeDays: number };
   intervals: { probe: number; widgets: number; cert: number };
   thresholds: {
@@ -145,7 +145,8 @@ export interface Kv {
 export interface Shared {
   guestIds?: Set<string>;
   guestNames?: Record<string, string>;
-  containers?: ContainerCounts;
+  /** per Docker engine id (from /info), so Portainer and a docker widget on one engine count it once */
+  containers?: Record<string, ContainerCounts>;
 }
 
 /** Everything an integration may use. Built by createContext in integrations/index.js. */
@@ -272,7 +273,8 @@ export interface Traffic {
 export interface DnsStats {
   queries: number;
   blockedPct: number;
-  avgMs: number;
+  /** null when the server doesn't report it (Pi-hole) */
+  avgMs: number | null;
   series: number[] | null;
   /** what the counts cover, e.g. "24 h" (AdGuard's statistics interval) */
   period: string | null;

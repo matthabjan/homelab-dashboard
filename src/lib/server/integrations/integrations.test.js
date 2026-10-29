@@ -12,7 +12,9 @@ const WIDGETS = {
   fritzbox: { url: 'http://fritz.test' },
   adguard: { url: 'https://adguard.test', username: 'admin', password: 's' },
   portainer: { url: 'https://portainer.test', env: 1, key: 'k' },
-  openmediavault: { url: 'https://nas.test', username: 'admin', password: 's' }
+  openmediavault: { url: 'https://nas.test', username: 'admin', password: 's' },
+  docker: { url: 'http://socket-proxy.test:2375' },
+  pihole: { url: 'https://pihole.test', key: 's' }
 };
 
 const memoryKv = () => {
@@ -73,6 +75,56 @@ test('Portainer looks up a restart policy once per container', async () => {
   // only the crashed container, for its live restart count
   assert.deepEqual(inspected, ['music-assistant']);
   assert.equal(again.containers?.failed, 2);
+});
+
+test('Docker refuses a socket path; Portainer and Docker on one engine count its containers once', async () => {
+  const run = (type, shared, table = FIXTURES[type]) => INTEGRATIONS[type].collect({ type, ...WIDGETS[type] },
+    createContext({ transport: fixtureTransport(table, { scenario: 'calm' }), kv: memoryKv(), settings: DEFAULT_SETTINGS, now: Date.now(), shared }));
+  await assert.rejects(INTEGRATIONS.docker.collect({ type: 'docker', url: 'unix:///var/run/docker.sock' }, createContext({ kv: memoryKv(), settings: DEFAULT_SETTINGS, now: Date.now() })), /http\(s\)/);
+
+  /** @type {import('$lib/types').Shared} */
+  const two = {};
+  await run('portainer', two);
+  await run('docker', two);
+  assert.deepEqual(Object.keys(two.containers ?? {}).sort(), ['DEMO:DOCKER02:ENGINE', 'DEMO:PORTAINER:ENGINE']);
+
+  // the docker widget pointed at the engine Portainer manages
+  /** @type {import('$lib/types').Shared} */
+  const one = {};
+  await run('portainer', one);
+  await run('docker', one, { ...FIXTURES.docker, 'GET /info': () => ({ ID: 'DEMO:PORTAINER:ENGINE' }) });
+  assert.deepEqual(Object.keys(one.containers ?? {}), ['DEMO:PORTAINER:ENGINE']);
+});
+
+test('Pi-hole v6 logs in once and reuses the session, logging in again after a 401', async () => {
+  const fixtures = fixtureTransport(FIXTURES.pihole, { scenario: 'calm' });
+  let logins = 0;
+  let expire = false;
+  /** @type {import('$lib/types').Transport} */
+  const transport = async (url, opts) => {
+    if (new URL(url).pathname === '/api/auth') logins++;
+    else if (expire) { expire = false; return new Response('{"error":{"key":"unauthorized"}}', { status: 401 }); }
+    return fixtures(url, opts);
+  };
+  const state = {};
+  const poll = () => INTEGRATIONS.pihole.collect({ type: 'pihole', ...WIDGETS.pihole }, createContext({ transport, kv: memoryKv(), settings: DEFAULT_SETTINGS, now: Date.now(), state }));
+  const first = await poll();
+  await poll();
+  assert.equal(logins, 1);
+  assert.deepEqual(first.dns && [first.dns.queries, first.dns.blockedPct], [31_402, 13.02]);
+  expire = true;
+  await poll();
+  assert.equal(logins, 2);
+});
+
+test('Pi-hole v5 and disabled blocking', async () => {
+  const run = (scenario, w) => INTEGRATIONS.pihole.collect({ type: 'pihole', ...WIDGETS.pihole, ...w }, createContext({ transport: fixtureTransport(FIXTURES.pihole, { scenario }), kv: memoryKv(), settings: DEFAULT_SETTINGS, now: Date.now() }));
+  const v5 = await run('calm', { version: 5 });
+  assert.equal(v5.dns?.queries, 31_402);
+  assert.deepEqual(v5.alerts, []);
+  assert.deepEqual((await run('issues', { version: 5 })).alerts.map((a) => a.title), ['Blocking is disabled']);
+  assert.deepEqual((await run('issues', {})).alerts.map((a) => a.title), ['Blocking is disabled']);
+  await assert.rejects(run('calm', { version: 5, key: '' }), /API token/);
 });
 
 for (const scenario of ['issues', 'calm']) {

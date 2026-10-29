@@ -37,6 +37,7 @@ host:
 
 network:
   # service: FRITZ!Box     # which widget provides WAN traffic (default: OPNsense, else FRITZ!Box)
+  # dns: AdGuard Home      # which widget provides DNS statistics (default: the first one with them)
 
 # "Most used" row: the services you open most; each open counts half as much after halfLifeDays
 mostUsed:

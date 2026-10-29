@@ -78,6 +78,11 @@ test('config files with mistakes', async (t) => {
     ]);
   });
 
+  await t.test('a docker widget on a socket instead of a proxy URL is a problem', () => {
+    write('services.yaml', SERVICES + '- Docker:\n    - Box:\n        widget:\n          type: docker\n          url: unix:///var/run/docker.sock\n');
+    assert.deepEqual(loadConfig().problems.map((p) => p.message), ['"Box": a docker widget needs an http(s):// url (a socket proxy, see docs/integrations.md#docker)']);
+  });
+
   await t.test('fixing the file clears the problem; a removed file is simply empty', () => {
     write('services.yaml', SERVICES);
     assert.deepEqual(loadConfig().problems, []);

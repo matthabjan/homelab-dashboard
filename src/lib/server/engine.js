@@ -73,6 +73,7 @@ export class Engine extends EventEmitter {
       throw e;
     }
     this.cfg = withDiscovered(this.base, this.discovered);
+    this.shared = {}; // hand-offs (container counts per engine, guest ids) refill on the next widget round, without removed services
     for (const t of this.timers) clearInterval(t);
     this.timers = [];
     const ids = new Set(this.cfg.services.map((s) => s.id));

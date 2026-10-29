@@ -44,7 +44,7 @@ services:
       XFF_DEPTH: 1
       # NODE_EXTRA_CA_CERTS: /certs/ca.pem   # trust your own CA for widget APIs
     # Credentials arrive as files in /run/secrets, so they don't show up in `docker inspect`
-    secrets: [pve_token_secret, pbs_token_secret, opnsense_key, opnsense_secret, omv_password, adguard_password, portainer_key]
+    secrets: [pve_token_secret, pbs_token_secret, opnsense_key, opnsense_secret, omv_password, adguard_password, pihole_app_password, portainer_key]
     volumes:
       - /opt/docker/dashboard/config:/config:ro   # services/settings/bookmarks + icons; reloads automatically
       - data:/data                                # uptime history (SQLite)
@@ -93,6 +93,7 @@ secrets:
   opnsense_secret: { environment: OPNSENSE_SECRET }
   omv_password: { environment: OMV_PASSWORD }
   adguard_password: { environment: ADGUARD_PASSWORD }
+  pihole_app_password: { environment: PIHOLE_APP_PASSWORD }
   portainer_key: { environment: PORTAINER_KEY }
 
 volumes:
@@ -116,6 +117,30 @@ Then:
 1. Reference it in `services.yaml`, for example `password: ${GRAFANA_TOKEN}`.
 2. Add `grafana_token` to the service's `secrets:` list **and** `grafana_token: { environment: GRAFANA_TOKEN }` to the top-level `secrets:` block.
 3. Add the stack variable `GRAFANA_TOKEN` and redeploy.
+
+### Docker socket proxy
+
+The [`docker` widget](integrations.md#docker) reads a Docker host through a socket proxy, never the socket itself. Add the proxy to the stack on each host you want to watch, with only read access to containers and engine info:
+
+```yaml
+services:
+  socket-proxy:
+    image: tecnativa/docker-socket-proxy:v0.5.0
+    restart: unless-stopped
+    environment:
+      CONTAINERS: 1   # GET /containers/... (list and inspect)
+      INFO: 1         # GET /info (engine ID, so a host seen twice counts once)
+      POST: 0         # read-only: no start, stop or create
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [socket-proxy]
+
+networks:
+  socket-proxy:
+    internal: true   # no internet, no published port
+```
+
+Put the dashboard on the `socket-proxy` network too and use `url: http://socket-proxy:2375`. For another host, publish the proxy's port only to the dashboard's address (for example with a firewall rule), never to the LAN at large: anyone who reaches it can list your containers and their environment.
 
 ## Other reverse proxies
 
