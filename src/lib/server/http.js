@@ -1,13 +1,36 @@
-import { Agent, fetch, interceptors } from 'undici';
+import { Agent, fetch } from 'undici';
+import dns from 'node:dns';
 import tls from 'node:tls';
 import net from 'node:net';
 /** @import { RequestOptions, Transport } from '$lib/types' */
 
-// Cache DNS answers: without it every probe and widget call resolves its host again, and the
-// burst every 30 s can trip the DNS server's rate limit (AdGuard: 20 queries/s per client).
-const dnsCache = () => interceptors.dns({ maxTTL: 300_000 });
-const insecureAgent = new Agent({ connect: { rejectUnauthorized: false }, keepAliveTimeout: 10_000 }).compose(dnsCache());
-const secureAgent = new Agent({ keepAliveTimeout: 10_000 }).compose(dnsCache());
+/**
+ * `lookup` for connections that caches answers for 5 minutes: without it every probe and widget call resolves its
+ * host again, and the burst every 30 s can trip the DNS server's rate limit (AdGuard: 20 queries/s per client).
+ * It hands Node all addresses, so a host with IPv4 and IPv6 falls back to the other family when one is unreachable
+ * (undici's DNS interceptor alternates between them and failed every other call from Docker without IPv6).
+ * @param {typeof dns.lookup} [resolve]
+ * @returns {net.LookupFunction}
+ */
+export function cachedLookup(resolve = dns.lookup, ttl = 300_000) {
+  /** @type {Map<string, { addrs: dns.LookupAddress[], until: number }>} */
+  const cache = new Map();
+  return (host, opts, cb) => {
+    const key = `${host} ${opts.family ?? 0}`;
+    const answer = (/** @type {dns.LookupAddress[]} */ addrs) => (opts.all ? cb(null, addrs) : cb(null, addrs[0].address, addrs[0].family));
+    const hit = cache.get(key);
+    if (hit && hit.until > Date.now()) return answer(hit.addrs);
+    resolve(host, { ...opts, all: true }, (err, addrs) => {
+      if (err) return cb(err, '', 0);
+      cache.set(key, { addrs, until: Date.now() + ttl });
+      answer(addrs);
+    });
+  };
+}
+
+const lookup = cachedLookup();
+const insecureAgent = new Agent({ connect: { rejectUnauthorized: false, lookup }, keepAliveTimeout: 10_000 });
+const secureAgent = new Agent({ connect: { lookup }, keepAliveTimeout: 10_000 });
 
 /** @type {Transport} */
 export async function request(url, { method = 'GET', headers = {}, body, insecure = true, timeout = 10_000, redirect = 'follow' } = {}) {
