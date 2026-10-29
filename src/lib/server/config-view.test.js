@@ -84,7 +84,7 @@ function fakeEngine() {
     state,
     snapshot: null,
     discoveredBy: new Map([[portainer?.id, discovered]]),
-    autoIcons: new Map([[cfg.services.find((s) => s.name === 'SSH')?.id, { icon: 'https://cdn.jsdelivr.net/gh/selfhst/icons/svg/openssh.svg', iconDark: 'https://cdn.jsdelivr.net/gh/selfhst/icons/svg/openssh-light.svg' }]])
+    autoIcons: new Map([[cfg.services.find((s) => s.name === 'SSH')?.id, { icon: 'https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/openssh.svg', iconDark: 'https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/openssh-light.svg' }]])
   });
 }
 
@@ -133,7 +133,7 @@ test('origin and icon helpers', () => {
   assert.equal(originOf('https://u:p@h.example.com:8443/a?b=c'), 'https://h.example.com:8443');
   assert.equal(originOf('unix:///var/run/docker.sock'), 'unix:');
   assert.equal(originOf('not a url'), null);
-  assert.equal(iconName('https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/jellyfin.png'), 'jellyfin.png');
+  assert.equal(iconName('https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons@main/png/jellyfin.png'), 'jellyfin.png');
 });
 
 test('config problems show as one alert per file, linking to the list', async () => {

@@ -3,8 +3,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createIconFinder, iconCandidates, svgLuminance } from './icons.js';
 
-const SH = 'https://cdn.jsdelivr.net/gh/selfhst/icons';
-const DI = 'https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons';
+const SH = 'https://cdn.jsdelivr.net/gh/selfhst/icons@main';
+const DI = 'https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons@main';
 
 /** @type {Record<string, any>} */
 const FILES = {
