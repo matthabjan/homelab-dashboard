@@ -12,6 +12,7 @@ const FILES = {
     { Reference: 'traefik', SVG: 'Yes', Light: 'Yes', Dark: 'Yes' },
     { Reference: 'lldap', SVG: 'Yes', Light: 'Yes', Dark: 'No' },
     { Reference: 'umami', SVG: 'Yes', Light: 'No', Dark: 'Yes' },
+    { Reference: 'opnsense', SVG: 'Yes', Light: 'Yes', Dark: 'Yes' },
     { Reference: 'ddns-updater', SVG: 'No', Light: 'No' },
     { Reference: 'ghost', SVG: 'No', Light: 'Yes' },
     { Reference: 'music-assistant', SVG: 'Yes', Light: 'No' }
@@ -25,6 +26,8 @@ const FILES = {
     nas: { base: 'svg', colors: { light: 'nas-light', dark: 'nas' } }
   },
   [`${SH}/svg/traefik.svg`]: '<svg><path style="fill:#24a1c1"/></svg>',
+  [`${SH}/svg/opnsense.svg`]: '<svg><path style="fill:#de3c07"/></svg>',
+  [`${SH}/svg/opnsense-light.svg`]: '<svg><path style="fill:#fff"/></svg>',
   [`${SH}/svg/lldap.svg`]: '<svg><path style="fill:#212529"/></svg>',
   [`${SH}/svg/lldap-light.svg`]: '<svg><path style="fill:#fff"/></svg>',
   [`${SH}/svg/umami.svg`]: '<svg><path fill="white"/></svg>',
@@ -80,6 +83,7 @@ test('selfh.st first; the icon itself in both themes unless it would vanish in o
   const { icons } = finder();
   await icons.refresh();
   assert.deepEqual(await icons.find(['traefik']), { icon: `${SH}/svg/traefik.svg`, iconDark: null });
+  assert.deepEqual(await icons.find(['opnsense']), { icon: `${SH}/svg/opnsense.svg`, iconDark: null }); // dark orange still shows
   assert.deepEqual(await icons.find(['lldap']), { icon: `${SH}/svg/lldap.svg`, iconDark: `${SH}/svg/lldap-light.svg` });
   assert.deepEqual(await icons.find(['umami']), { icon: `${SH}/svg/umami-dark.svg`, iconDark: `${SH}/svg/umami.svg` });
   assert.deepEqual(await icons.find(['ghost']), { icon: `${SH}/png/ghost.png`, iconDark: null });

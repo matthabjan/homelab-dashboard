@@ -45,8 +45,12 @@ export function svgLuminance(svg) {
   return { min: Math.min(min, max), max };
 }
 
-const DARK = 0.2;
-const LIGHT = 0.8;
+// The icon chip (--surface-2) in each theme, as relative luminance: #eef0f3 and #191e26.
+const BG_LIGHT = 0.86;
+const BG_DARK = 0.012;
+/** Below this contrast ratio against its chip, an icon counts as invisible in that theme. */
+const MIN_CONTRAST = 1.5;
+const contrast = (/** @type {number} */ a, /** @type {number} */ b) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
 
 /**
  * @param {{ kv: Kv, transport?: Transport, now?: () => number }} opts
@@ -113,21 +117,24 @@ export function createIconFinder({ kv, transport = request, now = Date.now }) {
   }
 
   /**
-   * The icon in both themes, unless it would vanish in one: nearly black gets the brightest variant for dark mode,
-   * nearly white the darkest variant for light mode.
+   * The icon in both themes, unless it would vanish in one: its brightest colour barely shows on the dark chip
+   * (LLDAP) → the brightest variant for dark mode; its darkest barely shows on the light chip → the darkest variant
+   * for light mode.
    * @param {string} icon @param {string[]} variants
    */
   async function pick(icon, variants) {
     const base = await luminance(icon);
-    if (!base || !variants.length || (base.max >= DARK && base.min <= LIGHT)) return { icon, iconDark: null };
-    const dark = base.max < DARK;
+    if (!base || !variants.length) return { icon, iconDark: null };
+    const dark = contrast(base.max, BG_DARK) < MIN_CONTRAST;
+    if (!dark && contrast(base.min, BG_LIGHT) >= MIN_CONTRAST) return { icon, iconDark: null };
+    const score = (/** @type {{ min: number, max: number }} */ l) => (dark ? contrast(l.max, BG_DARK) : contrast(l.min, BG_LIGHT));
     let best = null;
-    let bestL = dark ? base.max : base.min;
+    let bestScore = score(base);
     for (const v of variants) {
       const l = await luminance(v);
-      if (l && (dark ? l.max > bestL : l.min < bestL)) [best, bestL] = [v, dark ? l.max : l.min];
+      if (l && score(l) > bestScore) [best, bestScore] = [v, score(l)];
     }
-    if (!best) return { icon, iconDark: null };
+    if (!best || bestScore < MIN_CONTRAST) return { icon, iconDark: null };
     return dark ? { icon, iconDark: best } : { icon: best, iconDark: icon };
   }
 
