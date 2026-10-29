@@ -50,7 +50,7 @@ mkdir -p config && docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/config:/s
 # compose.yaml
 services:
   dashboard:
-    image: matthabjan/homelab-dashboard:0.1.5 # pin a version, update deliberately
+    image: matthabjan/homelab-dashboard:0.1.6 # pin a version, update deliberately
     restart: unless-stopped
     ports:
       - 127.0.0.1:3000:3000 # localhost only; reach it from the LAN or VPN through a reverse proxy
@@ -98,7 +98,7 @@ Pin an exact version in production so that it only updates when you choose to.
 
 ## Tech
 
-SvelteKit 2 / Svelte 5 on Node 24 (Node adapter). History is stored in the built-in `node:sqlite`. The only other runtime dependencies are `yaml` and `undici`. The fonts are self-hosted [Geist](https://vercel.com/font) (SIL Open Font License, see [static/fonts/OFL.txt](static/fonts/OFL.txt)). Service logos are not bundled: they load from [dashboard-icons](https://github.com/homarr-labs/dashboard-icons), [selfh.st icons](https://selfh.st/icons/) or your own files. Services without an icon get one matched by name, with its light variant in dark mode.
+SvelteKit 2 / Svelte 5 on Node 24 (Node adapter). History is stored in the built-in `node:sqlite`. The only other runtime dependencies are `yaml` and `undici`. The fonts are self-hosted [Geist](https://vercel.com/font) (SIL Open Font License, see [static/fonts/OFL.txt](static/fonts/OFL.txt)). Service logos are not bundled: they load from [dashboard-icons](https://github.com/homarr-labs/dashboard-icons), [selfh.st icons](https://selfh.st/icons/) or your own files. Services without an icon get one matched by name, with a light or dark variant where the icon would otherwise vanish.
 
 ## License
 

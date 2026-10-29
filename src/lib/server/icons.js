@@ -1,7 +1,8 @@
 // Automatic icons for services without `icon`: the service name, the container image, the widget type, then the
-// name's leading words are looked up in the selfh.st and dashboard-icons indexes (refreshed daily, kept in kv). When
-// the icon has a light variant, that becomes the dark-theme icon. selfh.st marks it in its index; for dashboard-icons
-// the brightest variant is taken, as names can't be trusted: there `lldap-dark` is the light one.
+// name's leading words are looked up in the selfh.st and dashboard-icons indexes (refreshed daily, kept in kv). The
+// icon itself is used in both themes; only when it would vanish in one, a variant takes its place there: the light one
+// in dark mode for a nearly black icon, the dark one in light mode for a nearly white icon. Variants are judged by
+// their colours, not their names: in dashboard-icons `lldap-dark` is the light one, `proxmox-light` too.
 import { request } from './http.js';
 import { CDN_DASHBOARD as DI, CDN_SELFHST as SH, slug } from './config.js';
 /** @import { Kv, Transport } from '$lib/types' */
@@ -28,32 +29,34 @@ export function iconCandidates(name, image, type) {
   return [...new Set(out.filter((c) => !!c))];
 }
 
-/** Brightest colour an SVG paints with, 0–1 (relative luminance). Unpainted shapes are black. */
+/** Darkest and brightest colour an SVG paints with, 0–1 (relative luminance). Unpainted shapes are black. */
 export function svgLuminance(svg) {
   const lum = (/** @type {number[]} */ rgb) => {
     const [r, g, b] = rgb.map((c) => (c /= 255) <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
     return 0.2126 * r + 0.7152 * g + 0.0722 * b;
   };
-  let max = 0;
+  let [min, max] = [1, 0];
   for (const [, v] of svg.matchAll(/(?:fill|stroke|stop-color)\s*[:=]\s*["']?\s*(#[0-9a-f]{3,8}\b|white|black|rgb\([^)]*\))/gi)) {
     const c = v.toLowerCase();
-    if (c === 'white') return 1;
-    if (c === 'black') continue;
     const hex = c.startsWith('#') ? (c.length < 6 ? [...c.slice(1, 4)].map((h) => h + h) : [c.slice(1, 3), c.slice(3, 5), c.slice(5, 7)]).map((h) => parseInt(h, 16)) : null;
-    const rgb = hex ?? (c.match(/\d+(\.\d+)?/g) ?? []).slice(0, 3).map(Number);
-    if (rgb.length === 3) max = Math.max(max, lum(rgb));
+    const rgb = c === 'white' ? [255, 255, 255] : c === 'black' ? [0, 0, 0] : hex ?? (c.match(/\d+(\.\d+)?/g) ?? []).slice(0, 3).map(Number);
+    if (rgb.length === 3) [min, max] = [Math.min(min, lum(rgb)), Math.max(max, lum(rgb))];
   }
-  return max;
+  return { min: Math.min(min, max), max };
 }
+
+const DARK = 0.2;
+const LIGHT = 0.8;
 
 /**
  * @param {{ kv: Kv, transport?: Transport, now?: () => number }} opts
  */
 export function createIconFinder({ kv, transport = request, now = Date.now }) {
-  /** @type {{ ts: number, sh: Record<string, [string, number]>, di: Record<string, string[]> } | null} */
+  /** @type {{ ts: number, sh: Record<string, [string, number, number]>, di: Record<string, string[]> } | null} */
   let index = kv.get('icons.index');
+  if (index && Object.values(index.sh).some((e) => e.length < 3)) index = null; // stored before dark variants were kept
   let tried = 0;
-  /** @type {Map<string, Promise<number | null>>} url → brightest colour (null: unknown) */
+  /** @type {Map<string, Promise<{ min: number, max: number } | null>>} url → darkest and brightest colour (null: unknown) */
   const bright = new Map();
   /** @type {Map<string, Promise<{ icon: string, iconDark: string | null } | null>>} */
   const found = new Map();
@@ -71,7 +74,7 @@ export function createIconFinder({ kv, transport = request, now = Date.now }) {
       found.clear();
       return null;
     }));
-    return /** @type {Promise<number | null>} */ (bright.get(url));
+    return /** @type {Promise<{ min: number, max: number } | null>} */ (bright.get(url));
   };
 
   /** Fetch both indexes when older than a day; a failure keeps the old ones and retries after an hour. */
@@ -83,7 +86,7 @@ export function createIconFinder({ kv, transport = request, now = Date.now }) {
       const [sh, di] = await Promise.all([get(`${SH}/index.json`).then((r) => r.json()), get(`${DI}/metadata.json`).then((r) => r.json())]);
       index = {
         ts: t,
-        sh: Object.fromEntries(sh.map((e) => [e.Reference, [e.SVG === 'Yes' ? 'svg' : 'png', e.Light === 'Yes' ? 1 : 0]])),
+        sh: Object.fromEntries(sh.map((e) => [e.Reference, [e.SVG === 'Yes' ? 'svg' : 'png', e.Light === 'Yes' ? 1 : 0, e.Dark === 'Yes' ? 1 : 0]])),
         di: Object.fromEntries(Object.entries(di).map(([n, m]) => [n, [m.base, ...Object.values(m.colors ?? {}).filter((v) => v !== n)]]))
       };
       kv.set('icons.index', index);
@@ -109,27 +112,40 @@ export function createIconFinder({ kv, transport = request, now = Date.now }) {
     return loose.map.get(compact(name)) ?? name;
   }
 
+  /**
+   * The icon in both themes, unless it would vanish in one: nearly black gets the brightest variant for dark mode,
+   * nearly white the darkest variant for light mode.
+   * @param {string} icon @param {string[]} variants
+   */
+  async function pick(icon, variants) {
+    const base = await luminance(icon);
+    if (!base || !variants.length || (base.max >= DARK && base.min <= LIGHT)) return { icon, iconDark: null };
+    const dark = base.max < DARK;
+    let best = null;
+    let bestL = dark ? base.max : base.min;
+    for (const v of variants) {
+      const l = await luminance(v);
+      if (l && (dark ? l.max > bestL : l.min < bestL)) [best, bestL] = [v, dark ? l.max : l.min];
+    }
+    if (!best) return { icon, iconDark: null };
+    return dark ? { icon, iconDark: best } : { icon: best, iconDark: icon };
+  }
+
   async function lookup(name) {
     name = resolve(name);
     const sh = index?.sh[name];
     if (sh) {
-      const [ext, light] = sh;
+      const [ext, light, dark] = sh;
       const icon = `${SH}/${ext}/${name}.${ext}`;
-      return { icon, iconDark: light ? `${SH}/${ext}/${name}-light.${ext}` : null };
+      if (ext !== 'svg') return { icon, iconDark: null };
+      return pick(icon, [...(light ? [`${SH}/svg/${name}-light.svg`] : []), ...(dark ? [`${SH}/svg/${name}-dark.svg`] : [])]);
     }
     const di = index?.di[name];
     if (!di) return null;
     const [ext, ...variants] = di;
     const icon = `${DI}/${ext}/${name}.${ext}`;
-    if (ext !== 'svg' || !variants.length) return { icon, iconDark: null };
-    let best = await luminance(icon);
-    let iconDark = null;
-    if (best === null) return { icon, iconDark };
-    for (const v of variants) {
-      const l = await luminance(`${DI}/svg/${v}.svg`);
-      if (l !== null && l > best) [best, iconDark] = [l, `${DI}/svg/${v}.svg`];
-    }
-    return { icon, iconDark };
+    if (ext !== 'svg') return { icon, iconDark: null };
+    return pick(icon, variants.map((v) => `${DI}/svg/${v}.svg`));
   }
 
   return {
