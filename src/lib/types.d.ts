@@ -80,6 +80,39 @@ export interface Service {
   container?: ContainerState | null;
   /** Image of a label-discovered container, for automatic icons. */
   image?: string | null;
+  /** a push check: jobs call /api/heartbeat/<id>; null when absent or misconfigured */
+  heartbeat: Heartbeat | null;
+}
+
+/** A service's `heartbeat:` block, durations in ms. */
+export interface Heartbeat {
+  /** URL path and kv key; defaults to the service id */
+  id: string;
+  every: number;
+  grace: number;
+  token: string;
+  /** counts in "oldest backup" / "backups overdue" */
+  backup: boolean;
+}
+
+/** How a check finds out whether a service is up. */
+export type CheckKind = 'http' | 'tcp' | 'container' | 'heartbeat';
+
+/** What the heartbeat endpoint stored for one id (kv `heartbeat:<id>`). */
+export interface HeartbeatRecord {
+  /** when the dashboard first saw this heartbeat: a job that never reports is overdue `every + grace` after it */
+  since: number;
+  lastOk: number | null;
+  lastFail: number | null;
+}
+
+/** A heartbeat's state as the engine last computed it. */
+export interface HeartbeatState extends HeartbeatRecord {
+  state: 'up' | 'down' | 'pending';
+  /** the job reported a failure after its last success */
+  failed: boolean;
+  /** when it became overdue (down and not failed) */
+  overdueSince: number | null;
 }
 
 export interface Bookmark {
@@ -368,6 +401,7 @@ export type WidgetState = WidgetResult & { ok: boolean; ts: number; error?: stri
 
 export interface ServiceState {
   probe: ProbeState;
+  heartbeat?: HeartbeatState | null;
   widget: WidgetState | null;
   wstate: Record<string, any>;
   cert: CertInfo | null;

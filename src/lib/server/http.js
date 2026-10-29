@@ -42,8 +42,33 @@ export async function getJson(url, opts = {}, transport = request) {
 export const basicAuth = (u, p) => 'Basic ' + Buffer.from(`${u ?? ''}:${p ?? ''}`).toString('base64');
 export const trimUrl = (u) => String(u || '').replace(/\/+$/, '');
 
-/** HTTP reachability check. Any response below 500 counts as "up" (login pages return 401/403). */
+/**
+ * TCP reachability: connected within 8 s is up, the time to connect is the latency. `connect` is the seam for tests.
+ * @param {string} host @param {number} port
+ * @returns {Promise<{ ok: boolean, ms: number | null, code: string | number }>}
+ */
+export function tcpProbe(host, port, { connect = net.connect, timeout = 8000 } = {}) {
+  const t0 = performance.now();
+  return new Promise((resolve) => {
+    const sock = connect({ host, port });
+    const done = (r) => { sock.destroy(); resolve(r); };
+    sock.setTimeout(timeout, () => done({ ok: false, ms: null, code: 'ETIMEDOUT' }));
+    sock.once('connect', () => done({ ok: true, ms: performance.now() - t0, code: 'open' }));
+    sock.once('error', (/** @type {NodeJS.ErrnoException} */ e) => done({ ok: false, ms: null, code: e?.code || 'ERROR' }));
+  });
+}
+
+/**
+ * Reachability check for a `siteMonitor`: `tcp://host:port` connects, anything else is an HTTP request where
+ * any response below 500 counts as "up" (login pages return 401/403).
+ */
 export async function probe(url) {
+  if (/^tcp:\/\//i.test(url)) {
+    let u;
+    try { u = new URL(url); } catch { return { ok: false, ms: null, code: 'Bad tcp:// URL' }; }
+    if (!u.port) return { ok: false, ms: null, code: 'tcp:// needs a port' };
+    return tcpProbe(u.hostname.replace(/^\[|\]$/g, ''), Number(u.port));
+  }
   const t0 = performance.now();
   try {
     const res = await request(url, { insecure: true, timeout: 8000, redirect: 'manual' });

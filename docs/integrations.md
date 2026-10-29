@@ -289,7 +289,7 @@ widget:
       label: items
       format: number
     - field: healthy
-      label: health
+      label: media health
       remap: [{ value: true, to: OK }, { value: false, to: Degraded }]
       crit: { below: 1 }             # ours: alert when the value crosses a threshold
 ```
@@ -299,7 +299,7 @@ widget:
 | Key | Meaning |
 |---|---|
 | `field` | Where the value is: a dot path (`a.b.0.c`) or the nested form `{ a: { b: c } }`. |
-| `label` | The stat's label. Default: the last key of `field`. |
+| `label` | The stat's label. Default: the last key of `field`. A threshold alert starts with it ("media health is Degraded"), so for a mapping with thresholds, pick a label that says what it belongs to. |
 | `format` | `text` (default), `number`, `float`, `percent`, `bytes`, `bitrate` (bits/s), `duration` (seconds), `date`, `relativeDate`, `size` (length of a list or object). |
 | `prefix`, `suffix` | Text before and after the value. |
 | `scale` | Multiply numbers, for example `100` or `"1/1024"`. |
@@ -314,7 +314,7 @@ The tile shows the stats in mapping order; the first mapping is the tile's line.
 
 | Severity | When |
 |---|---|
-| critical / warning | A mapping crosses its `crit` / `warn` threshold: "Health is Degraded", with the threshold in the detail. |
+| critical / warning | A mapping crosses its `crit` / `warn` threshold: "Media health is Degraded", with the threshold in the detail. |
 | warning | A mapping's `field` isn't in the response. The stat shows `—`. |
 
 If the response isn't JSON (a login page, for example), the tile shows *Stats unavailable · Response is not JSON*, and the start of the response goes to the container log.

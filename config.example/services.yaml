@@ -3,7 +3,9 @@
 #                "sh-<name>" for selfh.st icons, or a full URL. Missing icon → picked by service name from
 #                selfh.st / dashboard-icons, or a generated monogram when there's no match.
 #   iconDark:    optional variant used in dark mode
-#   siteMonitor: URL that is checked every 30 s (uptime, latency, TLS certificate)
+#   siteMonitor: URL that is checked every 30 s (uptime, latency, TLS certificate);
+#                tcp://host:port only checks that the port accepts connections (SSH, SMB, MQTT …)
+#   heartbeat:   a push check instead: the job calls the dashboard when it ran (see Backups below)
 #   latencyWarnMs: per-service "slow" limit in ms (default: settings.yaml → thresholds.latencyWarnMs)
 #   tlsVerify:   false → accept a self-signed certificate for this service's widget API
 #                (better: trust your CA with NODE_EXTRA_CA_CERTS, see README)
@@ -107,6 +109,10 @@
         href: https://ha.home.arpa
         description: Home automation
         siteMonitor: https://ha.home.arpa
+    - Mosquitto:
+        icon: mosquitto
+        description: MQTT broker
+        siteMonitor: tcp://mqtt.home.arpa:1883
 
 - Entertainment:
     - MusicAssistant:
@@ -131,6 +137,16 @@
               label: items
               format: number
             - field: healthy
-              label: health
+              label: media health
               remap: [{ value: true, to: OK }, { value: false, to: Degraded }]
               crit: { below: 1 }        # our addition: alerts when the server reports unhealthy
+
+- Backups:
+    - Nightly restic:
+        icon: restic
+        description: Offsite copy, reported by the job itself
+        heartbeat:
+          every: 24h              # how often the job runs: 30m, 6h, 1d …
+          grace: 1h               # default: 10% of every, at least 5m
+          token: ${HB_RESTIC}     # the job calls /api/heartbeat/backups-nightly-restic?token=…
+          backup: true            # counts in "oldest backup" and "backups overdue"

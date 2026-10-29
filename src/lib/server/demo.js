@@ -3,9 +3,10 @@
 // integration logic behind it: probes, certificates, temperatures and the first day of history.
 import { DEFAULT_SETTINGS } from './config.js';
 import { localName } from './local.js';
-import { insertProbe, insertMetric, countProbes, transaction, insertEvent, recordOpen } from './db.js';
+import { insertProbe, insertMetric, countProbes, transaction, insertEvent, recordOpen, kvSet } from './db.js';
+import { kvKey } from './heartbeat.js';
 
-export const DEMO = !!process.env.DEMO && process.env.DEMO !== '0';
+export { DEMO } from './config.js';
 export const SCENARIO = process.env.DEMO_SCENARIO === 'calm' ? 'calm' : 'issues';
 const calm = () => SCENARIO === 'calm';
 
@@ -73,6 +74,14 @@ export function seedHistory(services) {
         const blip = r() < 0.0015;
         insertProbe(s.id, ts, !(down || blip), down || blip ? null : isSlow(s) ? 150 + r() * 300 : baseMs(s) + r() * 14);
       }
+    }
+    // heartbeats: the job last ran 6 h ago, or (issues) 27 h ago with a 24 h schedule, so it is overdue
+    for (const s of services.filter((x) => x.heartbeat)) {
+      const lastOk = now - (calm() ? 6 : 27) * 3600_000;
+      const due = lastOk + s.heartbeat.every + s.heartbeat.grace;
+      kvSet(kvKey(s.heartbeat.id), { since: now - 7 * 86_400_000, lastOk, lastFail: null });
+      for (let ts = now - 86_400_000; ts < now; ts += 120_000) insertProbe(s.id, ts, ts <= due, null);
+      if (due < now) insertEvent(due, 'crit', s.id, `${s.name} went down`, 'Missed its run');
     }
     for (let ts = now - 86_400_000, i = 0; ts < now; ts += 300_000, i++) {
       const day = Math.sin((i / 288) * Math.PI * 2 - 1.2);

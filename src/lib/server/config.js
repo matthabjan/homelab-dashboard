@@ -6,8 +6,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import YAML from 'yaml';
 import { dockerUrlOk } from './integrations/docker.js';
-/** @import { Config, ConfigProblem, Discovered, Service, Settings } from '$lib/types' */
+/** @import { Config, ConfigProblem, Discovered, Heartbeat, Service, Settings } from '$lib/types' */
 
+export const DEMO = !!process.env.DEMO && process.env.DEMO !== '0';
 export const CONFIG_DIR = path.resolve(process.env.CONFIG_DIR || 'config');
 export const DATA_DIR = path.resolve(process.env.DATA_DIR || 'data');
 const SECRETS_DIR = process.env.SECRETS_DIR || '/run/secrets';
@@ -165,21 +166,64 @@ function deepMerge(base, over) {
 
 export const slug = (s) => s.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
+/** "30m", "6h", "1d", "90s", "2w", or a number of seconds → ms; null when it isn't one. */
+export function parseDuration(v) {
+  if (typeof v === 'number') return v > 0 ? v * 1000 : null;
+  const m = String(v ?? '').trim().match(/^(\d+(?:\.\d+)?)\s*(s|m|h|d|w)$/i);
+  return m ? Number(m[1]) * { s: 1e3, m: 6e4, h: 36e5, d: 864e5, w: 6048e5 }[m[2].toLowerCase()] : null;
+}
+
+/**
+ * A service's `heartbeat:` block with durations in ms. `grace` defaults to 10% of `every`, at least 5 minutes;
+ * `id` (the URL path) to the service id. Null when there is no block or `every` isn't a duration.
+ * @returns {Heartbeat | null}
+ */
+function toHeartbeat(def, id) {
+  if (!def || typeof def !== 'object') return null;
+  const every = parseDuration(def.every);
+  if (!every) return null;
+  return {
+    id: def.id ? slug(String(def.id)) : id,
+    every,
+    grace: parseDuration(def.grace) ?? Math.max(every * 0.1, 5 * 60_000),
+    token: def.token == null ? '' : String(def.token),
+    backup: def.backup === true
+  };
+}
+
 /** @returns {Service} */
 function toService(gname, name, def, settings) {
+  const id = slug(gname + '-' + name);
+  const heartbeat = toHeartbeat(def?.heartbeat, id);
   return {
-    id: slug(gname + '-' + name),
+    id,
     name,
     group: gname,
     href: def?.href ?? null,
     description: def?.description ?? '',
     icon: def?.icon ?? null,
     iconDark: def?.iconDark ?? null,
-    probe: def?.siteMonitor ?? def?.probe ?? null,
+    // a heartbeat is the service's check: one history, one status
+    probe: heartbeat ? null : def?.siteMonitor ?? def?.probe ?? null,
     insecure: def?.tlsVerify === undefined ? !settings.tlsVerify : !def.tlsVerify,
     latencyWarnMs: Number(def?.latencyWarnMs) || null,
-    widget: def?.widget ?? null
+    widget: def?.widget ?? null,
+    heartbeat
   };
+}
+
+/**
+ * What is wrong with a service's heartbeat block, if anything; the service then shows as unknown.
+ * @param {Service} svc @param {any} def @param {Set<string>} ids heartbeat ids taken so far
+ * @returns {string | null}
+ */
+function heartbeatProblem(svc, def, ids) {
+  if (def?.heartbeat == null) return null;
+  if (!svc.heartbeat) return `"${svc.name}": heartbeat needs \`every\` (such as 24h, 30m)`;
+  if (ids.has(svc.heartbeat.id)) return `"${svc.name}": heartbeat id "${svc.heartbeat.id}" is used twice`;
+  ids.add(svc.heartbeat.id);
+  // the demo has no secrets set
+  return svc.heartbeat.token || DEMO ? null : `"${svc.name}": heartbeat needs a token`;
 }
 
 /**
@@ -196,7 +240,8 @@ export function withDiscovered(cfg, discovered) {
   const services = [...cfg.services];
   const ids = new Set(services.map((s) => s.id));
   for (const d of discovered) {
-    const svc = { ...toService(d.group, d.name, d.def, cfg.settings), container: d.container ?? null, image: d.image ?? null };
+    // label values are never secret-substituted, so no heartbeat (token) from labels
+    const svc = { ...toService(d.group, d.name, d.def, cfg.settings), heartbeat: null, container: d.container ?? null, image: d.image ?? null };
     if (ids.has(svc.id)) continue;
     ids.add(svc.id);
     let group = groups.find((g) => g.name === d.group);
@@ -214,6 +259,7 @@ export function loadConfig() {
   const settings = deepMerge(DEFAULT_SETTINGS, readYaml('settings.yaml', 'map', {}, problems));
   const groups = [];
   const services = [];
+  const heartbeatIds = new Set();
   for (const [gname, items] of groupsOf(readYaml('services.yaml', 'list', [], problems), 'services.yaml', problems)) {
     const group = { name: gname, services: /** @type {Service[]} */ ([]) };
     for (const [name, def] of items) {
@@ -221,6 +267,8 @@ export function loadConfig() {
       if (svc.widget?.type === 'docker' && !dockerUrlOk(svc.widget.url)) {
         problems.push({ file: 'services.yaml', message: `"${name}": a docker widget needs an http(s):// url (a socket proxy, see docs/integrations.md#docker)`, fallback: null });
       }
+      const hb = heartbeatProblem(svc, def, heartbeatIds);
+      if (hb) { problems.push({ file: 'services.yaml', message: hb, fallback: null }); svc.heartbeat = null; }
       group.services.push(svc);
       services.push(svc);
     }

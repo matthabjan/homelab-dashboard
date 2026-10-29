@@ -4,7 +4,7 @@ import { probeStats, uptimeSince, probeBuckets, series, recentEvents, openScores
 import { fmtClock, fmtDuration as fmtAge, fmtHours, fmtSize } from './format.js';
 import { DEMO } from './demo.js';
 import { hostService, hostSource } from './local.js';
-/** @import { AttentionItem, ContainerCounts, Drive, Fact, Gauge, Level, NetworkReading, Settings, Snapshot, Tile, Traffic } from '$lib/types' */
+/** @import { AttentionItem, BackupStatus, ContainerCounts, Drive, Heartbeat, HeartbeatState, Fact, Gauge, Level, NetworkReading, Settings, Snapshot, Tile, Traffic } from '$lib/types' */
 /** @import { Engine } from './engine.js' */
 
 const RANK = { crit: 3, warn: 2, info: 1, ok: 0 };
@@ -29,14 +29,57 @@ const firstSeen = new Map();
 const level = (v, warn, crit) => (v == null ? 'none' : v >= crit ? 'crit' : v >= warn ? 'warn' : 'ok');
 
 /**
- * Status of a label-discovered container without a siteMonitor. The Portainer widget raises its alerts.
- * @returns {{ lvl: Level, status: string, line: string | null }}
+ * A tile's status from a check other than a probe. `alert` (critical) is completed with the service name.
+ * @typedef {{ lvl: Tile['level'], status: string, line: string | null, lineLevel?: Tile['lineLevel'], alert?: { title: string, detail: string, ts: number } }} CheckStatus
+ */
+
+/**
+ * Status of a label-discovered container without a siteMonitor. The container widget raises its alerts.
+ * @returns {CheckStatus}
  */
 function containerStatus({ state, health, exitCode }) {
   if (state === 'running' && health === 'unhealthy') return { lvl: 'warn', status: 'Unhealthy', line: 'Container unhealthy' };
   if (state === 'running') return { lvl: 'ok', status: 'Up', line: null };
   if (state === 'restarting') return { lvl: 'crit', status: 'Down', line: 'Container restarting' };
   return { lvl: 'crit', status: 'Down', line: `Container ${state}${exitCode ? ` · exit ${exitCode}` : ''}` };
+}
+
+/**
+ * Status of a heartbeat service: when its job last ran, or since when it is overdue or failed.
+ * @param {Heartbeat} hb @param {HeartbeatState | null | undefined} st @param {number} now
+ * @returns {CheckStatus}
+ */
+export function heartbeatStatus(hb, st, now) {
+  const every = `every ${fmtAge(hb.every)}`;
+  if (!st || st.state === 'pending') return { lvl: 'unknown', status: 'Waiting', line: `Waiting for the first run · ${every}`, lineLevel: 'muted' };
+  const last = st.lastOk != null ? `last run ${fmtAge(now - st.lastOk)} ago` : 'never ran';
+  if (st.failed) {
+    const at = /** @type {number} */ (st.lastFail);
+    return { lvl: 'crit', status: 'Down', line: `Reported failure ${fmtClock(at)}`, alert: { title: 'reported a failure', detail: `${fmtClock(at)} · ${last}`, ts: at } };
+  }
+  if (st.state === 'down') {
+    const since = /** @type {number} */ (st.overdueSince);
+    return { lvl: 'crit', status: 'Down', line: `Overdue since ${fmtClock(since)}`, alert: { title: 'missed its run', detail: `${last} · ${every}`, ts: since } };
+  }
+  return { lvl: 'ok', status: 'Up', line: `Last run ${fmtAge(now - /** @type {number} */ (st.lastOk))} ago · ${every}`, lineLevel: null };
+}
+
+/**
+ * PBS backups plus heartbeats marked `backup: true` (restic, borg, Kopia …): overdue counts added up, the oldest age
+ * the larger one; a heartbeat that never ran has no age yet.
+ * @param {BackupStatus | undefined} pbs @param {(HeartbeatState | null)[]} beats @param {number} now
+ * @returns {BackupStatus | undefined}
+ */
+export function mergeBackups(pbs, beats, now) {
+  const known = beats.filter((b) => b && b.state !== 'pending');
+  if (!known.length) return pbs;
+  const ages = known.flatMap((b) => (b?.lastOk != null ? [now - b.lastOk] : []));
+  const oldest = [pbs?.oldestAge, ...ages].filter((a) => a != null);
+  return {
+    overdue: (pbs?.overdue ?? 0) + known.filter((b) => b?.state === 'down').length,
+    oldestAge: oldest.length ? Math.max(.../** @type {number[]} */ (oldest)) : null,
+    known: true
+  };
 }
 
 /**
@@ -96,7 +139,7 @@ export function buildSnapshot(engine) {
       const st = engine.state(s.id);
       const p = st.probe;
       const w = st.widget;
-      const ps = s.probe || s.container ? stats(s.id, now) : null; // a container's state is recorded like a probe
+      const ps = s.probe || s.container || s.heartbeat ? stats(s.id, now) : null; // container and heartbeat states are recorded like probes
       const host = (() => { try { return new URL(s.href || s.probe || '').host; } catch { return ''; } })();
       /** @type {Tile['level']} */
       let lvl = s.probe ? (p.checked ? 'ok' : 'unknown') : w ? 'ok' : 'unknown';
@@ -104,20 +147,21 @@ export function buildSnapshot(engine) {
       let line = w?.line || s.description || '';
       /** @type {Tile['lineLevel']} */
       let lineLevel = null;
-      const ct = !s.probe && s.container ? containerStatus(s.container) : null;
+      const ct = !s.probe && s.container ? containerStatus(s.container) : s.heartbeat ? heartbeatStatus(s.heartbeat, st.heartbeat, now) : null;
       const auto = s.icon ? null : engine.autoIcons.get(s.id);
       const iconDark = s.iconDark ?? auto?.iconDark;
       if (ct) {
         ({ lvl, status } = ct);
-        if (ct.line) { line = ct.line; lineLevel = lvl; }
+        if (ct.line) { line = ct.line; lineLevel = ct.lineLevel !== undefined ? ct.lineLevel : lvl === 'unknown' ? 'muted' : lvl; }
       }
 
       const push = (a) => attention.push({ ...a, sid: s.id, service: s.name, href: s.href, ts: a.ts ?? w?.ts ?? now });
       // a stopped container is p.down (the engine records it like a failed probe); unhealthy is only a warning
       if (ct?.lvl === 'warn') push({ sev: 'warn', title: `${s.name} is unhealthy`, detail: 'container health check failing' });
+      if (ct?.alert) push({ sev: 'crit', ...ct.alert, title: `${s.name} ${ct.alert.title}` });
 
       const slowMs = s.latencyWarnMs ?? th.latencyWarnMs;
-      if (p.down) {
+      if (p.down && !s.heartbeat) {
         lvl = 'crit';
         status = 'Down';
         line = `Down since ${fmtClock(p.since)} · ${p.reason}`;
@@ -165,7 +209,7 @@ export function buildSnapshot(engine) {
         icon: resolveIcon(s.icon ?? auto?.icon, s.name),
         iconDark: iconDark ? resolveIcon(iconDark, s.name) : null,
         level: lvl,
-        status: p.down ? 'Down' : status,
+        status: p.down && !s.heartbeat ? 'Down' : status,
         line: line || (lvl === 'ok' ? 'Online' : ''),
         lineLevel,
         stats: (w?.stats || []).slice(0, 3),
@@ -317,7 +361,7 @@ export function buildSnapshot(engine) {
   // ---- verdict ----
   attention.sort((a, b) => RANK[b.sev] - RANK[a.sev] || b.ts - a.ts);
   const needCount = attention.filter((a) => a.sev === 'crit' || a.sev === 'warn').length;
-  const backups = widgets.find((x) => x.w.backups)?.w.backups;
+  const backups = mergeBackups(widgets.find((x) => x.w.backups)?.w.backups, engine.cfg.services.flatMap((s) => (s.heartbeat?.backup ? [engine.state(s.id).heartbeat ?? null] : [])), now);
   const certWarn = all.filter((t) => t.cert && t.cert.days < th.certWarnDays).length;
   const subParts = [`${up} of ${probed.length} services up`];
   if (backups?.known) subParts.push(backups.overdue ? `${backups.overdue} backup${backups.overdue > 1 ? 's' : ''} overdue` : 'backups current');

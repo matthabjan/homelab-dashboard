@@ -146,7 +146,8 @@ A list of groups. Each group is a list of services. This is the [gethomepage for
 | `description` | Second line of the tile when the widget has nothing more specific to show. |
 | `icon` | See [Icons](#icons). Without one, an icon is [picked automatically](#automatic-icons). |
 | `iconDark` | Icon used in dark mode. |
-| `siteMonitor` | URL checked every `intervals.probe` seconds, which gives up/down status, uptime and latency. Any response below 500 counts as up, including the 401 a login page returns. Two failures in a row mark the service down. `https://` URLs also get certificate-expiry checks. `probe` is accepted as an alias. |
+| `siteMonitor` | URL checked every `intervals.probe` seconds, which gives up/down status, uptime and latency. Any response below 500 counts as up, including the 401 a login page returns. Two failures in a row mark the service down. `https://` URLs also get certificate-expiry checks. `tcp://host:port` only checks that the port accepts a connection, for services without HTTP (SSH, SMB, MQTT, databases); the latency is the time to connect. `probe` is accepted as an alias. |
+| `heartbeat` | A push check for jobs, instead of `siteMonitor`. See [Heartbeats](#heartbeats). |
 | `latencyWarnMs` | The *Slow* limit for this service, overriding `thresholds.latencyWarnMs`. |
 | `tlsVerify` | `false` accepts a self-signed certificate on this service's **widget** API. It overrides the global `tlsVerify`. |
 | `widget` | Live data from the service's API. See [Integrations](integrations.md) for each `type`. |
@@ -154,6 +155,54 @@ A list of groups. Each group is a list of services. This is the [gethomepage for
 Service names should be unique within a group. A service's id is derived from its group and name, and the id is what uptime history and open counts are stored under, so **renaming a service or its group starts its history from scratch**.
 
 Widgets of a type this dashboard doesn't implement are ignored, and the tile still works.
+
+There is no ICMP ping: it needs extra privileges in the container. Check a port instead, such as `tcp://nas.home.arpa:445` (SMB), `:22` (SSH) or `:80`.
+
+### Heartbeats
+
+For jobs that run on a schedule (backups, cron jobs, scripts), the job reports to the dashboard when it ran, instead of the dashboard checking it. A heartbeat service is up while the last run is on schedule, and down when a run is overdue or the job reported a failure. Its uptime and 24-hour strip mean "on schedule".
+
+```yaml
+- Backups:
+    - Nightly restic:
+        description: Offsite copy
+        heartbeat:
+          every: 24h          # how often the job runs: 30m, 6h, 1d, 2w …
+          grace: 1h           # how late it may be; default 10% of every, at least 5m
+          token: ${HB_RESTIC} # a long random string, passed as a secret
+          backup: true        # counts in "oldest backup" and "backups overdue"
+          # id: restic        # the URL path; default: the service id (backups-nightly-restic)
+```
+
+| Key | Description |
+|---|---|
+| `every` | Expected time between runs: a number with `s`, `m`, `h`, `d` or `w`, or a number of seconds. |
+| `grace` | How long after `every` a run may arrive before it counts as missed. Default: 10% of `every`, at least 5 minutes. |
+| `token` | Required. The job sends it with each call. Generate one with `openssl rand -hex 24`. |
+| `backup` | `true` adds the job to the backup figures next to Proxmox Backup Server's: *oldest backup* and *backups overdue*. That covers restic, borg, Kopia or anything else that can call a URL. |
+| `id` | The id in the URL. Default: the service id, made from the group and name. Each id may be used once. |
+
+The job calls `/api/heartbeat/<id>` (GET or POST) when it succeeded, and `/api/heartbeat/<id>/fail` when it failed. The token goes in `Authorization: Bearer <token>` or `?token=<token>`. The answer is `ok` (200). An unknown id and a wrong token both get 404, and more than one call per second for the same id gets 429.
+
+```bash
+# at the end of a backup script
+if restic backup /data; then
+  curl -fsS -m 10 -H "Authorization: Bearer $HB" https://dash.home.arpa/api/heartbeat/backups-nightly-restic
+else
+  curl -fsS -m 10 -H "Authorization: Bearer $HB" https://dash.home.arpa/api/heartbeat/backups-nightly-restic/fail
+fi
+
+# or in one line, with the job's output for the log
+restic backup /data > /tmp/restic.log 2>&1 \
+  && curl -fsS -m 10 "https://dash.home.arpa/api/heartbeat/backups-nightly-restic?token=$HB" \
+  || curl -fsS -m 10 -H 'Content-Type: application/octet-stream' --data-binary @/tmp/restic.log "https://dash.home.arpa/api/heartbeat/backups-nightly-restic/fail?token=$HB"
+```
+
+A body sent with `/fail` is written to the container log only; the page shows when the failure was reported, never what the job said. A token in the URL can end up in proxy access logs, so prefer the `Authorization` header where you can.
+
+The last success and failure are stored in the database, so a restart doesn't make jobs overdue. A new heartbeat waits for its first call until `every + grace` after the dashboard first saw it, then counts as missed. A service with a `heartbeat` ignores `siteMonitor`: the heartbeat is its check.
+
+Behind a reverse proxy with basic auth, exempt `/api/heartbeat/` from the login, but keep it behind the IP allowlist: see [Deployment](deployment.md#heartbeats-behind-basic-auth).
 
 ---
 

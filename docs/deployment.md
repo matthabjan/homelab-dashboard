@@ -75,8 +75,9 @@ services:
       - traefik.http.middlewares.dashboard-headers.headers.referrerPolicy=no-referrer
       - traefik.http.middlewares.dashboard-headers.headers.permissionsPolicy=camera=(), microphone=(), geolocation=(), payment=(), usb=()
       - traefik.http.middlewares.dashboard-headers.headers.customResponseHeaders.X-Robots-Tag=noindex, nofollow
-      # manifest, icons and service worker without login, so phones can install the app (see Security)
-      - traefik.http.routers.dashboard-icons.rule=Host(`${DASHBOARD_HOST}`) && (Path(`/manifest.webmanifest`) || Path(`/service-worker.js`) || PathPrefix(`/assets/images/`))
+      # without login, still behind the allowlist: manifest, icons and service worker, so phones can install the app,
+      # and heartbeats, which bring their own token (see Security)
+      - traefik.http.routers.dashboard-icons.rule=Host(`${DASHBOARD_HOST}`) && (Path(`/manifest.webmanifest`) || Path(`/service-worker.js`) || PathPrefix(`/assets/images/`) || PathPrefix(`/api/heartbeat/`))
       - traefik.http.routers.dashboard-icons.priority=1000
       - traefik.http.routers.dashboard-icons.entrypoints=websecure
       - traefik.http.routers.dashboard-icons.tls=true
@@ -200,9 +201,25 @@ Don't publish port 3000 on a LAN-facing interface.
 
 - **LAN or VPN only.** The page lists your services, their addresses and what is wrong with them. Even behind a login, keep it off the internet; reach it from outside through your VPN.
 - **No login of its own.** Access control and TLS are the reverse proxy's job. Anyone who reaches port 3000 directly, including any container on the proxy's Docker network, bypasses both. Keep that network for trusted containers.
+- **Heartbeats behind basic auth.** Jobs authenticate with their [heartbeat token](configuration.md#heartbeats), not with the dashboard login, so `/api/heartbeat/` has to bypass basic auth. Keep it on the IP allowlist: jobs run on your LAN, and the endpoint isn't meant for the internet. See [Heartbeats behind basic auth](#heartbeats-behind-basic-auth).
 - **Installing the app with basic auth.** Phones fetch the manifest, app icons and service worker without credentials. That's why the example stack serves `/manifest.webmanifest`, `/service-worker.js` and `/assets/images/` without the login, but still only through the IP allowlist. These files contain only the title and the icons.
 - **Credentials** are never sent to the browser. Upstream error bodies go to the container log only, and `${…}` placeholders in container labels are not filled in.
 - Use a read-only account for each integration wherever the product allows it. See [Integrations](integrations.md).
+
+### Heartbeats behind basic auth
+
+[Heartbeat](configuration.md#heartbeats) calls carry their own token, and a job can't answer a basic-auth prompt (an `Authorization: Bearer` header would also collide with it). Serve `/api/heartbeat/` without the login, but only through the IP allowlist. The Traefik stack above already does, in the `dashboard-icons` router. With nginx:
+
+```nginx
+location /api/heartbeat/ {
+  auth_basic off;           # the heartbeat token authenticates the job
+  allow 192.168.1.0/24;     # your LAN: jobs run here, the endpoint isn't for the internet
+  deny all;
+  proxy_pass http://127.0.0.1:3000;
+  proxy_set_header Host $host;
+  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+}
+```
 
 ### TLS for widget APIs
 

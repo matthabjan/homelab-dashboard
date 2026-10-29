@@ -83,6 +83,34 @@ test('config files with mistakes', async (t) => {
     assert.deepEqual(loadConfig().problems.map((p) => p.message), ['"Box": a docker widget needs an http(s):// url (a socket proxy, see docs/integrations.md#docker)']);
   });
 
+  await t.test('heartbeats: durations, default grace and id; no token or a duplicate id is a problem', () => {
+    process.env.HB_TEST = 'tok';
+    write('services.yaml', `
+- Backups:
+    - Nightly restic:
+        siteMonitor: https://ignored.home.arpa
+        heartbeat: { every: 24h, token: "\${HB_TEST}", backup: true }
+    - Borg:
+        heartbeat: { every: 30m, grace: 2m, token: x, id: Backups nightly restic }
+    - Kopia:
+        heartbeat: { every: 1d }
+    - Cron:
+        heartbeat: { every: soon, token: x }
+`);
+    const cfg = loadConfig();
+    const hb = (n) => cfg.services.find((s) => s.name === n)?.heartbeat;
+    assert.deepEqual(hb('Nightly restic'), { id: 'backups-nightly-restic', every: 86_400_000, grace: 8_640_000, token: 'tok', backup: true });
+    assert.equal(cfg.services[0].probe, null, 'the heartbeat is the check');
+    assert.equal(hb('Borg'), null);
+    assert.equal(hb('Kopia'), null);
+    assert.deepEqual(cfg.problems.map((p) => p.message), [
+      '"Borg": heartbeat id "backups-nightly-restic" is used twice',
+      '"Kopia": heartbeat needs a token',
+      '"Cron": heartbeat needs `every` (such as 24h, 30m)'
+    ]);
+    delete process.env.HB_TEST;
+  });
+
   await t.test('fixing the file clears the problem; a removed file is simply empty', () => {
     write('services.yaml', SERVICES);
     assert.deepEqual(loadConfig().problems, []);
