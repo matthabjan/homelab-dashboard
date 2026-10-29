@@ -8,7 +8,7 @@ A self-hosted launcher and status page for a Proxmox-based homelab. It shows at 
 
 It is made for your **LAN or VPN** (WireGuard, Tailscale, …): it has no login of its own and is not meant to be reachable from the internet.
 
-![Dashboard in dark mode: the overall status, the problems that need attention, host vitals and the most used services](https://raw.githubusercontent.com/matthabjan/homelab-dashboard/main/docs/screenshots/desktop-dark.png)
+![Dashboard in dark mode: the overall status, the problems that need attention, host vitals and the most used services](docs/screenshots/desktop-dark.png)
 
 - **Status first.** One line at the top gives the overall state ("Everything is running." or the most important problem), followed by a list of problems ordered by severity. When nothing is wrong, that list shows recent activity instead.
 - **Vitals.** One card with four tabs: **System** (CPU, RAM, main disk and temperature of the Proxmox node, each with a 24-hour trend), **Storage** (how full the storage across PVE, PBS and the NAS is), **Drives** (SMART health of the physical disks) and **Network** (WAN and LAN traffic, DNS statistics). A tab whose panel has a warning is marked, so nothing hides behind a closed tab.
@@ -23,9 +23,9 @@ It is made for your **LAN or VPN** (WireGuard, Tailscale, …): it has no login 
 
 ## Screenshots
 
-![Light mode: the vitals card on its Network tab, the most used services, and service tiles with their 24-hour health strips](https://raw.githubusercontent.com/matthabjan/homelab-dashboard/main/docs/screenshots/desktop-light.png)
+![Light mode: the vitals card on its Network tab, the most used services, and service tiles with their 24-hour health strips](docs/screenshots/desktop-light.png)
 
-<p align="center"><img src="https://raw.githubusercontent.com/matthabjan/homelab-dashboard/main/docs/screenshots/phones.png" width="640" alt="On a phone: the status card and the attention list in dark mode, and the Storage tab of the vitals card in light mode"></p>
+![On a phone: the status card and the attention list in dark mode, and the Storage tab of the vitals card in light mode](docs/screenshots/phones.png)
 
 Every screenshot shows the built-in demo data (`DEMO=1`), not a real homelab.
 
