@@ -27,6 +27,9 @@ pwa:
   background: "#0A0D12"
 
 host:
+  # source: auto           # auto: the Proxmox node if there is a proxmox widget, else this machine | proxmox | local
+  # name: docker-01        # shown as Node (default: the Proxmox node, else HOST_NAME, else "this host")
+  # disk: /                # local host: path whose filesystem the Disk gauge shows
   service: Proxmox VE      # which service provides CPU / RAM / storage for the host card
   temperature: true        # CPU + NVMe temperatures from the kernel
   # storage: local-zfs     # PVE storage on the host gauge (default: the largest local one holding guest disks, else root)

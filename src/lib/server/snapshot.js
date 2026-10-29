@@ -3,6 +3,7 @@ import { resolveIcon, assetUrl } from './config.js';
 import { probeStats, uptimeSince, probeBuckets, series, recentEvents, openScores } from './db.js';
 import { fmtClock, fmtDuration as fmtAge, fmtHours, fmtSize } from './format.js';
 import { DEMO } from './demo.js';
+import { hostService, hostSource } from './local.js';
 /** @import { AttentionItem, Drive, Fact, Gauge, Level, NetworkReading, Settings, Snapshot, Tile, Traffic } from '$lib/types' */
 /** @import { Engine } from './engine.js' */
 
@@ -183,9 +184,9 @@ export function buildSnapshot(engine) {
   const probed = all.filter((t) => t.level !== 'unknown');
   const up = probed.filter((t) => t.status !== 'Down').length;
 
-  // ---- host vitals ----
-  const hostSvc = engine.cfg.services.find((s) => (settings.host.service ? s.name === settings.host.service : s.widget?.type === 'proxmox'));
-  const hw = hostSvc ? engine.state(hostSvc.id).widget?.host : null;
+  // ---- host vitals: the Proxmox node, or the machine the dashboard runs on ----
+  const hostSvc = hostSource(engine.cfg) === 'proxmox' ? hostService(engine.cfg) : undefined;
+  const hw = hostSvc ? engine.state(hostSvc.id).widget?.host : engine.local;
   const since24 = now - 24 * H;
   const spark = (key) => series(key, since24, now, 48).values;
   let host = null;
@@ -194,9 +195,9 @@ export function buildSnapshot(engine) {
     /** @type {Gauge[]} */
     const gauges = [];
     if (hw) {
-      gauges.push({ key: 'cpu', label: 'CPU', val: Math.round(hw.cpu), unit: '%', pct: hw.cpu, level: level(hw.cpu, 75, 90), sub: `${hw.cpus} threads`, series: spark('host.cpu'), max: 100 });
+      gauges.push({ key: 'cpu', label: 'CPU', val: hw.cpu == null ? '—' : Math.round(hw.cpu), unit: '%', pct: hw.cpu, level: level(hw.cpu, 75, 90), sub: `${hw.cpus} threads`, series: spark('host.cpu'), max: 100 });
       gauges.push({ key: 'mem', label: 'Memory', val: (hw.mem / 1024 ** 3).toFixed(1), unit: `of ${Math.round(hw.maxmem / 1024 ** 3)} GiB`, pct: hw.memPct, level: level(hw.memPct, 80, 92), sub: `${Math.round(hw.memPct)}% used`, series: spark('host.mem'), max: 100 });
-      gauges.push({ key: 'disk', label: 'Disk', val: Math.round(hw.disk.pct ?? 0), unit: '%', pct: hw.disk.pct, level: level(hw.disk.pct, th.storageAmberPct, th.storageWarnPct), sub: hw.disk.name, series: null });
+      gauges.push({ key: 'disk', label: 'Disk', val: hw.disk.pct == null ? '—' : Math.round(hw.disk.pct), unit: '%', pct: hw.disk.pct, level: level(hw.disk.pct, th.storageAmberPct, th.storageWarnPct), sub: hw.disk.name, series: null });
     }
     if (temps?.cpu != null) {
       const span = th.tempWarnC + 15 - th.tempMinC;
@@ -206,11 +207,12 @@ export function buildSnapshot(engine) {
       for (const n of temps.nvme) if (n >= 70) attention.push({ sev: 'warn', title: `NVMe at ${Math.round(n)} °C`, detail: 'drive is running hot', href: hostSvc?.href, ts: now });
     }
     host = {
-      name: hw?.node ?? 'host',
+      name: settings.host.name || (hw?.node ?? 'host'),
       href: hostSvc?.href ?? null,
-      facts: hw
-        ? [...(hw.uptime ? [{ label: 'Uptime', value: hw.uptime }] : []), { label: 'Guests', value: `${hw.guestsRunning} of ${hw.guestsTotal} running` }]
-        : [],
+      facts: [
+        ...(hw?.uptime ? [{ label: 'Uptime', value: hw.uptime }] : []),
+        ...(hw?.guestsTotal != null ? [{ label: 'Guests', value: `${hw.guestsRunning} of ${hw.guestsTotal} running` }] : [])
+      ],
       gauges
     };
   }

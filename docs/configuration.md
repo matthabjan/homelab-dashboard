@@ -54,13 +54,28 @@ Paths are relative to the config folder (served under `/assets/`), or full `http
 
 ### `host`: the System panel
 
+The System panel shows a Proxmox node when there is a `proxmox` widget, and otherwise the machine the dashboard runs on (the **local host**): CPU, memory, disk and uptime from `/proc`, plus temperatures. The panel works without Proxmox.
+
 | Key | Default | Description |
 |---|---|---|
+| `source` | `auto` | `auto`: the Proxmox node if a `proxmox` widget exists, else the local host. `proxmox` or `local` forces one. |
+| `name` | see description | Shown as *Node*. Default: the Proxmox node's name, else the `HOST_NAME` environment variable, else `this host`. (Inside a container the hostname is the container id, so it isn't used.) |
+| `disk` | `/` | Local host: the path whose filesystem the *Disk* gauge shows. In Docker, `/` is usually the host disk that holds Docker's data. To show another disk, mount it read-only (`- /mnt/data:/mnt/data:ro`) and set `disk: /mnt/data`. |
 | `service` | first `proxmox` widget | Name of the service (as written in `services.yaml`) whose Proxmox node is shown as the host. |
 | `node` | first online node | Proxmox node to show, for clusters. A widget's own `node:` takes precedence. |
 | `temperature` | `true` | Read CPU and NVMe temperatures from the kernel (`/sys/class/hwmon`). |
 | `storage` | automatic | PVE storage shown on the System panel's *Disk* gauge. By default it is the largest local storage that holds guest disks (`images` / `rootdir` content), otherwise the root filesystem. |
 | `storages` | all | List of PVE storage names to show in the Storage panel. |
+
+What the local host shows depends on where the dashboard runs:
+
+| Environment | What it shows |
+|---|---|
+| Docker container | The host's CPU, memory and uptime. Docker doesn't give a container its own view of `/proc/stat` and `/proc/meminfo`. |
+| LXC with lxcfs (the Proxmox default) | The **container's** CPU and memory, not the node's. Proxmox users should keep the `proxmox` source. |
+| VM | The VM itself. |
+
+CPU usage is measured between two polls, so the CPU gauge shows `—` for the first minute after a start.
 
 ### `network`: the Network panel
 
@@ -82,7 +97,7 @@ The *Most used* row above the groups fills itself from how often you open each s
 | Key | Default | Description |
 |---|---|---|
 | `probe` | `30` | Reachability check for every `siteMonitor`. |
-| `widgets` | `60` | Polling of widget APIs and host temperatures. |
+| `widgets` | `60` | Polling of widget APIs, the local host and temperatures. |
 | `cert` | `21600` | TLS certificate check (every 6 h). |
 
 The page shows a "stale" notice when no update has arrived for 2.5 × the longer of `probe` and `widgets`.
@@ -245,5 +260,7 @@ labels:
 | `DEMO` | none | `1` uses sample data instead of real APIs. |
 | `DEMO_SCENARIO` | `issues` | `issues` (several problems) or `calm` (everything healthy). |
 | `HWMON_DIR` | `/sys/class/hwmon` | Where temperatures are read from. |
+| `PROC_DIR` | `/proc` | Where the local host's CPU, memory and uptime are read from. |
+| `HOST_NAME` | none | Name of the local host, shown as *Node* when `host.name` isn't set. |
 
 `PORT`, `HOST`, `ORIGIN` and the `*_HEADER` variables come from SvelteKit's Node adapter. See [its documentation](https://svelte.dev/docs/kit/adapter-node#Environment-variables) for the rest, such as `BODY_SIZE_LIMIT` and `SHUTDOWN_TIMEOUT`.

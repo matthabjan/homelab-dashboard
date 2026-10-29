@@ -7,12 +7,13 @@ import { openDb, insertProbe, insertMetric, insertEvent, prune, kvGet, kvSet } f
 import { probe, certInfo, reasonText } from './http.js';
 import { fmtClock } from './format.js';
 import { readTemps } from './integrations/host.js';
-import { DEMO, SCENARIO, demoProbe, demoCert, demoTemps, seedHistory } from './demo.js';
+import { hostSource, readLocal } from './local.js';
+import { DEMO, SCENARIO, demoProbe, demoCert, demoTemps, demoLocal, seedHistory } from './demo.js';
 import { FIXTURES, fixtureTransport } from './demo/index.js';
 import { buildSnapshot } from './snapshot.js';
 import { createIconFinder, iconCandidates } from './icons.js';
 import { INTEGRATIONS, ORDER, createContext } from './integrations/index.js';
-/** @import { Config, Discovered, Service, ServiceState, Shared, Snapshot, Temps, Widget } from '$lib/types' */
+/** @import { Config, Discovered, HostVitals, Service, ServiceState, Shared, Snapshot, Temps, Widget } from '$lib/types' */
 
 const kv = { get: kvGet, set: kvSet };
 
@@ -34,6 +35,9 @@ export class Engine extends EventEmitter {
   shared = {};
   /** @type {Temps | null} */
   temps = null;
+  /** @type {HostVitals | null} the machine the dashboard runs on, when `host.source` resolves to local */
+  local = null;
+  localState = {}; // the previous /proc/stat totals, for CPU %
   timers = [];
   icons = createIconFinder({ kv });
   /** @type {Map<string, { icon: string, iconDark: string | null }>} service id → icon found for a service without `icon` */
@@ -146,6 +150,12 @@ export class Engine extends EventEmitter {
     await Promise.all(list.filter((x) => !ORDER.includes(x.widget.type)).map(run));
     this.updateDiscovered(list);
     this.recordContainers(list, now);
+
+    if (hostSource(this.cfg) === 'local') {
+      this.local = DEMO ? demoLocal(settings.host) : await readLocal(settings.host, this.localState);
+      // the same keys the Proxmox widget records, so the gauges' sparklines don't care where they came from
+      if (this.local) { insertMetric('host.cpu', now, this.local.cpu); insertMetric('host.mem', now, this.local.memPct); }
+    } else this.local = null;
 
     if (settings.host.temperature) {
       this.temps = DEMO ? demoTemps() : await readTemps();

@@ -2,6 +2,7 @@
 // Widgets run the real integrations on the API fixtures in ./demo/; this file only fakes what has no
 // integration logic behind it: probes, certificates, temperatures and the first day of history.
 import { DEFAULT_SETTINGS } from './config.js';
+import { localName } from './local.js';
 import { insertProbe, insertMetric, countProbes, transaction, insertEvent, recordOpen } from './db.js';
 
 export const DEMO = !!process.env.DEMO && process.env.DEMO !== '0';
@@ -33,6 +34,31 @@ export function demoCert(s) {
 
 export function demoTemps() {
   return { cpu: 48 + Math.random() * 6, nvme: [44], drives: [] };
+}
+
+/**
+ * The local host (no Proxmox widget): a small Docker box. Its history is seeded with the Proxmox one (host.cpu, host.mem).
+ * @param {import('$lib/types').Settings['host']} host
+ * @returns {import('$lib/types').HostVitals}
+ */
+export function demoLocal(host) {
+  const GiB = 1024 ** 3;
+  const maxmem = 16 * GiB;
+  const mem = maxmem * (0.58 + Math.random() * 0.03);
+  const disk = calm() ? 41 : 74;
+  return {
+    node: localName(host),
+    cpu: 12 + Math.random() * 9,
+    cpus: 8,
+    mem,
+    maxmem,
+    memPct: (mem / maxmem) * 100,
+    disk: { name: host.disk, pct: disk, sub: `${Math.round(disk * 4.65) / 10} / 465.6 GiB` },
+    uptime: '12 d',
+    guestsRunning: null,
+    guestsTotal: null,
+    updates: null
+  };
 }
 
 /** Fill 24 h of history so sparklines and the availability strip have something to show. */

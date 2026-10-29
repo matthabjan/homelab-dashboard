@@ -22,6 +22,9 @@ export interface Settings {
     background: string;
   };
   host: {
+    source: 'auto' | 'proxmox' | 'local';
+    name: string | null;
+    disk: string;
     service: string | null;
     node: string | null;
     temperature: boolean;
@@ -206,18 +209,19 @@ export interface OfflineRow {
   pct?: number | null;
 }
 
-/** The Proxmox node shown as "host". */
+/** The machine shown as "host": the Proxmox node, or the one the dashboard runs on (local.js, no guests). */
 export interface HostVitals {
   node: string;
-  cpu: number;
+  /** null on the local host's first poll (CPU % needs two samples) */
+  cpu: number | null;
   cpus: number;
   mem: number;
   maxmem: number;
   memPct: number;
   disk: { name: string; pct: number | null; sub: string };
   uptime: string | null;
-  guestsRunning: number;
-  guestsTotal: number;
+  guestsRunning: number | null;
+  guestsTotal: number | null;
   updates: number | null;
 }
 

@@ -30,6 +30,9 @@ export const DEFAULT_SETTINGS = {
     background: '#0A0D12'
   },
   host: {
+    source: 'auto', // auto: the Proxmox node when there is a proxmox widget, else this machine (local) | proxmox | local
+    name: null, // shown as Node; default: the Proxmox node, else HOST_NAME, else "this host"
+    disk: '/', // local host: path whose filesystem the Disk gauge shows
     service: null, // name of the Proxmox service whose node is shown as "host" (default: first proxmox widget)
     node: null,
     temperature: true, // read CPU/NVMe temps from the kernel (works because the LXC shares the host kernel)
