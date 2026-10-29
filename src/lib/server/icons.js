@@ -73,7 +73,8 @@ export function createIconFinder({ kv, transport = request, now = Date.now }) {
 
   // A failed check means "no light variant" for now and forgets the lookups that used it, so the next run retries.
   const luminance = (url) => {
-    if (!bright.has(url)) bright.set(url, get(url).then((r) => r.text()).then(svgLuminance, () => {
+    if (!bright.has(url)) bright.set(url, get(url).then((r) => r.text()).then(svgLuminance, (e) => {
+      console.warn(`[icons] colour check failed: ${e.message}`);
       bright.delete(url);
       found.clear();
       return null;
@@ -118,15 +119,19 @@ export function createIconFinder({ kv, transport = request, now = Date.now }) {
 
   /**
    * The icon in both themes, unless it would vanish in one: its brightest colour barely shows on the dark chip
-   * (LLDAP) → the brightest variant for dark mode; its darkest barely shows on the light chip → the darkest variant
-   * for light mode.
-   * @param {string} icon @param {string[]} variants
+   * (LLDAP) → the light variant for dark mode; its darkest barely shows on the light chip → the dark variant for
+   * light mode. selfh.st names its variants reliably (`named`); dashboard-icons' are measured and the best one taken.
+   * @param {string} icon @param {string[]} variants @param {{ light: string | null, dark: string | null }} [named]
    */
-  async function pick(icon, variants) {
+  async function pick(icon, variants, named) {
     const base = await luminance(icon);
-    if (!base || !variants.length) return { icon, iconDark: null };
+    if (!base || !(variants.length || named?.light || named?.dark)) return { icon, iconDark: null };
     const dark = contrast(base.max, BG_DARK) < MIN_CONTRAST;
     if (!dark && contrast(base.min, BG_LIGHT) >= MIN_CONTRAST) return { icon, iconDark: null };
+    if (named) {
+      const v = dark ? named.light : named.dark;
+      return !v ? { icon, iconDark: null } : dark ? { icon, iconDark: v } : { icon: v, iconDark: icon };
+    }
     const score = (/** @type {{ min: number, max: number }} */ l) => (dark ? contrast(l.max, BG_DARK) : contrast(l.min, BG_LIGHT));
     let best = null;
     let bestScore = score(base);
@@ -145,7 +150,7 @@ export function createIconFinder({ kv, transport = request, now = Date.now }) {
       const [ext, light, dark] = sh;
       const icon = `${SH}/${ext}/${name}.${ext}`;
       if (ext !== 'svg') return { icon, iconDark: null };
-      return pick(icon, [...(light ? [`${SH}/svg/${name}-light.svg`] : []), ...(dark ? [`${SH}/svg/${name}-dark.svg`] : [])]);
+      return pick(icon, [], { light: light ? `${SH}/svg/${name}-light.svg` : null, dark: dark ? `${SH}/svg/${name}-dark.svg` : null });
     }
     const di = index?.di[name];
     if (!di) return null;

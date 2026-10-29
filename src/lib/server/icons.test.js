@@ -27,11 +27,8 @@ const FILES = {
   },
   [`${SH}/svg/traefik.svg`]: '<svg><path style="fill:#24a1c1"/></svg>',
   [`${SH}/svg/opnsense.svg`]: '<svg><path style="fill:#de3c07"/></svg>',
-  [`${SH}/svg/opnsense-light.svg`]: '<svg><path style="fill:#fff"/></svg>',
   [`${SH}/svg/lldap.svg`]: '<svg><path style="fill:#212529"/></svg>',
-  [`${SH}/svg/lldap-light.svg`]: '<svg><path style="fill:#fff"/></svg>',
   [`${SH}/svg/umami.svg`]: '<svg><path fill="white"/></svg>',
-  [`${SH}/svg/umami-dark.svg`]: '<svg><path fill="#111"/></svg>',
   [`${DI}/svg/nas.svg`]: '<svg><path fill="#f5f5f5"/></svg>',
   [`${DI}/svg/nas-light.svg`]: '<svg><path fill="#222"/></svg>',
   [`${DI}/svg/vaultwarden.svg`]: '<svg><path d="M0"/></svg>',
@@ -80,7 +77,7 @@ test('luminance: darkest and brightest paint, unpainted is black', () => {
 });
 
 test('selfh.st first; the icon itself in both themes unless it would vanish in one', async () => {
-  const { icons } = finder();
+  const { icons, calls } = finder();
   await icons.refresh();
   assert.deepEqual(await icons.find(['traefik']), { icon: `${SH}/svg/traefik.svg`, iconDark: null });
   assert.deepEqual(await icons.find(['opnsense']), { icon: `${SH}/svg/opnsense.svg`, iconDark: null }); // dark orange still shows
@@ -88,6 +85,7 @@ test('selfh.st first; the icon itself in both themes unless it would vanish in o
   assert.deepEqual(await icons.find(['umami']), { icon: `${SH}/svg/umami-dark.svg`, iconDark: `${SH}/svg/umami.svg` });
   assert.deepEqual(await icons.find(['ghost']), { icon: `${SH}/png/ghost.png`, iconDark: null });
   assert.deepEqual(await icons.find(['ddns-updater']), { icon: `${SH}/png/ddns-updater.png`, iconDark: null });
+  assert.ok(!calls.some((u) => /-(light|dark)\.svg$/.test(u))); // selfh.st variants are taken by name, not fetched
 });
 
 test('dashboard-icons: variants judged by colour, whatever they are called', async () => {
