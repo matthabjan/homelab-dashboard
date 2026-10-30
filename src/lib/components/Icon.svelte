@@ -12,6 +12,9 @@
   const mono = $derived('/assets/monogram/' + encodeURIComponent(name || '?') + '.svg');
   let failed = $state(false);
   let failedDark = $state(false);
+  // a new URL (icon fixed in services.yaml, automatic icon found) gets another try
+  $effect.pre(() => { void src; failed = false; });
+  $effect.pre(() => { void dark; failedDark = false; });
 
   /**
    * Calls `onfail` when the image can't load. Attached on the client rather than as `onerror`: Svelte renders that as an

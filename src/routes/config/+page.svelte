@@ -4,6 +4,7 @@
   import type { CheckKind, ConfigView, KeyValue, Level } from '$lib/types';
   import ThemeToggle from '$lib/components/ThemeToggle.svelte';
   import type { PageProps } from './$types';
+  import { ago } from '$lib/ago.ts';
 
   let { data }: PageProps = $props();
   const view = $derived(data.view);
@@ -13,7 +14,7 @@
   // live: reload the page data when the stream reports an update, at most every 5 s
   onMount(() => {
     const es = new EventSource('/api/stream');
-    let last = 0;
+    let last = Date.now();
     let pending: ReturnType<typeof setTimeout> | undefined;
     es.onmessage = () => {
       const wait = Math.max(0, last + 5000 - Date.now());
@@ -23,14 +24,10 @@
     return () => { es.close(); clearTimeout(pending); clearInterval(tick); };
   });
 
-  function ago(ts: number | null) {
+  function since(ts: number | null) {
     if (ts == null) return 'never';
-    const s = Math.max(0, Math.round((now - ts) / 1000));
-    if (s < 60) return 'just now';
-    const m = Math.round(s / 60);
-    if (m < 60) return `${m} m ago`;
-    const h = Math.floor(m / 60);
-    return h < 48 ? `${h} h ago` : `${Math.floor(h / 24)} d ago`;
+    const a = ago(ts, now);
+    return a === 'now' ? 'just now' : `${a} ago`;
   }
 
   async function copy(i: ConfigView['icons'][number]) {
@@ -105,7 +102,7 @@
               <td data-label="Type">{#if w.docs}<a class="docs" href={w.docs} target="_blank" rel="noopener">{w.type}<span class="sr"> (documentation, opens in a new tab)</span></a>{:else}<span class="mono">{w.type}</span>{/if}</td>
               <td data-label="Endpoint"><span class="mono">{w.origin ?? '—'}</span>{#each w.options as o}<span class="mono muted opt">{o.k}: {o.v}</span>{/each}</td>
               <td data-label="Status"><span class="state lv-{lv}"><span class="dot lv-{lv}" aria-hidden="true"></span>{word}</span>{#if w.error}<span class="muted sub err">{w.error}</span>{/if}</td>
-              <td data-label="Last success" class="mono">{ago(w.lastOk)}</td>
+              <td data-label="Last success" class="mono">{since(w.lastOk)}</td>
               <td data-label="Source" class="muted">{w.source}</td>
             </tr>
           {/each}

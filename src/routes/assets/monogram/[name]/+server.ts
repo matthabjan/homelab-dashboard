@@ -2,7 +2,8 @@ import type { RequestHandler } from './$types';
 
 // Generated icon for services without a logo: rounded square with initials.
 export const GET: RequestHandler = ({ params }) => {
-  const name = decodeURIComponent(params.name).replace(/\.svg$/, '');
+  // SvelteKit has decoded the param already: decoding again throws on a name with % in it ("100% Uptime")
+  const name = params.name.replace(/\.svg$/, '');
   const words = name.replace(/[^\p{L}\p{N} ]/gu, ' ').trim().split(/\s+/);
   const initials = (words.length > 1 ? words[0][0] + words[1][0] : (words[0] || '?').slice(0, 2)).toUpperCase();
   let h = 0;

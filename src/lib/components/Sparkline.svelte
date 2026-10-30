@@ -8,10 +8,9 @@
     color?: string;
     area?: boolean;
     height?: number;
-    dashed?: boolean;
     label?: string;
   }
-  let { values = [], max = null, min = 0, minSpan = 0, color = 'var(--acc)', area = false, height = 24, dashed = false, label = '' }: Props = $props();
+  let { values = [], max = null, min = 0, minSpan = 0, color = 'var(--acc)', area = false, height = 24, label = '' }: Props = $props();
 
   const W = 200;
   const H = 48;
@@ -47,7 +46,7 @@
 {#if geo}
   <svg viewBox="0 0 {W} {H}" preserveAspectRatio="none" style:height="{height}px" role={label ? 'img' : undefined} aria-label={label || undefined} aria-hidden={label ? undefined : 'true'}>
     {#if area}<path d={geo.fill} fill={color} fill-opacity="0.13" />{/if}
-    <path d={geo.line} fill="none" stroke={color} stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" stroke-dasharray={dashed ? '3 3' : undefined} />
+    <path d={geo.line} fill="none" stroke={color} stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" />
   </svg>
 {/if}
 
