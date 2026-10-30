@@ -1,0 +1,12 @@
+{
+  "extends": "./.svelte-kit/tsconfig.json",
+  "compilerOptions": {
+    "strict": true,
+    "skipLibCheck": true,
+    "types": ["node"],
+    // tests run the .ts sources directly with Node's type stripping: relative imports name the .ts file,
+    // and only syntax Node can erase is allowed (no enums, namespaces or parameter properties)
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true
+  }
+}

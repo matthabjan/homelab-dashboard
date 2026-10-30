@@ -130,7 +130,7 @@ Traffic rates come from the difference between two polls, so the first value app
 
 ## OpenMediaVault
 
-Provides the NAS rows in **Storage** (with each disk's SMART result), the disks with SMART monitoring in [**Drives**](#drives), plus SMART status and service status on the tile.
+Provides the NAS rows in **Storage** (with each disk's SMART result) and the disks with SMART monitoring in [**Drives**](#drives). The tile shows running / enabled **services**, pending package **updates**, and **storage**: how full the fullest data file system is (the system disk is left out), amber and red at the `storageAmberPct` / `storageWarnPct` thresholds.
 
 ```yaml
 widget:
@@ -140,7 +140,7 @@ widget:
   password: ${OMV_PASSWORD}
 ```
 
-**Account.** OMV's RPC API has no read-only role, so this needs an admin login. Treat the password as highly sensitive and use `https://`.
+**Account.** OMV's RPC API has no read-only role, so this needs an admin login. Rather than your own, create a dedicated user under **Users → Users**: shell `/usr/sbin/nologin`, member of `openmediavault-admin` only (not `_ssh` or `sudo`), no shared folder permissions. An OMV admin can effectively get root on the NAS, so treat the password as highly sensitive and use `https://`.
 
 **Alerts**
 
@@ -148,6 +148,7 @@ widget:
 |---|---|
 | critical | A monitored disk's SMART status isn't `GOOD`. |
 | warning | A service enabled in OMV isn't running. |
+| info | Package updates are available. |
 
 Only disks with SMART monitoring enabled in OMV are checked. Virtual disks have no SMART data and are shown without it.
 

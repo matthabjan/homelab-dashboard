@@ -1,10 +1,11 @@
-<script>
+<script lang="ts">
   import { onMount } from 'svelte';
   import { invalidateAll } from '$app/navigation';
+  import type { CheckKind, ConfigView, KeyValue, Level } from '$lib/types';
   import ThemeToggle from '$lib/components/ThemeToggle.svelte';
+  import type { PageProps } from './$types';
 
-  /** @type {import('./$types').PageProps} */
-  let { data } = $props();
+  let { data }: PageProps = $props();
   const view = $derived(data.view);
   let now = $state(Date.now());
   let copied = $state('');
@@ -13,7 +14,7 @@
   onMount(() => {
     const es = new EventSource('/api/stream');
     let last = 0;
-    let pending;
+    let pending: ReturnType<typeof setTimeout> | undefined;
     es.onmessage = () => {
       const wait = Math.max(0, last + 5000 - Date.now());
       pending ??= setTimeout(() => { pending = undefined; last = Date.now(); invalidateAll(); }, wait);
@@ -22,7 +23,7 @@
     return () => { es.close(); clearTimeout(pending); clearInterval(tick); };
   });
 
-  function ago(ts) {
+  function ago(ts: number | null) {
     if (ts == null) return 'never';
     const s = Math.max(0, Math.round((now - ts) / 1000));
     if (s < 60) return 'just now';
@@ -32,8 +33,7 @@
     return h < 48 ? `${h} h ago` : `${Math.floor(h / 24)} d ago`;
   }
 
-  /** @param {import('$lib/types').ConfigView['icons'][number]} i */
-  async function copy(i) {
+  async function copy(i: ConfigView['icons'][number]) {
     try {
       await navigator.clipboard.writeText(i.yaml);
       copied = `Copied the icon for ${i.name}`;
@@ -44,8 +44,7 @@
 
   // settings by section: `intervals.probe` → intervals / probe; top-level keys are "general"
   const settingGroups = $derived.by(() => {
-    /** @type {Map<string, { k: string, v: string }[]>} */
-    const groups = new Map();
+    const groups = new Map<string, KeyValue[]>();
     for (const { k, v } of view.settings) {
       const [head, ...rest] = k.split('.');
       const g = rest.length ? head : 'general';
@@ -55,8 +54,8 @@
     return [...groups];
   });
 
-  const STATUS = { ok: ['ok', 'OK'], error: ['crit', 'Error'], never: ['none', 'Not run yet'], unsupported: ['warn', 'Not supported'] };
-  const KIND = { http: 'HTTP', tcp: 'TCP', container: 'Container', heartbeat: 'Heartbeat' };
+  const STATUS: Record<ConfigView['widgets'][number]['status'], [Level | 'none', string]> = { ok: ['ok', 'OK'], error: ['crit', 'Error'], never: ['none', 'Not run yet'], unsupported: ['warn', 'Not supported'] };
+  const KIND: Record<CheckKind, string> = { http: 'HTTP', tcp: 'TCP', container: 'Container', heartbeat: 'Heartbeat' };
 </script>
 
 <svelte:head>

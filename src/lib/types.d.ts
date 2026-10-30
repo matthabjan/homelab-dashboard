@@ -1,6 +1,9 @@
 // Shared shapes, checked by `npm run check`. Types only: nothing here exists at runtime.
-// The JS files use them through JSDoc, e.g. /** @import { Context, WidgetResult } from '$lib/types' */.
-// Terms as in CONTEXT.md.
+// Imported with `import type { Context, WidgetResult } from '$lib/types'`. Terms as in CONTEXT.md.
+// The shapes of the APIs an integration reads live in that integration's own file.
+
+/** Any value JSON can hold: parsed config values, API bodies before an integration narrows them. */
+export type Json = string | number | boolean | null | Json[] | { [key: string]: Json };
 
 // ---------- config (settings.yaml, services.yaml, bookmarks.yaml) ----------
 
@@ -55,7 +58,8 @@ export interface Widget {
   url: string;
   username?: string;
   password?: string;
-  [option: string]: any;
+  /** options of the integration; each one narrows its own (e.g. `datastore`, `fields`) */
+  [option: string]: unknown;
 }
 
 /** Container state of a label-discovered service (from Portainer). */
@@ -63,6 +67,33 @@ export interface ContainerState {
   state: string;
   health: string | null;
   exitCode: number;
+}
+
+/**
+ * A service as written in services.yaml or in `dashboard.*` container labels, before config.ts resolves it.
+ * Not validated: config.ts reads it as it is (a value of another type is used as written).
+ */
+export interface ServiceDef {
+  href?: string;
+  description?: string;
+  icon?: string;
+  iconDark?: string;
+  siteMonitor?: string;
+  /** older name of siteMonitor */
+  probe?: string;
+  tlsVerify?: boolean;
+  latencyWarnMs?: number | string;
+  widget?: Widget;
+  heartbeat?: HeartbeatDef;
+}
+
+/** A service's `heartbeat:` block as written: durations as "24h" or seconds. */
+export interface HeartbeatDef {
+  every?: string | number;
+  grace?: string | number;
+  id?: string | number;
+  token?: string | number;
+  backup?: boolean;
 }
 
 export interface Service {
@@ -154,14 +185,34 @@ export interface RequestOptions {
 /** The seam between integrations and the network: undici in production, a fixture transport in demo and tests. */
 export type Transport = (url: string, opts?: RequestOptions) => Promise<Response | import('undici').Response>;
 
-/** What a fixture route receives (demo/index.js); it returns an object (sent as JSON) or a string (sent as XML). */
+/**
+ * Where the engine's readings come from: `liveSources` (sources.ts) in production, `demoSources` (demo.ts) in the
+ * demo; tests script their own. The engine reaches the outside only through these (and the db).
+ */
+export interface Sources {
+  /** one HTTP or TCP probe of `s.probe` */
+  probe(s: Service, now: number): ProbeResult | Promise<ProbeResult>;
+  /** the certificate behind an https `s.probe`; null when there is none to read */
+  cert(s: Service): CertInfo | null | Promise<CertInfo | null>;
+  /** the machine the dashboard runs on; `state` carries the previous CPU totals between calls */
+  local(host: Settings['host'], state: { prev?: { total: number; idle: number } | null }): HostVitals | null | Promise<HostVitals | null>;
+  temps(): Temps | null | Promise<Temps | null>;
+  /** the transport a widget type's integration gets in `ctx` */
+  transport(type: string): Transport;
+  /** for the icon indexes and SVGs */
+  iconTransport: Transport;
+  /** fill history before the first rounds (the demo's first day); runs on every config load */
+  seed(services: Service[]): void;
+}
+
+/** What a fixture route receives (demo/index.ts); it returns an object (sent as JSON) or a string (sent as XML). */
 export interface FixtureRequest {
   now: number;
   scenario: string;
   params: Record<string, string>;
   headers: Record<string, string>;
   /** parsed when JSON, else the raw string (SOAP) */
-  body: any;
+  body: unknown;
   url: URL;
 }
 
@@ -170,7 +221,8 @@ export type Fixtures = Record<string, (req: FixtureRequest) => object | string |
 
 /** Durable key/value store that survives restarts. */
 export interface Kv {
-  get(key: string): any;
+  /** what was stored under `key`, as the caller stored it (JSON round trip); null when nothing was */
+  get<T = unknown>(key: string): T | null;
   set(key: string, value: unknown): void;
 }
 
@@ -182,19 +234,20 @@ export interface Shared {
   containers?: Record<string, ContainerCounts>;
 }
 
-/** Everything an integration may use. Built by createContext in integrations/index.js. */
+/** Everything an integration may use. Built by createContext in integrations/index.ts. */
 export interface Context {
   settings: Settings;
   now: number;
   insecure: boolean;
   shared: Shared;
-  /** in memory, per service, between polls */
-  state: Record<string, any>;
+  /** in memory, per service, between polls; each integration keeps its own fields */
+  state: Record<string, unknown>;
   /** history for sparklines; null and NaN are skipped */
   metric(key: string, value: number | null): void;
   kv: Kv;
   request: Transport;
-  getJson(url: string, opts?: RequestOptions): Promise<any>;
+  /** the parsed body, as the shape the integration expects from that endpoint (not checked at runtime) */
+  getJson<T = unknown>(url: string, opts?: RequestOptions): Promise<T>;
 }
 
 export type Severity = 'crit' | 'warn' | 'info';
@@ -243,7 +296,7 @@ export interface OfflineRow {
   pct?: number | null;
 }
 
-/** The machine shown as "host": the Proxmox node, or the one the dashboard runs on (local.js, no guests). */
+/** The machine shown as "host": the Proxmox node, or the one the dashboard runs on (local.ts, no guests). */
 export interface HostVitals {
   node: string;
   /** null on the local host's first poll (CPU % needs two samples) */
@@ -330,7 +383,8 @@ export interface ContainerCounts {
 export interface Discovered {
   group: string;
   name: string;
-  def: Record<string, any>;
+  /** the service as the labels define it, like a services.yaml entry */
+  def: ServiceDef;
   container: ContainerState;
   image: string | null;
 }
@@ -363,13 +417,13 @@ export interface Threshold {
 /** One value of a customapi widget (gethomepage's mapping fields, plus `warn` / `crit`). */
 export interface CustomApiMapping {
   /** dot path `a.b.0.c`, or the nested form `{ a: { b: c } }` */
-  field: string | Record<string, any>;
+  field: string | { [key: string]: Json };
   label?: string;
   format?: 'text' | 'number' | 'float' | 'percent' | 'bytes' | 'bitrate' | 'duration' | 'date' | 'relativeDate' | 'size';
   prefix?: string;
   suffix?: string;
   scale?: number | string;
-  remap?: { value?: any; any?: boolean; to: any }[];
+  remap?: { value?: Json; any?: boolean; to: Json }[];
   warn?: Threshold;
   crit?: Threshold;
 }
@@ -380,30 +434,52 @@ export interface Integration {
 
 // ---------- engine state ----------
 
-export interface ProbeState {
+/** A service's up/down from its check (probe, container state or heartbeat), kept by `check.ts#record`. */
+export interface CheckState {
+  /** failed readings in a row */
   fails: number;
   down: boolean;
+  /** the first failure of the current run of failures */
   since: number | null;
   reason: string | null;
+  /** the last probe's latency */
   ms: number | null;
   checked: number | null;
+}
+
+/** One HTTP or TCP probe. `code` is the HTTP status or the error code (see `http.ts#reasonText`). */
+export interface ProbeResult {
+  ok: boolean;
+  ms: number | null;
+  code: string | number | null;
+}
+
+/** A tile's status from its check; `alert` is completed with the service name ("<name> is down"). */
+export interface CheckStatus {
+  lvl: Level | 'unknown';
+  status: string;
+  line: string | null;
+  /** undefined: the line takes the tile's level */
+  lineLevel?: Tile['lineLevel'];
+  alert?: { sev: 'crit' | 'warn'; title: string; detail: string; ts?: number };
 }
 
 export interface CertInfo {
   validTo: number;
   trusted: boolean;
   selfSigned: boolean;
-  subject?: string;
+  /** the CN; Node gives a list when the certificate has several */
+  subject?: string | string[];
 }
 
 /** The last collect of a service: its result, or `ok: false` with the error and the previous stats. */
 export type WidgetState = WidgetResult & { ok: boolean; ts: number; error?: string; /** the last successful poll */ lastOk: number | null };
 
 export interface ServiceState {
-  probe: ProbeState;
+  check: CheckState;
   heartbeat?: HeartbeatState | null;
   widget: WidgetState | null;
-  wstate: Record<string, any>;
+  wstate: Record<string, unknown>;
   cert: CertInfo | null;
 }
 
@@ -422,7 +498,7 @@ export interface KeyValue {
 }
 
 /**
- * Everything the /config page shows, built from an allowlist (config-view.js): no credentials, headers, request
+ * Everything the /config page shows, built from an allowlist (config-view.ts): no credentials, headers, request
  * bodies, URL paths or queries, heartbeat tokens, or label values beyond group and name.
  */
 export interface ConfigView {
@@ -484,7 +560,8 @@ export interface AttentionItem {
 export interface FeedEvent {
   ts: number;
   sev: Severity | 'ok';
-  sid: string;
+  /** null for events that aren't about one service (backups completed, updates) */
+  sid: string | null;
   title: string;
   detail: string | null;
   href: string | null;
