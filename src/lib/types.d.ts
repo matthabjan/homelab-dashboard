@@ -154,6 +154,26 @@ export interface RequestOptions {
 /** The seam between integrations and the network: undici in production, a fixture transport in demo and tests. */
 export type Transport = (url: string, opts?: RequestOptions) => Promise<Response | import('undici').Response>;
 
+/**
+ * Where the engine's readings come from: `liveSources` (sources.js) in production, `demoSources` (demo.js) in the
+ * demo; tests script their own. The engine reaches the outside only through these (and the db).
+ */
+export interface Sources {
+  /** one HTTP or TCP probe of `s.probe` */
+  probe(s: Service, now: number): ProbeResult | Promise<ProbeResult>;
+  /** the certificate behind an https `s.probe`; null when there is none to read */
+  cert(s: Service): CertInfo | null | Promise<CertInfo | null>;
+  /** the machine the dashboard runs on; `state` carries the previous CPU totals between calls */
+  local(host: Settings['host'], state: { prev?: { total: number; idle: number } | null }): HostVitals | null | Promise<HostVitals | null>;
+  temps(): Temps | null | Promise<Temps | null>;
+  /** the transport a widget type's integration gets in `ctx` */
+  transport(type: string): Transport;
+  /** for the icon indexes and SVGs */
+  iconTransport: Transport;
+  /** fill history before the first rounds (the demo's first day); runs on every config load */
+  seed(services: Service[]): void;
+}
+
 /** What a fixture route receives (demo/index.js); it returns an object (sent as JSON) or a string (sent as XML). */
 export interface FixtureRequest {
   now: number;

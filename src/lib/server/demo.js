@@ -1,10 +1,13 @@
 // DEMO=1 — preview the UI without any homelab APIs. DEMO_SCENARIO=issues (default) | calm
-// Widgets run the real integrations on the API fixtures in ./demo/; this file only fakes what has no
-// integration logic behind it: probes, certificates, temperatures and the first day of history.
+// demoSources is the engine's adapter for it: widgets run the real integrations on the API fixtures in ./demo/;
+// this file only fakes what has no integration logic behind it: probes, certificates, the local host,
+// temperatures and the first day of history. Icons still come from the real indexes.
 import { DEFAULT_SETTINGS } from './config.js';
 import { localName } from './local.js';
 import { insertProbe, insertMetric, countProbes, transaction, insertEvent, recordOpen, kvSet } from './db.js';
 import { kvKey } from './heartbeat.js';
+import { request } from './http.js';
+import { FIXTURES, fixtureTransport } from './demo/index.js';
 
 export { DEMO } from './config.js';
 export const SCENARIO = process.env.DEMO_SCENARIO === 'calm' ? 'calm' : 'issues';
@@ -104,4 +107,22 @@ export function seedHistory(services) {
       insertEvent(now - 13 * 3600_000, 'ok', null, 'Backups completed', '5 guests · main');
     }
   });
+}
+
+/**
+ * The demo's sources, for SCENARIO: fixtures instead of the homelab, made-up probes, certificates and host readings.
+ * @returns {import('$lib/types').Sources}
+ */
+export function demoSources() {
+  const scenario = SCENARIO;
+  const transports = new Map(Object.entries(FIXTURES).map(([type, table]) => [type, fixtureTransport(table, { scenario })]));
+  return {
+    probe: demoProbe,
+    cert: demoCert,
+    local: demoLocal,
+    temps: demoTemps,
+    transport: (type) => transports.get(type) ?? fixtureTransport({}, { scenario }),
+    iconTransport: request,
+    seed: seedHistory
+  };
 }

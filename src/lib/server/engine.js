@@ -4,25 +4,28 @@ import fs from 'node:fs';
 import { EventEmitter } from 'node:events';
 import { CONFIG_DIR, loadConfig, withDiscovered } from './config.js';
 import { openDb, insertMetric, insertEvent, prune, kvGet, kvSet } from './db.js';
-import { probe, certInfo, reasonText } from './http.js';
-import { readTemps } from './integrations/host.js';
-import { hostSource, readLocal } from './local.js';
+import { reasonText } from './http.js';
+import { hostSource } from './local.js';
 import { checkIn, createLimiter, heartbeatState, record as heartbeatRecord } from './heartbeat.js';
-import { DEMO, SCENARIO, demoProbe, demoCert, demoTemps, demoLocal, seedHistory } from './demo.js';
-import { FIXTURES, fixtureTransport } from './demo/index.js';
+import { DEMO, demoSources } from './demo.js';
+import { liveSources } from './sources.js';
 import { createSnapshot } from './snapshot.js';
 import { blankCheck, kindOf, record } from './check.js';
 import { createIconFinder, iconCandidates } from './icons.js';
 import { INTEGRATIONS, ORDER, createContext } from './integrations/index.js';
-/** @import { Config, ContainerState, Discovered, HostVitals, Service, ServiceState, Shared, Snapshot, Temps, Widget } from '$lib/types' */
+/** @import { Config, ContainerState, Discovered, HostVitals, Service, ServiceState, Shared, Snapshot, Sources, Temps, Widget } from '$lib/types' */
 
 const kv = { get: kvGet, set: kvSet };
 
-const withTimeout = (p, ms, label) =>
-  Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(`${label} timed out`)), ms))]);
+/** `p`, or a rejection after `ms`; the timer is cleared either way, so a finished round leaves none behind. */
+function withTimeout(p, ms, label) {
+  let t;
+  const timeout = new Promise((_, rej) => { t = setTimeout(() => rej(new Error(`${label} timed out`)), ms); });
+  return Promise.race([p, timeout]).finally(() => clearTimeout(t));
+}
 
 export class Engine extends EventEmitter {
-  // both set by reload(), which start() runs first; unset before that (see hooks.server.js)
+  // both set by load(), which start() runs first; unset before that (see hooks.server.js)
   /** @type {Config} */
   cfg;
   /** @type {Config} */
@@ -39,9 +42,11 @@ export class Engine extends EventEmitter {
   /** @type {HostVitals | null} the machine the dashboard runs on, when `host.source` resolves to local */
   local = null;
   localState = {}; // the previous /proc/stat totals, for CPU %
+  /** @type {ReturnType<typeof setTimeout>[]} the rounds' timers, set by schedule() */
   timers = [];
+  /** @type {(() => void)[]} undoes what start() set up besides the rounds */
+  teardown = [];
   heartbeatLimit = createLimiter();
-  icons = createIconFinder({ kv });
   /** @type {Map<string, { icon: string, iconDark: string | null }>} service id → icon found for a service without `icon` */
   autoIcons = new Map();
   buildSnapshot = createSnapshot();
@@ -50,39 +55,71 @@ export class Engine extends EventEmitter {
   started = false;
   probed = false; // the first probe round, 5 s after start
 
+  /** @param {Sources} sources where readings come from: live, demo, or a test's script */
+  constructor(sources) {
+    super();
+    this.sources = sources;
+    this.icons = createIconFinder({ kv, transport: sources.iconTransport });
+  }
+
   start() {
     if (this.started) return;
     this.started = true;
     this.setMaxListeners(200);
     openDb();
     this.reload();
+    /** @type {ReturnType<typeof setTimeout> | undefined} */
     let t;
     try {
-      fs.watch(CONFIG_DIR, { recursive: false }, (_, file) => {
+      const watcher = fs.watch(CONFIG_DIR, { recursive: false }, (_, file) => {
         if (!file || !/\.ya?ml$/.test(file)) return;
         clearTimeout(t);
         t = setTimeout(() => { console.log(`[config] ${file} changed — reloading`); this.reload(); }, 500);
       });
+      this.teardown.push(() => { clearTimeout(t); watcher.close(); });
     } catch (e) { console.warn('[config] watch unavailable:', e.message); }
-    setInterval(() => prune(this.cfg.settings.retentionDays), 6 * 3600_000).unref();
+    const pruning = setInterval(() => prune(this.cfg.settings.retentionDays), 6 * 3600_000).unref();
+    this.teardown.push(() => clearInterval(pruning));
+  }
+
+  /** Stop every timer and the config watcher; the state stays as it is. */
+  stop() {
+    for (const t of this.timers) clearInterval(t);
+    this.timers = [];
+    for (const undo of this.teardown) undo();
+    this.teardown = [];
+    this.started = false;
   }
 
   reload() {
-    // loadConfig records bad files instead of throwing; anything else unexpected keeps the running config (a timer calls this)
+    if (this.load()) this.schedule();
+  }
+
+  /**
+   * Read the config files and publish. Returns false when that failed unexpectedly and the running config stays
+   * (loadConfig records bad files instead of throwing); without a running config it throws.
+   */
+  load() {
     try {
       this.base = loadConfig();
     } catch (e) {
       console.error('[config] reload failed:', e);
-      if (this.base) return;
+      if (this.base) return false;
       throw e;
     }
     this.cfg = withDiscovered(this.base, this.discovered);
     this.shared = {}; // hand-offs (container counts per engine, guest ids) refill on the next widget round, without removed services
-    for (const t of this.timers) clearInterval(t);
-    this.timers = [];
     const ids = new Set(this.cfg.services.map((s) => s.id));
     for (const id of this.rt.keys()) if (!ids.has(id)) this.rt.delete(id);
-    if (DEMO) seedHistory(this.cfg.services);
+    this.sources.seed(this.cfg.services);
+    this.publish();
+    return true;
+  }
+
+  /** (Re)start the rounds at the intervals in settings; each runs once straight away (probes 5 s after start). */
+  schedule() {
+    for (const t of this.timers) clearInterval(t);
+    this.timers = [];
     const iv = this.cfg.settings.intervals;
     const every = (fn, s) => { fn(); this.timers.push(setInterval(fn, s * 1000)); };
     const probes = () => this.runProbes().catch((e) => console.error('[probe]', e));
@@ -92,7 +129,6 @@ export class Engine extends EventEmitter {
     every(() => this.runWidgets().catch((e) => console.error('[widgets]', e)), iv.widgets);
     every(() => this.runCerts().catch((e) => console.error('[cert]', e)), iv.cert);
     every(() => this.findIcons().catch((e) => console.error('[icons]', e)), 3600);
-    this.publish();
   }
 
   /** @returns {ServiceState} */
@@ -105,7 +141,7 @@ export class Engine extends EventEmitter {
   async runProbes() {
     const now = Date.now();
     await Promise.all(
-      this.cfg.services.filter((s) => s.probe).map(async (s) => record(s, this.state(s.id), DEMO ? demoProbe(s, now) : await probe(s.probe), now))
+      this.cfg.services.filter((s) => s.probe).map(async (s) => record(s, this.state(s.id), await this.sources.probe(s, now), now))
     );
     this.checkHeartbeats(now);
     this.publish();
@@ -118,7 +154,7 @@ export class Engine extends EventEmitter {
     const run = async (s) => {
       const st = this.state(s.id);
       const ctx = createContext({
-        transport: DEMO ? fixtureTransport(FIXTURES[s.widget.type], { scenario: SCENARIO }) : undefined,
+        transport: this.sources.transport(s.widget.type),
         kv,
         settings,
         now,
@@ -143,13 +179,13 @@ export class Engine extends EventEmitter {
     this.recordContainers(list, now);
 
     if (hostSource(this.cfg) === 'local') {
-      this.local = DEMO ? demoLocal(settings.host) : await readLocal(settings.host, this.localState);
+      this.local = await this.sources.local(settings.host, this.localState);
       // the same keys the Proxmox widget records, so the gauges' sparklines don't care where they came from
       if (this.local) { insertMetric('host.cpu', now, this.local.cpu); insertMetric('host.mem', now, this.local.memPct); }
     } else this.local = null;
 
     if (settings.host.temperature) {
-      this.temps = DEMO ? demoTemps() : await readTemps();
+      this.temps = await this.sources.temps();
       if (this.temps?.cpu != null) insertMetric('host.temp', now, this.temps.cpu);
     }
     this.publish();
@@ -234,7 +270,7 @@ export class Engine extends EventEmitter {
     await Promise.all(
       this.cfg.services.filter((s) => s.probe?.startsWith('https')).map(async (s) => {
         const st = this.state(s.id);
-        const c = DEMO ? demoCert(s) : await certInfo(s.probe);
+        const c = await this.sources.cert(s);
         if (!c) return;
         // durable, so a renewal while the dashboard was down still shows up
         const key = `cert.validTo.${s.id}`;
@@ -261,6 +297,6 @@ export class Engine extends EventEmitter {
 
 /** @returns {Engine} */
 export function getEngine() {
-  globalThis.__homelabEngine ??= new Engine();
+  globalThis.__homelabEngine ??= new Engine(DEMO ? demoSources() : liveSources);
   return globalThis.__homelabEngine;
 }

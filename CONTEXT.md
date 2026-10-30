@@ -14,6 +14,8 @@ Terms used in the code and in design discussions.
 
 **Transport** — a function `(url, opts) → Response`; the seam between integrations and the network. Production: undici (`http.js`). Demo and tests: a fixture transport.
 
+**Sources** — where the engine's readings come from: probes, certificates, the local host, temperatures, the transport each widget type gets, and the first day of history. `liveSources` (`sources.js`) in production, `demoSources()` (`demo.js`) in the demo; tests script their own. The engine reaches the outside only through them and the db.
+
 **Fixture** — the recorded-style API responses for one widget type (`src/lib/server/demo/<type>.js`): a table of `"METHOD /path"` routes to functions of `{ now, scenario, params, headers, body }`.
 
 **Scenario** — which story the fixtures tell: `issues` (default; things to look at) or `calm` (all fine). Set with `DEMO_SCENARIO`.
