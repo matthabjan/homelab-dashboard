@@ -8,6 +8,7 @@ import { DEFAULT_SETTINGS } from '../config.ts';
 import { crossed, fieldPath, formatValue } from './customapi.ts';
 import { memoryKv } from '../test-helpers.ts';
 import type { CustomApiMapping, Fixtures, Json, Shared, Transport, Widget, WidgetResult } from '$lib/types';
+import type { OmvRpcRequest } from './openmediavault.ts';
 
 /** A widget block without its type, which each test adds. */
 type WidgetOptions = { url: string; [option: string]: unknown };
@@ -263,6 +264,22 @@ test('OMV: services, updates and the fullest data disk, not the largest', async 
   // scratch (500 GB, 90 %) beats data (8 TB, 71 %)
   assert.deepEqual(stats(issues), { services: ['3 / 3', null], updates: ['4', null], storage: ['90%', 'crit'] });
   assert.deepEqual(issues.alerts.map((a) => a.title), ['4 updates available on nas']);
+  assert.equal(issues.line, 'scratch 90% full · SMART 1 / 1 ok');
+  assert.equal(calm.line, 'data 71% full · SMART 1 / 1 ok');
+});
+
+test('OMV: a stopped service leads the line', async () => {
+  const table: Fixtures = {
+    'POST /rpc.php': (req) => {
+      const body = req.body as OmvRpcRequest;
+      if (body.method !== 'getStatus') return FIXTURES.openmediavault['POST /rpc.php'](req);
+      return { response: { data: [{ name: 'smb', title: 'SMB/CIFS', enabled: true, running: true }, { name: 'nfs', title: 'NFS', enabled: true, running: false }] }, error: null };
+    }
+  };
+  const res = await INTEGRATIONS.openmediavault.collect({ type: 'openmediavault', ...WIDGETS.openmediavault },
+    createContext({ transport: fixtureTransport(table, { scenario: 'calm' }), kv: memoryKv(), settings: DEFAULT_SETTINGS, now: Date.now() }));
+  assert.equal(res.line, '1 service stopped · data 71% full · SMART 1 / 1 ok');
+  assert.deepEqual(res.alerts.map((a) => a.title), ['NAS service NFS stopped']);
 });
 
 test('OPNsense: WAN rates are text, rounded from 100 Mbit/s up', async () => {

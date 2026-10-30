@@ -166,6 +166,7 @@ export async function collect(w: Widget, ctx: Context): Promise<WidgetResult> {
   const alerts: Alert[] = [];
   const enabled = (services || []).filter((s) => s.enabled !== false);
   const svcRunning = enabled.filter((s) => s.running).length;
+  const stopped = enabled.length - svcRunning;
   for (const s of enabled.filter((s) => !s.running)) alerts.push({ sev: 'warn', title: `NAS service ${s.title || s.name} stopped`, detail: 'Enabled in OMV but not running' });
 
   // only sent to admins; a non-admin login gets hostname and time only
@@ -176,26 +177,28 @@ export async function collect(w: Widget, ctx: Context): Promise<WidgetResult> {
   // a drive that isn't GOOD is raised by the Drives panel, which also colours this tile
   const good = disks.filter((d) => d.overallstatus === 'GOOD').length;
 
-  const storage: UsageRow[] = (Array.isArray(fs) ? fs : [])
+  const volumes = (Array.isArray(fs) ? fs : [])
     .filter((f) => Number(f.size) > 0 && f.mountpoint !== '/')
-    .map((f): UsageRow => {
+    .map((f) => {
       const total = Number(f.size), avail = Number(f.available);
       const used = Number.isFinite(avail) ? total - avail : Number(f.used);
       const dev = f.canonicaldevicefile || f.devicefile;
-      return { name: `${f.label || (dev ? dev.replace(/^\/dev\//, '') : f.mountpoint)} · NAS`, used, total, pct: pct(used, total), sub: fmtPair(used, total), source: 'omv' };
+      const label = f.label || (dev ? dev.replace(/^\/dev\//, '') : f.mountpoint);
+      return { label, row: { name: `${label} · NAS`, used, total, pct: pct(used, total), sub: fmtPair(used, total), source: 'omv' } satisfies UsageRow };
     });
+  const storage: UsageRow[] = volumes.map((v) => v.row);
   for (const s of storage) ctx.metric(`storage.omv.${s.name}`, s.pct);
   // the root file system is left out above, so this is the fullest data disk
-  const fullest = [...storage].sort((a, b) => (b.pct ?? 0) - (a.pct ?? 0))[0];
-  const full = fullest?.pct ?? 0, th = ctx.settings.thresholds;
+  const fullest = [...volumes].sort((a, b) => (b.row.pct ?? 0) - (a.row.pct ?? 0))[0];
+  const full = fullest?.row.pct ?? 0, th = ctx.settings.thresholds;
 
   return {
     stats: [
-      { k: 'services', v: services ? `${svcRunning} / ${enabled.length}` : '—', level: svcRunning < enabled.length ? 'warn' : null },
+      { k: 'services', v: services ? `${svcRunning} / ${enabled.length}` : '—', level: stopped ? 'warn' : null },
       { k: 'updates', v: updates == null ? '—' : String(updates) },
-      { k: 'storage', v: fmtPct(fullest?.pct), level: full >= th.storageWarnPct ? 'crit' : full >= th.storageAmberPct ? 'warn' : null }
+      { k: 'storage', v: fmtPct(fullest?.row.pct), level: full >= th.storageWarnPct ? 'crit' : full >= th.storageAmberPct ? 'warn' : null }
     ],
-    line: [fullest && `Fullest disk ${fmtPct(fullest.pct)}`, disks.length && `SMART ${good} / ${disks.length} ok`].filter(Boolean).join(' · ') || 'Online',
+    line: [stopped && `${stopped} service${stopped > 1 ? 's' : ''} stopped`, fullest && `${fullest.label} ${fmtPct(fullest.row.pct)} full`, disks.length && `SMART ${good} / ${disks.length} ok`].filter(Boolean).join(' · ') || 'Online',
     alerts,
     storage,
     drives: await omvDrives(w, ctx, disks)
