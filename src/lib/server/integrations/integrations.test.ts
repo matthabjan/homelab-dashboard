@@ -315,6 +315,10 @@ for (const scenario of ['issues', 'calm']) {
         assert.ok(res.stats.every((s) => typeof s.v === 'string'), 'stat values are text');
         assert.equal(typeof res.line, 'string');
         assert.ok(Array.isArray(res.alerts), 'alerts');
+        // attention ages and dedupes by key: two alerts with one key would silently become one
+        const keys = res.alerts.map((a) => a.key);
+        assert.ok(keys.every((k) => typeof k === 'string' && k.length > 0), 'every alert has a key');
+        assert.equal(new Set(keys).size, keys.length, `alert keys are unique: ${keys.join(', ')}`);
       });
     }
   });

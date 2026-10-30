@@ -167,7 +167,7 @@ export async function collect(w: Widget, ctx: Context): Promise<WidgetResult> {
   (ctx.shared.guests ??= {})[`${base} ${node.node}`] = Object.fromEntries(guests.map((g) => [String(g.id), g.name]));
 
   const alerts: Alert[] = [];
-  if (node.status !== 'online') alerts.push({ sev: 'crit', title: `Node ${node.node} is offline`, detail: 'Proxmox reports the node as ' + node.status });
+  if (node.status !== 'online') alerts.push({ sev: 'crit', key: 'node-offline', title: `Node ${node.node} is offline`, detail: 'Proxmox reports the node as ' + node.status });
   if (updates) alerts.push({ sev: 'info', key: 'updates', title: `${updates} updates available on ${node.node}`, detail: 'apt packages pending' });
   for (const s of down) alerts.push({ sev: 'warn', key: `storage-${s.storage}`, title: `${s.storage} is unavailable on ${node.node}`, detail: `Proxmox reports the storage as ${s.status ?? 'unknown'}` });
   if (missing) alerts.push({ sev: 'warn', key: 'host-storage', title: `host.storage "${missing}" not found on ${node.node}`, detail: 'The host gauge falls back to the guest-disk storage' });

@@ -144,7 +144,7 @@ test('origin and icon helpers', () => {
 test('config problems show as one alert per file, linking to the list', async () => {
   const { createSnapshot } = await import('./snapshot.ts');
   const { snapshotInput } = await import('./test-helpers.ts');
-  const items = createSnapshot()(snapshotInput({ cfg: fakeEngine().cfg }), Date.now()).attention.filter((a) => a.key?.startsWith('config-'));
+  const items = createSnapshot()(snapshotInput({ cfg: fakeEngine().cfg }), Date.now()).attention.filter((a) => a.key.startsWith('config|'));
   assert.deepEqual(items.map((a) => [a.sev, a.title, a.href]), [['warn', 'services.yaml has 2 problems', '/config#problems']]);
   assert.match(items[0].detail ?? '', /, and 1 more$/);
 });

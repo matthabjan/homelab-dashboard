@@ -258,8 +258,8 @@ export interface Alert {
   sev: Severity;
   title: string;
   detail?: string;
-  /** identifies the alert across polls when the title changes (e.g. includes a count) */
-  key?: string;
+  /** identifies the alert across polls, unique within one result: titles may carry readings (a count, a percentage) */
+  key: string;
 }
 
 /** Written to the events table and shown in the feed. */
@@ -551,14 +551,20 @@ export interface Fact {
 
 export interface AttentionItem {
   sev: Severity;
+  /** named after its service ("Pi-hole: Blocking is disabled") */
   title: string;
   detail?: string;
-  key?: string;
+  /** the raised key, scoped by its service or source (`<sid>|<key>`, `config|<key>`) */
+  key: string;
   sid?: string;
   service?: string;
   href?: string | null;
+  /** when it first appeared */
   ts: number;
 }
+
+/** A row of the feed: an attention item, or a recent event. */
+export type FeedItem = AttentionItem | (FeedEvent & { service?: undefined });
 
 export interface FeedEvent {
   ts: number;
@@ -620,7 +626,8 @@ export interface Snapshot {
   facts: Fact[];
   attention: AttentionItem[];
   needCount: number;
-  events: FeedEvent[];
+  /** what the attention section lists: see attention.ts */
+  feed: FeedItem[];
   /** 48 half-hour buckets, oldest first */
   fleet: (Level | 'none')[];
   fleetAvail: number | null;

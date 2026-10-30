@@ -167,7 +167,7 @@ export async function collect(w: Widget, ctx: Context): Promise<WidgetResult> {
   const enabled = (services || []).filter((s) => s.enabled !== false);
   const svcRunning = enabled.filter((s) => s.running).length;
   const stopped = enabled.length - svcRunning;
-  for (const s of enabled.filter((s) => !s.running)) alerts.push({ sev: 'warn', title: `NAS service ${s.title || s.name} stopped`, detail: 'Enabled in OMV but not running' });
+  for (const s of enabled.filter((s) => !s.running)) alerts.push({ sev: 'warn', key: `service-${s.name}`, title: `NAS service ${s.title || s.name} stopped`, detail: 'Enabled in OMV but not running' });
 
   // only sent to admins; a non-admin login gets hostname and time only
   const updates = typeof info?.availablePkgUpdates === 'number' ? info.availablePkgUpdates : null;

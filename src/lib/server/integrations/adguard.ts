@@ -31,8 +31,8 @@ export async function collect(w: Widget, ctx: Context): Promise<WidgetResult> {
   // one point per hour or day, covering AdGuard's statistics interval
   const series = Array.isArray(stats.dns_queries) ? stats.dns_queries : null;
   const alerts: Alert[] = [];
-  if (status && status.protection_enabled === false) alerts.push({ sev: 'warn', title: 'DNS protection is paused', detail: 'AdGuard Home filtering is disabled' });
-  if (status && status.running === false) alerts.push({ sev: 'crit', title: 'AdGuard DNS not running', detail: 'DNS server reports not running' });
+  if (status && status.protection_enabled === false) alerts.push({ sev: 'warn', key: 'paused', title: 'DNS protection is paused', detail: 'AdGuard Home filtering is disabled' });
+  if (status && status.running === false) alerts.push({ sev: 'crit', key: 'not-running', title: 'AdGuard DNS not running', detail: 'DNS server reports not running' });
   return {
     stats: [
       { k: 'queries', v: fmtNum(q) },

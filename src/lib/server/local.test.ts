@@ -89,14 +89,14 @@ test('a nearly full local disk raises the storage warning', async () => {
   const local = await readLocal(host, {}, { procDir: proc });
   assert.ok(local);
   const full = { ...local, disk: { name: '/', pct: 91.4, sub: '426 / 466 GiB' } };
-  const alerts = buildSnapshot(snapshotInput({ local: full })).attention.filter((a) => a.key === 'local-disk');
+  const alerts = buildSnapshot(snapshotInput({ local: full })).attention.filter((a) => a.key === 'host|local-disk');
   assert.deepEqual(alerts.map((a) => [a.sev, a.title, a.detail]), [['warn', 'Disk / is 91% full', 'this host · 426 / 466 GiB']]);
   const ok = { ...local, disk: { name: '/', pct: 84, sub: '' } };
-  assert.equal(buildSnapshot(snapshotInput({ local: ok })).attention.filter((a) => a.key === 'local-disk').length, 0);
+  assert.equal(buildSnapshot(snapshotInput({ local: ok })).attention.filter((a) => a.key === 'host|local-disk').length, 0);
 });
 
 test('a widget alert names its service in the attention list and headline, not on its own tile', () => {
-  const widget = (title: string): import('$lib/types').WidgetState => ({ ok: true, ts: Date.now(), lastOk: Date.now(), stats: [], line: '', alerts: [{ sev: 'crit', title, detail: 'critical when below 1' }] });
+  const widget = (title: string): import('$lib/types').WidgetState => ({ ok: true, ts: Date.now(), lastOk: Date.now(), stats: [], line: '', alerts: [{ sev: 'crit', key: 'health', title, detail: 'critical when below 1' }] });
   const snap = buildSnapshot(snapshotInput({ services: [
     { name: 'Media server', state: { widget: widget('Health is Degraded') } },
     { name: 'Pi-hole', state: { widget: widget('Pi-hole is not filtering') } }

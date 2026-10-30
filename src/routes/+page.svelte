@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { AttentionItem, FeedEvent, Snapshot, Tile } from '$lib/types';
+  import type { FeedItem, Snapshot, Tile } from '$lib/types';
   import type { PageProps } from './$types';
   import Icon from '$lib/components/Icon.svelte';
   import Vitals from '$lib/components/Vitals.svelte';
@@ -31,8 +31,6 @@
   let offline = $state(false);
   // a status page must not keep saying "all good" on old data: the page greys out instead
   const degraded = $derived(!!stale || lost || offline);
-  /** a row of the attention list: an alert, or a recent change (events aren't tied to a service name) */
-  type FeedItem = AttentionItem | (FeedEvent & { service?: undefined });
   // tiles (and 'verdict') whose level changed in the last update, briefly highlighted
   let flash = $state(new Set<string>());
   function changes(prev: Snapshot, next: Snapshot) {
@@ -51,16 +49,8 @@
     clearTimeout(unflash);
     unflash = setTimeout(() => (flash = new Set()), 2400);
   }
-  // problems first; when all is well show recent changes (incl. informational notes)
-  const feed: FeedItem[] = $derived(
-    !snap ? [] : snap.needCount ? snap.attention : dedupe([...snap.attention, ...snap.events].sort((a, b) => b.ts - a.ts))
-  );
-  // an alert and the event it logged say the same; the alert carries its service's name in front ("Proxmox VE: …")
-  function dedupe(list: FeedItem[]) {
-    const seen = new Set<string>();
-    const bare = (x: FeedItem) => (x.service && x.title.startsWith(`${x.service}: `) ? x.title.slice(x.service.length + 2) : x.title);
-    return list.filter((x) => !seen.has(bare(x)) && seen.add(bare(x)));
-  }
+  // problems first; when all is well, recent changes too (built by the server: attention.ts)
+  const feed: FeedItem[] = $derived(snap?.feed ?? []);
   const target = $derived(snap?.linkTarget || '_blank');
   // this dashboard's own pages (the config view) open in place; services as settings.linkTarget says
   const linkTarget = (href: string | null | undefined) => (!href ? undefined : href.startsWith('/') ? undefined : target);

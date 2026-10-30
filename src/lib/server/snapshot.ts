@@ -6,7 +6,8 @@ import { fmtDuration as fmtAge, fmtHours, fmtSize } from './format.ts';
 import { DEMO } from './demo.ts';
 import { hostService, hostSource } from './local.ts';
 import { kindOf, status as checkStatus } from './check.ts';
-import type { AttentionItem, BackupStatus, ConfigProblem, ContainerCounts, Drive, HeartbeatState, Fact, Gauge, Level, NetworkReading, Settings, Severity, Snapshot, Tile, Traffic } from '$lib/types';
+import { createAttention, type Raised } from './attention.ts';
+import type { BackupStatus, ConfigProblem, ContainerCounts, Drive, HeartbeatState, Fact, Gauge, Level, NetworkReading, Settings, Severity, Snapshot, Tile, Traffic } from '$lib/types';
 import type { Engine } from './engine.ts';
 
 const RANK: Record<Severity | Level, number> = { crit: 3, warn: 2, info: 1, ok: 0 };
@@ -19,14 +20,14 @@ const MIN_SLOW_SAMPLES = 10; // ~5 min of probes before a service can be called 
 export type SnapshotInput = Pick<Engine, 'cfg' | 'state' | 'autoIcons' | 'shared' | 'temps' | 'local'>;
 type ProbeSummary = { up24: number | null; p95: number | null; p95h: number | null; n1: number; up7: number | null };
 /** What a builder carries from one snapshot to the next. */
-type Memory = { stats: { ts: number; data: Map<string, ProbeSummary> }; firstSeen: Map<string, number> };
+type Memory = { stats: { ts: number; data: Map<string, ProbeSummary> }; attention: ReturnType<typeof createAttention> };
 
 /**
  * A snapshot builder. It remembers when each alert first appeared (so attention shows "since" instead of
  * "last polled") and caches probe statistics for a minute, so keep one per engine.
  */
 export function createSnapshot(): (input: SnapshotInput, now: number) => Snapshot {
-  const mem: Memory = { stats: { ts: 0, data: new Map() }, firstSeen: new Map() };
+  const mem: Memory = { stats: { ts: 0, data: new Map() }, attention: createAttention() };
   return (input, now) => build(input, now, mem);
 }
 
@@ -60,21 +61,18 @@ export function mergeBackups(pbs: BackupStatus | undefined, beats: (HeartbeatSta
   };
 }
 
-/** "Pi-hole: Blocking is disabled", unless the title already names the service (as "X: stats unavailable" does). */
-export const named = (service: string, title: string) => (title.toLowerCase().includes(service.toLowerCase()) ? title : `${service}: ${title}`);
-
 /**
- * A drive's row in the Drives panel, and what is wrong with it (each problem becomes an alert, and colours the tile of
- * the service that reported the drive, as a widget alert does).
+ * A drive's row in the Drives panel, and what is wrong with it: each problem is raised for the service that reported
+ * the drive, as a predicate of the drive ("WD Red has 8% life left").
  */
 function driveStatus(d: Drive, where: string, th: Settings['thresholds']) {
   /** severity, alert text, alert key */
   const problems: ['crit' | 'warn', string, string][] = [];
-  if (d.health === 'failing') problems.push(['crit', 'SMART reports failing', 'health']);
-  if (d.health === 'warning') problems.push(['warn', 'SMART reports a past or minor problem', 'health']);
-  if (d.lifeLeft != null && d.lifeLeft <= th.driveLifeWarnPct) problems.push(['warn', `${d.lifeLeft}% life left`, 'life']);
-  if (d.errors) problems.push(['warn', `${d.errors} media errors or bad sectors`, 'errors']);
-  if (d.tempC != null && d.tempC >= th.driveTempWarnC) problems.push(['warn', `${d.tempC} °C`, 'temp']);
+  if (d.health === 'failing') problems.push(['crit', 'is failing SMART', 'health']);
+  if (d.health === 'warning') problems.push(['warn', 'has a past or minor SMART problem', 'health']);
+  if (d.lifeLeft != null && d.lifeLeft <= th.driveLifeWarnPct) problems.push(['warn', `has ${d.lifeLeft}% life left`, 'life']);
+  if (d.errors) problems.push(['warn', `has ${d.errors} media errors or bad sectors`, 'errors']);
+  if (d.tempC != null && d.tempC >= th.driveTempWarnC) problems.push(['warn', `is at ${d.tempC} °C`, 'temp']);
   const level: Level = problems.some((p) => p[0] === 'crit') ? 'crit' : problems.length ? 'warn' : 'ok';
   const detail = [
     d.lifeLeft != null && `${d.lifeLeft}% life left`,
@@ -98,7 +96,8 @@ function driveStatus(d: Drive, where: string, th: Settings['thresholds']) {
 function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
   const { settings, groups, bookmarks } = engine.cfg;
   const th = settings.thresholds;
-  const attention: AttentionItem[] = [];
+  // everything is raised first: a tile is as bad as the worst alert raised for its service, wherever it came from
+  const round = mem.attention.begin(now);
   const tiles: Map<string, Tile> = new Map();
 
   // a config file with an error: keeping its last version is a warning, losing its content is critical
@@ -108,13 +107,13 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
   for (const p of engine.cfg.problems ?? []) byFile.set(p.file, [...(byFile.get(p.file) ?? []), p]);
   for (const [file, list] of byFile) {
     const [first] = list;
-    attention.push({
+    round.raise({
       sev: list.some((p) => p.fallback === 'none') ? 'crit' : 'warn',
-      key: `config-${file}`,
+      source: 'config',
+      key: file,
       title: list.length === 1 ? `${file} has an error` : `${file} has ${list.length} problems`,
       detail: list.length === 1 ? `${first.message} · ${shown[String(first.fallback)]}` : `${first.message}, and ${list.length - 1} more`,
-      href: '/config#problems',
-      ts: now
+      href: '/config#problems'
     });
   }
 
@@ -134,14 +133,14 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
       const auto = s.icon ? null : engine.autoIcons.get(s.id);
       const iconDark = s.iconDark ?? auto?.iconDark;
 
-      const push = (a: Omit<AttentionItem, 'ts'> & { ts?: number }) => attention.push({ ...a, sid: s.id, service: s.name, href: s.href, ts: a.ts ?? w?.ts ?? now });
-      if (cs?.alert) push({ ...cs.alert, title: `${s.name} ${cs.alert.title}` });
+      const raise = (a: Omit<Raised, 'service' | 'source'>) => round.raise({ ...a, ts: a.ts ?? w?.ts, service: s });
+      if (cs?.alert) raise({ ...cs.alert, key: 'check', title: `${s.name} ${cs.alert.title}` });
 
       const slowMs = s.latencyWarnMs ?? th.latencyWarnMs;
       if (!c.down && ps?.p95h != null && ps.n1 >= MIN_SLOW_SAMPLES && ps.p95h > slowMs) {
         lvl = 'warn';
         status = 'Slow';
-        push({ sev: 'warn', title: `${s.name} is slow`, detail: `p95 ${Math.round(ps.p95h)} ms over the last hour · limit ${slowMs} ms` });
+        raise({ sev: 'warn', key: 'slow', title: `${s.name} is slow`, detail: `p95 ${Math.round(ps.p95h)} ms over the last hour · limit ${slowMs} ms` });
         if (!w) { line = `Slow · p95 ${Math.round(ps.p95h)} ms`; lineLevel = 'warn'; }
       }
 
@@ -150,23 +149,14 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
         const days = Math.floor((st.cert.validTo - now) / 86_400_000);
         cert = { days, selfSigned: st.cert.selfSigned };
         if (days < th.certWarnDays) {
-          push({ sev: days < 3 ? 'crit' : 'warn', title: days < 0 ? 'Certificate expired' : `Certificate expires in ${days} d`, detail: host });
-          if (lvl === 'ok') lvl = 'warn';
-          if (!lineLevel) { line = days < 0 ? 'Certificate expired' : `Certificate expires in ${days} d`; lineLevel = 'warn'; }
+          raise({ sev: days < 3 ? 'crit' : 'warn', key: 'cert', title: days < 0 ? 'Certificate expired' : `Certificate expires in ${days} d`, detail: host });
         }
       }
 
       if (w) {
-        for (const a of w.alerts || []) {
-          // the attention list and the headline stand alone, so a widget's alert says whose it is; the tile line doesn't need to
-          push({ ...a, title: named(s.name, a.title) });
-          if (RANK[a.sev] > RANK[lvl === 'unknown' ? 'ok' : lvl] && a.sev !== 'info') {
-            lvl = a.sev;
-            if (!c.down) { line = a.detail ? `${a.title} · ${a.detail}` : a.title; lineLevel = a.sev; }
-          }
-        }
+        for (const a of w.alerts || []) raise({ ...a, key: `widget-${a.key}` });
         if (!w.ok) {
-          push({ sev: 'info', title: `${s.name}: stats unavailable`, detail: w.error });
+          raise({ sev: 'info', key: 'stats', title: 'stats unavailable', detail: w.error });
           if (!lineLevel) { line = 'Stats unavailable'; lineLevel = 'muted'; }
         }
       }
@@ -182,7 +172,7 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
         iconDark: iconDark ? resolveIcon(iconDark, s.name) : null,
         level: lvl,
         status,
-        line: line || (lvl === 'ok' ? 'Online' : ''),
+        line,
         lineLevel,
         stats: (w?.stats || []).slice(0, 3),
         uptime24: ps?.up24 ?? null,
@@ -193,11 +183,6 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
       });
     }
   }
-
-  attention.sort((a, b) => RANK[b.sev] - RANK[a.sev] || b.ts - a.ts);
-  const all = [...tiles.values()];
-  const probed = all.filter((t) => t.level !== 'unknown');
-  const up = probed.filter((t) => t.status !== 'Down').length;
 
   // ---- host vitals: the Proxmox node, or the machine the dashboard runs on ----
   const hostSvc = hostSource(engine.cfg) === 'proxmox' ? hostService(engine.cfg) : undefined;
@@ -214,15 +199,17 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
       gauges.push({ key: 'disk', label: 'Disk', val: hw.disk.pct == null ? '—' : Math.round(hw.disk.pct), unit: '%', pct: hw.disk.pct, level: level(hw.disk.pct, th.storageAmberPct, th.storageWarnPct), sub: hw.disk.name, series: null });
       // a Proxmox node's disk is also a storage row, which raises this itself; the local host has no other place for it
       if (!hostSvc && hw.disk.pct != null && hw.disk.pct >= th.storageWarnPct) {
-        attention.push({ sev: 'warn', key: 'local-disk', title: `Disk ${hw.disk.name} is ${Math.round(hw.disk.pct)}% full`, detail: `${hw.node} · ${hw.disk.sub}`, ts: now });
+        round.raise({ sev: 'warn', source: 'host', key: 'local-disk', title: `Disk ${hw.disk.name} is ${Math.round(hw.disk.pct)}% full`, detail: `${hw.node} · ${hw.disk.sub}` });
       }
     }
     if (temps?.cpu != null) {
       const span = th.tempWarnC + 15 - th.tempMinC;
       const tp = Math.max(0, Math.min(100, ((temps.cpu - th.tempMinC) / span) * 100));
       gauges.push({ key: 'temp', label: 'CPU temp', val: Math.round(temps.cpu), unit: '°C', pct: tp, level: level(temps.cpu, th.tempWarnC, th.tempWarnC + 10), sub: `warn at ${th.tempWarnC} °C`, series: spark('host.temp'), max: null });
-      if (temps.cpu >= th.tempWarnC) attention.push({ key: 'cpu-temp', sev: temps.cpu >= th.tempWarnC + 10 ? 'crit' : 'warn', title: `CPU at ${Math.round(temps.cpu)} °C`, detail: `limit ${th.tempWarnC} °C`, href: hostSvc?.href, ts: now });
-      temps.nvme.forEach((n, i) => { if (n >= th.driveTempWarnC) attention.push({ key: `nvme-temp-${i}`, sev: 'warn', title: `NVMe at ${Math.round(n)} °C`, detail: 'drive is running hot', href: hostSvc?.href, ts: now }); });
+      // the kernel's sensors are the Proxmox node's (the dashboard shares its kernel), so its tile carries them
+      const whose = hostSvc ? { service: hostSvc } : { source: 'host' };
+      if (temps.cpu >= th.tempWarnC) round.raise({ ...whose, key: 'cpu-temp', sev: temps.cpu >= th.tempWarnC + 10 ? 'crit' : 'warn', title: `CPU at ${Math.round(temps.cpu)} °C`, detail: `limit ${th.tempWarnC} °C` });
+      temps.nvme.forEach((n, i) => { if (n >= th.driveTempWarnC) round.raise({ ...whose, key: `nvme-temp-${i}`, sev: 'warn', title: `NVMe at ${Math.round(n)} °C`, detail: 'drive is running hot' }); });
     }
     host = {
       name: settings.host.name || (hw?.node ?? 'host'),
@@ -246,7 +233,7 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
       if (x.offline || x.pct == null) { storage.push({ name: x.name, pct: x.pct ?? null, level: 'off', sub: x.sub }); continue; }
       const lv: Level = x.pct >= th.storageWarnPct ? 'crit' : x.pct >= th.storageAmberPct ? 'warn' : 'ok';
       storage.push({ name: x.name, pct: x.pct, level: lv, sub: x.sub });
-      if (x.pct >= th.storageWarnPct) attention.push({ sev: 'warn', key: `storage-${s.id}-${x.name}`, title: `${x.name} is ${Math.round(x.pct)}% full`, detail: x.sub, href: s.href, ts: now });
+      if (x.pct >= th.storageWarnPct) round.raise({ sev: 'warn', service: s, key: `storage-${x.name}`, title: `${x.name} is ${Math.round(x.pct)}% full`, detail: x.sub });
     }
   }
 
@@ -260,18 +247,26 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
       if (d.serial && seenSerials.has(d.serial)) continue;
       if (d.serial) seenSerials.add(d.serial);
       const { row, problems } = driveStatus(d, d.where ?? s.name, th);
-      const tile = tiles.get(s.id);
-      for (const [sev, text, key] of problems) {
-        const title = `${d.model}: ${text}`;
-        attention.push({ sev, key: `drive-${d.serial ?? d.model}-${key}`, sid: s.id, service: s.name, title, detail: row.meta, href: s.href, ts: now });
-        if (tile && RANK[sev] > RANK[tile.level === 'unknown' ? 'ok' : tile.level]) {
-          tile.level = sev;
-          if (tile.status !== 'Down') { tile.line = title; tile.lineLevel = sev; }
-        }
-      }
+      for (const [sev, text, key] of problems) round.raise({ sev, service: s, key: `drive-${d.serial ?? d.model}-${key}`, title: `${d.model} ${text}`, detail: row.meta });
       drives.push(row);
     }
   }
+
+  // ---- attention closed: each tile takes its worst alert when that is worse than its check says ----
+  const events = recentEvents(now - 24 * H, 5).map((e) => ({ ...e, href: (e.sid && engine.cfg.services.find((s) => s.id === e.sid)?.href) ?? null }));
+  const att = round.close(events);
+  for (const t of tiles.values()) {
+    const top = t.level === 'unknown' ? null : att.worst(t.id);
+    if (top && RANK[top.sev] > RANK[t.level as Level]) {
+      t.level = top.sev;
+      t.line = top.detail ? `${top.title} · ${top.detail}` : top.title;
+      t.lineLevel = top.sev;
+    }
+    t.line ||= t.level === 'ok' ? 'Online' : '';
+  }
+  const all = [...tiles.values()];
+  const probed = all.filter((t) => t.level !== 'unknown');
+  const up = probed.filter((t) => t.status !== 'Down').length;
 
   // ---- network ----
   let network: Snapshot['network'] = null;
@@ -322,30 +317,13 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
   const ups = all.map((t) => t.uptime24).filter((x) => x != null);
   const fleetAvail = ups.length ? ups.reduce((a, b) => a + b, 0) / ups.length : null;
 
-  // ---- alert age ----
-  const seenNow = new Set();
-  for (const a of attention) {
-    const k = `${a.sid ?? ''}|${a.key ?? a.title}`;
-    seenNow.add(k);
-    const first = mem.firstSeen.get(k) ?? Math.min(a.ts ?? now, now);
-    mem.firstSeen.set(k, first);
-    a.ts = Math.min(a.ts ?? now, first);
-  }
-  for (const k of mem.firstSeen.keys()) if (!seenNow.has(k)) mem.firstSeen.delete(k);
-
-  // ---- verdict ----
-  attention.sort((a, b) => RANK[b.sev] - RANK[a.sev] || b.ts - a.ts);
-  const needCount = attention.filter((a) => a.sev === 'crit' || a.sev === 'warn').length;
+  // ---- verdict: the headline is attention's, the line under it this module's ----
   const backups = mergeBackups(widgets.find((x) => x.w.backups)?.w.backups, engine.cfg.services.flatMap((s) => (s.heartbeat?.backup ? [engine.state(s.id).heartbeat ?? null] : [])), now);
   const certWarn = all.filter((t) => t.cert && t.cert.days < th.certWarnDays).length;
   const subParts = [`${up} of ${probed.length} services up`];
   if (backups?.known) subParts.push(backups.overdue ? `${backups.overdue} backup${backups.overdue > 1 ? 's' : ''} overdue` : 'backups current');
   subParts.push(certWarn ? `${certWarn} certificate${certWarn > 1 ? 's' : ''} expiring` : 'no certs expiring soon');
-  const top = attention[0];
-  const verdict: Snapshot['verdict'] = needCount
-    // needCount > 0: the top item is crit or warn, never info
-    ? { level: (top.sev as Level), tag: `${needCount} ${needCount === 1 ? 'needs' : 'need'} attention`, title: `${top.title}.`, sub: subParts.join(' · ') }
-    : { level: 'ok', tag: 'All systems normal', title: 'Everything is running.', sub: subParts.join(' · ') };
+  const verdict: Snapshot['verdict'] = { ...att.headline, sub: subParts.join(' · ') };
 
   // summed over Docker engines; a host seen by both Portainer and a docker widget is one entry
   const containers = Object.values(engine.shared.containers ?? {}).reduce(
@@ -360,7 +338,6 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
     nextCert && { k: 'next cert', v: `${nextCert.days} d`, level: nextCert.days < th.certWarnDays ? 'warn' : null }
   ] as (Fact | false | undefined)[]).filter((f): f is Fact => !!f);
 
-  const events = recentEvents(now - 24 * H, 5).map((e) => ({ ...e, href: (e.sid && tiles.get(e.sid)?.href) ?? null }));
 
   const scores = openScores(now, settings.mostUsed.halfLifeDays);
   const mostUsed = all
@@ -382,9 +359,9 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
     staleAfter: Math.max(settings.intervals.widgets, settings.intervals.probe) * 2.5 * 1000,
     verdict,
     facts,
-    attention,
-    needCount,
-    events,
+    attention: att.items,
+    needCount: att.needCount,
+    feed: att.feed,
     fleet: buckets,
     fleetAvail,
     host,

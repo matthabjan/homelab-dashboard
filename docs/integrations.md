@@ -7,7 +7,8 @@ A widget adds live data to a service: tile stats, panels in the vitals card and 
 - **Use a dedicated read-only account** wherever the product supports one. Don't reuse an admin login.
 - **Use `https://` URLs.** Over `http://`, credentials cross the network in plain text.
 - **Pass credentials as secrets** (`${NAME}`). See [Configuration → Secrets](configuration.md#secrets-and-variables).
-- A widget's alerts start with the service's name in the attention list ("Pi-hole: Blocking is disabled"), unless they already name it. On the service's own tile they don't.
+- Every alert about a service starts with the service's name in the attention list ("Pi-hole: Blocking is disabled", "Nextcloud: Certificate expires in 5 d"), unless it already names it. On the service's own tile it doesn't.
+- A tile is as bad as the worst alert raised for its service, wherever that alert comes from: a widget, a certificate, a full storage or a drive it reports. With a Proxmox host, the CPU and NVMe temperatures count against the Proxmox tile.
 - Each widget has 25 s per poll. If a call fails, the tile shows *Stats unavailable* with a short reason, keeps its last stats, and the full error goes to the container log.
 
 | Type | Product | Auth | Read-only possible |
@@ -334,7 +335,7 @@ The vitals card has a **Drives** panel next to **Storage**: Storage shows how fu
 
 Virtual disks (QEMU, virtio) are skipped, since the host reports the real drive. A disk seen by two sources (passed through whole) is shown once. Each row shows model, type (NVMe, SSD, HDD, USB), size and where it sits, then life left, temperature, power-on time and data written as far as the drive reports them. SATA SSDs that PVE lists as `hdd` with `rpm 0` are shown as SSD. SMART details are read every 10 minutes, since they change slowly and reading them wakes the disks.
 
-**Alerts**
+**Alerts** count against the service that reported the drive, so its tile turns amber or red too. They read as the drive's model and the problem ("NAS: WD Red has 8% life left").
 
 | Severity | When |
 |---|---|
