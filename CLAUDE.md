@@ -39,7 +39,7 @@ Domain terms (service, widget, integration, ctx, transport, fixture, scenario, a
 
 ## Adding or changing an integration
 
-Every type must exist in three places or `integrations.test.ts` fails: `INTEGRATIONS` (integrations/index.ts), `FIXTURES` (demo/index.ts), and `WIDGETS` in the test. Fixtures should cover both scenarios (`issues` triggers the alerts, `calm` is healthy). Also update `config.example/services.yaml` (and a commented example in `config.starter/services.yaml` if it's useful without Proxmox) and `docs/integrations.md` (least-privilege account, options, alerts). Match gethomepage widget field names. Alert text is shown to every viewer: never put credentials or upstream bodies in it — throw short messages and attach the body as `err.body` (logged only).
+Every type must exist in three places or `integrations.test.ts` fails: `INTEGRATIONS` (integrations/index.ts), `FIXTURES` (demo/index.ts), and `WIDGETS` in the test. Fixtures should cover both scenarios (`issues` triggers the alerts, `calm` is healthy). Also update `config.example/services.yaml` (and a commented example in `config.starter/services.yaml` if it's useful without Proxmox) and `docs/integrations.md` (least-privilege account, options, alerts). Match gethomepage widget field names. Build `stats` and `line` with `format.ts#card` from `[Stat, text]` facts: the Most used card shows the first two stats, the service card the line, and both must say the same. Alert text is shown to every viewer: never put credentials or upstream bodies in it — throw short messages and attach the body as `err.body` (logged only).
 
 ## Conventions
 

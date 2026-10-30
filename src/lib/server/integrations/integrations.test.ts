@@ -217,7 +217,7 @@ test('customapi: alerts for crossed thresholds and missing fields; refreshInterv
     createContext({ transport: fixtureTransport(FIXTURES.customapi, { scenario }), kv: memoryKv(), settings: DEFAULT_SETTINGS, now, state }));
   const calm = await run('calm');
   assert.deepEqual(calm.stats.map((x) => [x.k, x.v, x.level]), [['sessions', '3', null], ['items', '2,841', null], ['health', 'OK', null]]);
-  assert.equal(calm.line, 'sessions 3');
+  assert.equal(calm.line, 'sessions 3 · items 2,841');
   assert.deepEqual(calm.alerts, []);
 
   const issues = await run('issues');
@@ -253,19 +253,20 @@ test('customapi: a non-JSON answer is an error with the body for the log only', 
   assert.deepEqual([post.method, post.body, post.headers['Content-Type'], post.headers.Authorization], ['POST', '{"q":1}', 'application/json', 'Basic dTpw']);
 });
 
-test('OMV: services, updates and the fullest data disk, not the largest', async () => {
+test('OMV: the fullest data disk (not the largest) and updates', async () => {
   const run = (scenario: string) => INTEGRATIONS.openmediavault.collect({ type: 'openmediavault', ...WIDGETS.openmediavault },
     createContext({ transport: fixtureTransport(FIXTURES.openmediavault, { scenario }), kv: memoryKv(), settings: DEFAULT_SETTINGS, now: Date.now() }));
-  const stats = (r: WidgetResult) => Object.fromEntries(r.stats.map((s) => [s.k, [s.v, s.level ?? null]]));
+  // in order: the Most used card shows the first two, which the line (the service card) says too
+  const stats = (r: WidgetResult) => r.stats.map((s) => [s.k, s.v, s.level ?? null]);
   const calm = await run('calm');
-  assert.deepEqual(stats(calm), { services: ['3 / 3', null], updates: ['0', null], storage: ['71%', 'warn'] });
+  assert.deepEqual(stats(calm), [['data full', '71%', 'warn'], ['updates', '0', null]]);
   assert.deepEqual(calm.alerts, []);
   const issues = await run('issues');
   // scratch (500 GB, 90 %) beats data (8 TB, 71 %)
-  assert.deepEqual(stats(issues), { services: ['3 / 3', null], updates: ['4', null], storage: ['90%', 'crit'] });
+  assert.deepEqual(stats(issues), [['scratch full', '90%', 'crit'], ['updates', '4', null]]);
   assert.deepEqual(issues.alerts.map((a) => a.title), ['4 updates available on nas']);
-  assert.equal(issues.line, 'scratch 90% full · SMART 1 / 1 ok');
-  assert.equal(calm.line, 'data 71% full · SMART 1 / 1 ok');
+  assert.equal(issues.line, 'scratch 90% full · 4 updates');
+  assert.equal(calm.line, 'data 71% full · 0 updates');
 });
 
 test('OMV: a stopped service leads the line', async () => {
@@ -278,7 +279,9 @@ test('OMV: a stopped service leads the line', async () => {
   };
   const res = await INTEGRATIONS.openmediavault.collect({ type: 'openmediavault', ...WIDGETS.openmediavault },
     createContext({ transport: fixtureTransport(table, { scenario: 'calm' }), kv: memoryKv(), settings: DEFAULT_SETTINGS, now: Date.now() }));
-  assert.equal(res.line, '1 service stopped · data 71% full · SMART 1 / 1 ok');
+  // both cards lead with it: the line and the first two stats say the same
+  assert.equal(res.line, '1 service stopped · data 71% full');
+  assert.deepEqual(res.stats.slice(0, 2).map((s) => [s.k, s.v, s.level ?? null]), [['services', '1 / 2', 'warn'], ['data full', '71%', 'warn']]);
   assert.deepEqual(res.alerts.map((a) => a.title), ['NAS service NFS stopped']);
 });
 
@@ -301,6 +304,36 @@ test('OPNsense: WAN rates are text, rounded from 100 Mbit/s up', async () => {
   const after = await INTEGRATIONS.opnsense.collect({ type: 'opnsense', ...WIDGETS.opnsense },
     createContext({ transport: fixtureTransport(reset, { scenario: 'calm', now: t0 + 120_000 }), kv: memoryKv(), settings: DEFAULT_SETTINGS, now: t0 + 120_000, state }));
   assert.equal(after.network?.up, null);
+});
+
+// The Most used card shows a widget's first two stats, the service card its line: both say the same two facts.
+const card = async (type: string, scenario: string, table: Fixtures = FIXTURES[type as keyof typeof FIXTURES], w: WidgetOptions = WIDGETS[type]) => {
+  const res = await INTEGRATIONS[type as keyof typeof INTEGRATIONS].collect({ type, ...w } as Widget,
+    createContext({ transport: fixtureTransport(table, { scenario }), kv: memoryKv(), settings: DEFAULT_SETTINGS, now: Date.now() }));
+  return { line: res.line, stats: res.stats.slice(0, 2).map((s) => [s.k, s.v, s.level ?? null]) };
+};
+
+test('cards: PBS shows the last backup and the datastore; overdue backups lead', async () => {
+  assert.deepEqual(await card('proxmoxbackupserver', 'calm'), { line: 'Last backup 6 h ago · store 62%', stats: [['last backup', '6 h', null], ['datastore', '62%', null]] });
+  assert.deepEqual(await card('proxmoxbackupserver', 'issues'), { line: '1 backup overdue · last backup 6 h ago', stats: [['overdue', '1', 'warn'], ['last backup', '6 h', null]] });
+});
+
+test('cards: FRITZ!Box shows the line rates and uptime; an offline line leads', async () => {
+  assert.deepEqual(await card('fritzbox', 'calm'), { line: '250 / 40 Mbit/s · up 12 d', stats: [['max ↓ / ↑ Mbit/s', '250 / 40', null], ['up', '12 d', null]] });
+  const offline: Fixtures = { ...FIXTURES.fritzbox, 'POST /igdupnp/control/WANIPConn1': () => '<s:Envelope><s:Body><NewConnectionStatus>Disconnected</NewConnectionStatus><NewUptime>0</NewUptime></s:Body></s:Envelope>' };
+  assert.deepEqual(await card('fritzbox', 'calm', offline), { line: 'Internet offline · 250 / 40 Mbit/s', stats: [['internet', 'offline', 'crit'], ['max ↓ / ↑ Mbit/s', '250 / 40', null]] });
+});
+
+test('cards: containers show running / total, then failed or unhealthy ones if any', async () => {
+  assert.deepEqual(await card('portainer', 'calm'), { line: '25 / 26 running', stats: [['running', '25 / 26', null]] });
+  assert.deepEqual(await card('portainer', 'issues'), { line: '23 / 26 running · 2 failed', stats: [['running', '23 / 26', null], ['failed', '2', 'crit']] });
+  assert.deepEqual(await card('docker', 'issues'), { line: '6 / 6 running · 1 unhealthy', stats: [['running', '6 / 6', null], ['unhealthy', '1', 'warn']] });
+});
+
+test('cards: customapi shows the first two mappings', async () => {
+  const { line, stats } = await card('customapi', 'calm');
+  assert.equal(line, 'sessions 3 · items 2,841');
+  assert.deepEqual(stats, [['sessions', '3', null], ['items', '2,841', null]]);
 });
 
 for (const scenario of ['issues', 'calm']) {

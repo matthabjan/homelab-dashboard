@@ -1,7 +1,8 @@
 // Docker Engine API logic shared by the portainer widget (through Portainer's proxy) and the docker widget (a socket proxy):
 // container counts, failed and unhealthy containers, and services from `dashboard.*` labels.
 // Containers with label `dashboard.ignore=true` are skipped.
-import type { Alert, ContainerCounts, ContainerState, Context, RequestOptions, ServiceDef, WidgetResult } from '$lib/types';
+import { card } from '../format.ts';
+import type { Alert, ContainerCounts, ContainerState, Context, RequestOptions, ServiceDef, Stat, WidgetResult } from '$lib/types';
 
 /** An entry of GET /containers/json?all=1 (Docker Engine API). */
 export interface DockerContainer {
@@ -139,13 +140,12 @@ export async function collectContainers(base: string, opts: RequestOptions, ctx:
   // keyed by Docker engine, so Portainer and a docker widget on the same engine count its containers once
   (ctx.shared.containers ??= {})[await engineId(base, opts, ctx)] = containers;
   const bad = failed.length + restarting.length;
+  // failed and unhealthy ones only when there are any; a finished one-shot job is neither
+  const facts: [Stat, string][] = [[{ k: 'running', v: `${running.length} / ${list.length}` }, `${running.length} / ${list.length} running`]];
+  if (bad) facts.push([{ k: 'failed', v: String(bad), level: 'crit' }, `${bad} failed`]);
+  if (unhealthy.length) facts.push([{ k: 'unhealthy', v: String(unhealthy.length), level: 'warn' }, `${unhealthy.length} unhealthy`]);
   return {
-    stats: [
-      { k: 'running', v: String(running.length) },
-      { k: 'stopped', v: String(exited.length), level: bad ? 'crit' : null },
-      { k: 'unhealthy', v: String(unhealthy.length), level: unhealthy.length ? 'warn' : null }
-    ],
-    line: `${running.length} / ${list.length} running${bad ? ` · ${bad} failed` : ''}${unhealthy.length ? ` · ${unhealthy.length} unhealthy` : ''}`,
+    ...card(facts),
     alerts,
     containers,
     discovered

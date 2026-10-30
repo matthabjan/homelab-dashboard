@@ -1,9 +1,9 @@
 // OpenMediaVault — JSON-RPC with session login (same credentials as homepage).
 // Reads services, pending updates, SMART status and mounted file systems in one go.
 import { trimUrl } from '../http.ts';
-import { fmtPair, fmtPct, pct } from '../format.ts';
+import { card, fmtPair, fmtPct, pct } from '../format.ts';
 import { attributesFromText, fromAttributes, fromNvmeText, slowly, toDrive } from './smart.ts';
-import type { Alert, UsageRow, Context, Drive, SmartReading, Widget, WidgetResult } from '$lib/types';
+import type { Alert, UsageRow, Context, Drive, SmartReading, Stat, Widget, WidgetResult } from '$lib/types';
 
 /** What /rpc.php is sent. */
 export interface OmvRpcRequest {
@@ -173,9 +173,8 @@ export async function collect(w: Widget, ctx: Context): Promise<WidgetResult> {
   const updates = typeof info?.availablePkgUpdates === 'number' ? info.availablePkgUpdates : null;
   if (updates) alerts.push({ sev: 'info', key: 'updates', title: `${updates} updates available on ${info?.hostname || 'NAS'}`, detail: 'apt packages pending' });
 
-  const disks = (smart || []).filter((d) => d.monitor);
   // a drive that isn't GOOD is raised by the Drives panel, which also colours this tile
-  const good = disks.filter((d) => d.overallstatus === 'GOOD').length;
+  const disks = (smart || []).filter((d) => d.monitor);
 
   const volumes = (Array.isArray(fs) ? fs : [])
     .filter((f) => Number(f.size) > 0 && f.mountpoint !== '/')
@@ -192,13 +191,14 @@ export async function collect(w: Widget, ctx: Context): Promise<WidgetResult> {
   const fullest = [...volumes].sort((a, b) => (b.row.pct ?? 0) - (a.row.pct ?? 0))[0];
   const full = fullest?.row.pct ?? 0, th = ctx.settings.thresholds;
 
+  // services only when one is stopped, updates only when OMV tells this login
+  const facts: [Stat, string][] = [];
+  if (stopped) facts.push([{ k: 'services', v: `${svcRunning} / ${enabled.length}`, level: 'warn' }, `${stopped} service${stopped > 1 ? 's' : ''} stopped`]);
+  if (fullest) facts.push([{ k: `${fullest.label} full`, v: fmtPct(fullest.row.pct), level: full >= th.storageWarnPct ? 'crit' : full >= th.storageAmberPct ? 'warn' : null }, `${fullest.label} ${fmtPct(fullest.row.pct)} full`]);
+  if (updates != null) facts.push([{ k: 'updates', v: String(updates) }, `${updates} update${updates === 1 ? '' : 's'}`]);
+
   return {
-    stats: [
-      { k: 'services', v: services ? `${svcRunning} / ${enabled.length}` : '—', level: stopped ? 'warn' : null },
-      { k: 'updates', v: updates == null ? '—' : String(updates) },
-      { k: 'storage', v: fmtPct(fullest?.row.pct), level: full >= th.storageWarnPct ? 'crit' : full >= th.storageAmberPct ? 'warn' : null }
-    ],
-    line: [stopped && `${stopped} service${stopped > 1 ? 's' : ''} stopped`, fullest && `${fullest.label} ${fmtPct(fullest.row.pct)} full`, disks.length && `SMART ${good} / ${disks.length} ok`].filter(Boolean).join(' · ') || 'Online',
+    ...card(facts),
     alerts,
     storage,
     drives: await omvDrives(w, ctx, disks)
