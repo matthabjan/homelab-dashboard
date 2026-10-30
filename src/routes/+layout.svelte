@@ -1,8 +1,9 @@
-<script>
+<script lang="ts">
   import '../app.css';
   import { onMount } from 'svelte';
-  /** @type {import('./$types').LayoutProps} */
-  let { data, children } = $props();
+  import type { LayoutProps } from './$types';
+
+  let { data, children }: LayoutProps = $props();
 
   onMount(() => {
     if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {

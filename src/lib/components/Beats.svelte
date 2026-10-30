@@ -1,21 +1,25 @@
-<script>
+<script lang="ts">
   /** 24 h health ribbon: 48 half-hour buckets ending at `end`. Healthy ones form one quiet ribbon; a degraded or down one stands taller in its colour. */
-  /** @import { Level } from '$lib/types' */
-  /**
-   * `onpick` makes the strip touch-scrubbable (tooltips don't exist on touch): it gets the slot under the finger as text, then null shortly after release
-   * @type {{ beats: (Level | 'none')[], end: number, label: string, onpick?: (text: string | null) => void }}
-   */
-  let { beats, end, label, onpick } = $props();
+  import type { Level } from '$lib/types';
+
+  interface Props {
+    beats: (Level | 'none')[];
+    end: number;
+    label: string;
+    /** makes the strip touch-scrubbable (tooltips don't exist on touch): it gets the slot under the finger as text, then null shortly after release */
+    onpick?: (text: string | null) => void;
+  }
+  let { beats, end, label, onpick }: Props = $props();
 
   const B = 1_800_000;
-  const WORD = { ok: 'all up', warn: 'degraded', crit: 'outage', none: 'no data' };
-  const hm = (t) => new Date(t).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-  const slotEnd = (i) => end - (beats.length - 1 - i) * B;
-  const slot = (i) => `${hm(slotEnd(i) - B)}–${hm(slotEnd(i))}`;
+  const WORD: Record<Level | 'none', string> = { ok: 'all up', warn: 'degraded', crit: 'outage', none: 'no data' };
+  const hm = (t: number) => new Date(t).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  const slotEnd = (i: number) => end - (beats.length - 1 - i) * B;
+  const slot = (i: number) => `${hm(slotEnd(i) - B)}–${hm(slotEnd(i))}`;
 
   // problem periods (runs of degraded or down half-hours), so screen readers get what the colours show
   const periods = $derived.by(() => {
-    const out = [];
+    const out: string[] = [];
     for (let i = 0; i < beats.length; i++) {
       const b = beats[i];
       if (b !== 'warn' && b !== 'crit') continue;
@@ -28,9 +32,8 @@
   });
 
   let picked = $state(-1);
-  let unpick;
-  /** @param {PointerEvent & { currentTarget: HTMLElement }} e */
-  function pick(e) {
+  let unpick: ReturnType<typeof setTimeout> | undefined;
+  function pick(e: PointerEvent & { currentTarget: HTMLElement }) {
     if (!onpick || e.pointerType === 'mouse') return;
     const r = e.currentTarget.getBoundingClientRect();
     const i = Math.min(beats.length - 1, Math.max(0, Math.floor(((e.clientX - r.left) / r.width) * beats.length)));

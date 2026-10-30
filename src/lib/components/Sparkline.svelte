@@ -1,16 +1,23 @@
-<script>
+<script lang="ts">
   /** Minimal sparkline. `values` may contain nulls (gaps). `minSpan` keeps a near-flat series from being blown up into noise. */
-  /**
-   * @type {{ values?: (number | null)[] | null, max?: number | null, min?: number | null, minSpan?: number,
-   *   color?: string, area?: boolean, height?: number, dashed?: boolean, label?: string }}
-   */
-  let { values = [], max = null, min = 0, minSpan = 0, color = 'var(--acc)', area = false, height = 24, dashed = false, label = '' } = $props();
+  interface Props {
+    values?: (number | null)[] | null;
+    max?: number | null;
+    min?: number | null;
+    minSpan?: number;
+    color?: string;
+    area?: boolean;
+    height?: number;
+    dashed?: boolean;
+    label?: string;
+  }
+  let { values = [], max = null, min = 0, minSpan = 0, color = 'var(--acc)', area = false, height = 24, dashed = false, label = '' }: Props = $props();
 
   const W = 200;
   const H = 48;
   const geo = $derived.by(() => {
     const vs = values ?? [];
-    const nums = vs.filter((v) => v != null);
+    const nums = vs.filter((v): v is number => v != null);
     if (nums.length < 2) return null;
     let hi = max ?? Math.max(...nums) * 1.1;
     let lo = min ?? Math.min(...nums);
@@ -20,8 +27,8 @@
     }
     const span = hi - lo || 1;
     const step = W / (vs.length - 1);
-    const segs = [];
-    let cur = [];
+    const segs: [number, number][][] = [];
+    let cur: [number, number][] = [];
     vs.forEach((v, i) => {
       if (v == null) { if (cur.length) segs.push(cur); cur = []; return; }
       const y = H - 2 - ((Math.min(v, hi) - lo) / span) * (H - 4);

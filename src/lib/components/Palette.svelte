@@ -1,27 +1,46 @@
-<script>
+<script lang="ts">
   import { tick } from 'svelte';
+  import type { Bookmark, Tile } from '$lib/types';
   import Icon from './Icon.svelte';
 
   /** Command palette: fuzzy search over services and bookmarks. */
-  /** @import { Bookmark, Tile } from '$lib/types' */
-  /** @type {{ open?: boolean, services?: Tile[], bookmarks?: Bookmark[], mostUsed?: Tile[], target?: string, onopen?: (id: string) => void }} */
-  let { open = $bindable(false), services = [], bookmarks = [], mostUsed = [], target = '_blank', onopen } = $props();
+  interface Props {
+    open?: boolean;
+    services?: Tile[];
+    bookmarks?: Bookmark[];
+    mostUsed?: Tile[];
+    target?: string;
+    onopen?: (id: string) => void;
+  }
+  let { open = $bindable(false), services = [], bookmarks = [], mostUsed = [], target = '_blank', onopen }: Props = $props();
+
+  /** one row of the palette: a service, a bookmark or one of this dashboard's own pages */
+  interface Item {
+    kind: 'service' | 'link' | 'page';
+    id: string;
+    name: string;
+    sub: string;
+    href: string | null;
+    icon: string | null;
+    iconDark: string | null;
+    level: Tile['level'] | null;
+    /** lowercased text the query is matched against */
+    hay: string;
+  }
 
   let q = $state('');
   let active = $state(0);
-  /** @type {HTMLInputElement | undefined} */
-  let input = $state();
-  /** @type {HTMLElement | undefined} */
-  let list = $state();
+  let input: HTMLInputElement | undefined = $state();
+  let list: HTMLElement | undefined = $state();
 
-  const items = $derived([
-    ...services.map((s) => ({ kind: 'service', id: s.id, name: s.name, sub: s.host || s.group, href: s.href, icon: s.icon, iconDark: s.iconDark, level: s.level, hay: `${s.name} ${s.host} ${s.group} ${s.description}`.toLowerCase() })),
-    ...bookmarks.map((b) => ({ kind: 'link', id: 'bm-' + b.name, name: b.name, sub: b.group, href: b.href, icon: b.icon, iconDark: b.iconDark, level: null, hay: `${b.name} ${b.group} ${b.href}`.toLowerCase() })),
+  const items: Item[] = $derived([
+    ...services.map((s): Item => ({ kind: 'service', id: s.id, name: s.name, sub: s.host || s.group, href: s.href, icon: s.icon, iconDark: s.iconDark, level: s.level, hay: `${s.name} ${s.host} ${s.group} ${s.description}`.toLowerCase() })),
+    ...bookmarks.map((b): Item => ({ kind: 'link', id: 'bm-' + b.name, name: b.name, sub: b.group, href: b.href, icon: b.icon, iconDark: b.iconDark, level: null, hay: `${b.name} ${b.group} ${b.href}`.toLowerCase() })),
     // this dashboard's own pages
     { kind: 'page', id: 'page-config', name: 'Config & status', sub: 'problems, widgets, checks', href: '/config', icon: null, iconDark: null, level: null, hay: 'config status settings problems widgets checks secrets icons' }
   ]);
 
-  function score(hay, name, query) {
+  function score(hay: string, name: string, query: string) {
     const n = name.toLowerCase();
     if (n.startsWith(query)) return 100 - n.length / 100;
     if (n.split(/[\s\-!]+/).some((w) => w.startsWith(query))) return 80;
@@ -56,7 +75,7 @@
   });
   $effect(() => { q; active = 0; });
 
-  function go(item, newTab = false) {
+  function go(item: Item | undefined, newTab = false) {
     if (!item?.href) return;
     if (item.kind === 'service') onopen?.(item.id);
     open = false;
@@ -64,7 +83,7 @@
     else window.open(item.href, newTab ? '_blank' : target, 'noopener');
   }
 
-  function key(e) {
+  function key(e: KeyboardEvent) {
     if (e.key === 'ArrowDown') { e.preventDefault(); active = (active + 1) % Math.max(1, results.length); scroll(); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); active = (active - 1 + results.length) % Math.max(1, results.length); scroll(); }
     else if (e.key === 'Enter') { e.preventDefault(); go(results[active], e.metaKey || e.ctrlKey); }

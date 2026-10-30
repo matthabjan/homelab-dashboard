@@ -1,20 +1,21 @@
-<script>
+<script lang="ts">
   import { onMount } from 'svelte';
+  import type { AttentionItem, FeedEvent, Snapshot, Tile } from '$lib/types';
+  import type { PageProps } from './$types';
   import Icon from '$lib/components/Icon.svelte';
   import Vitals from '$lib/components/Vitals.svelte';
   import ThemeToggle from '$lib/components/ThemeToggle.svelte';
   import Palette from '$lib/components/Palette.svelte';
   import Beats from '$lib/components/Beats.svelte';
 
-  /** @type {import('./$types').PageProps} */
-  let { data } = $props();
+  let { data }: PageProps = $props();
   // svelte-ignore state_referenced_locally — only the first snapshot comes from load; the stream replaces it
   let snap = $state(data.snapshot);
-  let live = $state('connecting'); // connecting | live | reconnecting
+  let live = $state<'connecting' | 'live' | 'reconnecting'>('connecting');
   let now = $state(Date.now());
   let paletteOpen = $state(false);
   let feedOpen = $state(false); // phones: attention list expanded past the first 3
-  let section = $state('top'); // phones: tab bar item for the section in view
+  let section = $state<string>('top'); // phones: tab bar item for the section in view
 
   const allServices = $derived(snap ? snap.groups.flatMap((g) => g.services) : []);
   // "13 of 16 up", over the services that have a check
@@ -29,18 +30,19 @@
   let offline = $state(false);
   // a status page must not keep saying "all good" on old data: the page greys out instead
   const degraded = $derived(!!stale || lost || offline);
+  /** a row of the attention list: an alert, or a recent change (events aren't tied to a service name) */
+  type FeedItem = AttentionItem | (FeedEvent & { service?: undefined });
   // tiles (and 'verdict') whose level changed in the last update, briefly highlighted
-  let flash = $state(new Set());
-  /** @param {import('$lib/types').Snapshot} prev @param {import('$lib/types').Snapshot} next */
-  function changes(prev, next) {
+  let flash = $state(new Set<string>());
+  function changes(prev: Snapshot, next: Snapshot) {
     const was = new Map(prev.groups.flatMap((g) => g.services).map((t) => [t.id, t.level]));
     const ids = next.groups.flatMap((g) => g.services).filter((t) => was.has(t.id) && was.get(t.id) !== t.level).map((t) => t.id);
     if (prev.verdict.level !== next.verdict.level) ids.push('verdict');
     return ids;
   }
-  let unflash;
+  let unflash: ReturnType<typeof setTimeout> | undefined;
   /** a new snapshot from the stream; whatever changed level is highlighted for a moment */
-  function receive(next) {
+  function receive(next: Snapshot) {
     const ids = snap ? changes(snap, next) : [];
     snap = next;
     if (!ids.length) return;
@@ -49,24 +51,24 @@
     unflash = setTimeout(() => (flash = new Set()), 2400);
   }
   // problems first; when all is well show recent changes (incl. informational notes)
-  const feed = $derived(
+  const feed: FeedItem[] = $derived(
     !snap ? [] : snap.needCount ? snap.attention : dedupe([...snap.attention, ...snap.events].sort((a, b) => b.ts - a.ts))
   );
   // an alert and the event it logged say the same; the alert carries its service's name in front ("Proxmox VE: …")
-  function dedupe(list) {
-    const seen = new Set();
-    const bare = (x) => (x.service && x.title.startsWith(`${x.service}: `) ? x.title.slice(x.service.length + 2) : x.title);
+  function dedupe(list: FeedItem[]) {
+    const seen = new Set<string>();
+    const bare = (x: FeedItem) => (x.service && x.title.startsWith(`${x.service}: `) ? x.title.slice(x.service.length + 2) : x.title);
     return list.filter((x) => !seen.has(bare(x)) && seen.add(bare(x)));
   }
   const target = $derived(snap?.linkTarget || '_blank');
   // this dashboard's own pages (the config view) open in place; services as settings.linkTarget says
-  const linkTarget = (href) => (!href ? undefined : href.startsWith('/') ? undefined : target);
-  const isProblem = (level) => level === 'crit' || level === 'warn';
+  const linkTarget = (href: string | null | undefined) => (!href ? undefined : href.startsWith('/') ? undefined : target);
+  const isProblem = (level: Tile['level']) => level === 'crit' || level === 'warn';
   // phones have no tooltips: a problem row in the services list leads with its status word ("Up · …") unless the line already says it
-  const statusWord = (t) => (isProblem(t.level) && t.status && !t.line.toLowerCase().includes(t.status.toLowerCase()) ? t.status : '');
-  const uptimeTxt = (t) => (t.uptime24 != null ? `${pctTxt(t.uptime24)} uptime in 24 h` : '');
+  const statusWord = (t: Tile) => (isProblem(t.level) && t.status && !t.line.toLowerCase().includes(t.status.toLowerCase()) ? t.status : '');
+  const uptimeTxt = (t: Tile) => (t.uptime24 != null ? `${pctTxt(t.uptime24)} uptime in 24 h` : '');
   // phones: the fleet ribbon slot under the finger, in place of the "Last 24 h" label
-  let fleetPick = $state(/** @type {string | null} */ (null));
+  let fleetPick = $state<string | null>(null);
   const today = $derived.by(() => {
     const d = new Date(now);
     return `${d.toLocaleDateString('en-GB', { weekday: 'long' })}, ${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`;
@@ -75,19 +77,19 @@
   /** (re)open the stream now: the banner's Retry, coming back online. Set once mounted */
   let connect = () => {};
   onMount(() => {
-    let es;
-    let retry;
-    let grace;
+    let es: EventSource | undefined;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    let grace: ReturnType<typeof setTimeout> | undefined;
     const connected = () => { live = 'live'; lost = false; clearTimeout(grace); grace = undefined; };
     connect = () => {
       clearTimeout(retry);
       es?.close();
       es = new EventSource('/api/stream');
       es.onopen = connected;
-      es.onmessage = (e) => { receive(JSON.parse(e.data)); connected(); };
+      es.onmessage = (e: MessageEvent<string>) => { receive(JSON.parse(e.data)); connected(); };
       es.onerror = () => {
         live = 'reconnecting';
-        es.close();
+        es?.close();
         grace ??= setTimeout(() => (lost = true), 8000);
         retry = setTimeout(connect, 4000);
       };
@@ -112,7 +114,7 @@
   $effect(() => {
     const n = snap?.needCount ?? 0;
     document.title = n ? `(${n}) ${snap?.title}` : (snap?.title ?? document.title);
-    const nav = /** @type {Navigator & { setAppBadge?: (n?: number) => Promise<void>, clearAppBadge?: () => Promise<void> }} */ (navigator);
+    const nav: Navigator & { setAppBadge?: (n?: number) => Promise<void>; clearAppBadge?: () => Promise<void> } = navigator;
     (n ? nav.setAppBadge?.(n) : nav.clearAppBadge?.())?.catch(() => {});
   });
 
@@ -131,25 +133,26 @@
     for (const id of ['top', ...ids]) { const el = document.getElementById(id); if (el) spy.observe(el); }
     return spy;
   }
-  /** @returns {'location' | undefined} */
-  const current = (id) => (section === id ? 'location' : undefined);
+  const current = (id: string): 'location' | undefined => (section === id ? 'location' : undefined);
 
-  function onKey(e) {
-    const tag = e.target?.tagName;
-    const typing = tag === 'INPUT' || tag === 'TEXTAREA' || e.target?.isContentEditable;
+  function onKey(e: KeyboardEvent) {
+    // key events target the focused element (the body when nothing is focused)
+    const el = e.target as HTMLElement | null;
+    const tag = el?.tagName;
+    const typing = tag === 'INPUT' || tag === 'TEXTAREA' || el?.isContentEditable;
     if ((e.key === 'k' && (e.metaKey || e.ctrlKey)) || (e.key === '/' && !typing)) {
       e.preventDefault();
       paletteOpen = true;
     }
   }
 
-  function opened(id) {
+  function opened(id: string) {
     try {
       fetch('/api/open', { method: 'POST', keepalive: true, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id }) });
     } catch {}
   }
 
-  function ago(ts) {
+  function ago(ts: number) {
     const s = Math.max(0, Math.round((now - ts) / 1000));
     if (s < 60) return 'now';
     const m = Math.round(s / 60);
@@ -158,8 +161,8 @@
     if (h < 24) return `${h} h${h < 10 && m % 60 ? ' ' + String(m % 60).padStart(2, '0') + ' m' : ''}`;
     return `${Math.floor(h / 24)} d`;
   }
-  const pctTxt = (v, d = 2) => (v == null ? '—' : v >= 99.995 ? '100%' : v.toFixed(d) + '%');
-  const ICONS = {
+  const pctTxt = (v: number | null, d = 2) => (v == null ? '—' : v >= 99.995 ? '100%' : v.toFixed(d) + '%');
+  const ICONS: Record<FeedItem['sev'], string> = {
     crit: 'M12 9v4M12 17h.01M10.3 3.9 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z',
     warn: 'M12 7v5l3 2M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z',
     info: 'M12 16v-4M12 8h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z',

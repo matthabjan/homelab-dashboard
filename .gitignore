@@ -39,3 +39,4 @@ certs/
 
 # Vite temp files
 vite.config.js.timestamp-*
+vite.config.ts.timestamp-*

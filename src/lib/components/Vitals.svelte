@@ -1,19 +1,35 @@
-<script>
+<script lang="ts">
   import { onMount } from 'svelte';
+  import type { Level, Snapshot, Traffic } from '$lib/types';
   import Gauge from './Gauge.svelte';
   import Sparkline from './Sparkline.svelte';
 
-  /** @typedef {import('$lib/types').Snapshot} Snapshot */
-  /** @type {{ host: Snapshot['host'], storage: Snapshot['storage'], drives: Snapshot['drives'], network: Snapshot['network'], target: string }} */
-  let { host, storage, drives, network, target } = $props();
+  interface Props {
+    host: Snapshot['host'];
+    storage: Snapshot['storage'];
+    drives: Snapshot['drives'];
+    network: Snapshot['network'];
+    target: string;
+  }
+  let { host, storage, drives, network, target }: Props = $props();
+
+  /** a tab of the card: its panel id, its name and the dot it shows */
+  interface Panel {
+    id: 'system' | 'storage' | 'drives' | 'network';
+    name: string;
+    level: Level | null;
+    meta?: string;
+  }
 
   /** the worst problem among the levels, for the dot on a tab: a hidden panel must not hide one */
-  const worst = (/** @type {string[]} */ levels) => (levels.includes('crit') ? 'crit' : levels.includes('warn') ? 'warn' : null);
-  const count = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
-  const charted = (t) => (t?.seriesDown ?? []).filter((v) => v != null).length > 1;
+  const worst = (levels: string[]): Level | null => (levels.includes('crit') ? 'crit' : levels.includes('warn') ? 'warn' : null);
+  const count = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+  /** whether the reading has a chart (two points or more); a guard, so the chart can read its series */
+  const charted = (t: Traffic | null | undefined): t is Traffic & { seriesDown: (number | null)[] } =>
+    (t?.seriesDown ?? []).filter((v) => v != null).length > 1;
 
   const panels = $derived.by(() => {
-    const list = [];
+    const list: Panel[] = [];
     if (host) list.push({ id: 'system', name: 'System', level: worst(host.gauges.map((g) => g.level)) });
     if (storage.length) {
       const off = storage.filter((s) => s.level === 'off').length;
@@ -33,22 +49,23 @@
   });
 
   // which panel is open. Remembered per browser as a convenience, so storage errors are ignored
-  let picked = $state('system');
+  let picked = $state<string>('system');
   onMount(() => {
     try { picked = localStorage.getItem('vitalsView') ?? picked; } catch {}
   });
   // the remembered panel may have no data (any more): fall back to the first one
   const view = $derived(panels.some((p) => p.id === picked) ? picked : panels[0]?.id);
   const active = $derived(panels.find((p) => p.id === view));
-  function show(id) {
+  function show(id: string) {
     picked = id;
     try { localStorage.setItem('vitalsView', id); } catch {}
   }
   // arrow keys move between the tabs and wrap around, Home and End jump to the ends (roving tabindex)
-  function tabKey(e) {
+  function tabKey(e: KeyboardEvent) {
     const i = panels.findIndex((p) => p.id === view);
     const n = panels.length;
-    const to = { ArrowLeft: (i - 1 + n) % n, ArrowRight: (i + 1) % n, Home: 0, End: n - 1 }[e.key];
+    const moves: Partial<Record<string, number>> = { ArrowLeft: (i - 1 + n) % n, ArrowRight: (i + 1) % n, Home: 0, End: n - 1 };
+    const to = moves[e.key];
     if (to == null) return;
     e.preventDefault();
     show(panels[to].id);
@@ -56,11 +73,11 @@
   }
   const tabbed = $derived(panels.length > 1);
 
-  const fmtRate = (v) => (v == null ? '—' : v >= 100 ? Math.round(v) : v.toFixed(1));
-  const fmtNum = (n) => (n == null ? '—' : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(n >= 1e4 ? 0 : 1) + 'k' : String(n));
+  const fmtRate = (v: number | null) => (v == null ? '—' : v >= 100 ? Math.round(v) : v.toFixed(1));
+  const fmtNum = (n: number | null) => (n == null ? '—' : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(n >= 1e4 ? 0 : 1) + 'k' : String(n));
 </script>
 
-{#snippet traffic(t, what, downWord, upWord)}
+{#snippet traffic(t: Traffic, what: string, downWord: string, upWord: string)}
   <!-- one traffic reading: where it comes from, the current rates, then the recent chart -->
   <div class="cell">
     <div class="net-row">
@@ -69,7 +86,7 @@
     </div>
     <!-- a fresh metric has fewer than two points: no chart, so no blank space either -->
     {#if charted(t)}
-      {@const down = t.seriesDown.filter((v) => v != null)}
+      {@const down = t.seriesDown.filter((v): v is number => v != null)}
       <div class="netchart">
         <div class="layer"><Sparkline values={t.seriesDown} color="var(--acc)" area height={40} min={0} label="{what} {downWord}, last {t.spanH ?? 24} hours" /></div>
         <div class="layer"><Sparkline values={t.seriesUp} color="var(--acc-2)" height={40} min={0} max={Math.max(1, ...down) * 1.1} /></div>

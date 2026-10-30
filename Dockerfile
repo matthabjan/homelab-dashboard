@@ -3,7 +3,7 @@
 ARG NODE_IMAGE=node:24-alpine@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53
 
 # ---- build ----
-# The bundle is plain JS, so it is built once on the build machine's own platform,
+# The bundle is plain JS (the TypeScript is compiled away), so it is built once on the build machine's own platform,
 # not again under emulation for every target platform.
 FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS build
 WORKDIR /app

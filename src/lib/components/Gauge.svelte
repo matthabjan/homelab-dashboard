@@ -1,7 +1,11 @@
-<script>
+<script lang="ts">
+  import type { Gauge } from '$lib/types';
   import Sparkline from './Sparkline.svelte';
-  /** @type {{ g: import('$lib/types').Gauge }} */
-  let { g } = $props();
+
+  interface Props {
+    g: Gauge;
+  }
+  let { g }: Props = $props();
   const R = 34;
   const C = 2 * Math.PI * R;
   const pct = $derived(Math.max(0, Math.min(100, g.pct ?? 0)));
