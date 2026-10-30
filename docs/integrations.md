@@ -9,6 +9,7 @@ A widget adds live data to a service: tile stats, panels in the vitals card and 
 - **Pass credentials as secrets** (`${NAME}`). See [Configuration → Secrets](configuration.md#secrets-and-variables).
 - Every alert about a service starts with the service's name in the attention list ("Pi-hole: Blocking is disabled", "Nextcloud: Certificate expires in 5 d"), unless it already names it. On the service's own tile it doesn't.
 - A tile is as bad as the worst alert raised for its service, wherever that alert comes from: a widget, a certificate, a full storage or a drive it reports. With a Proxmox host, the CPU and NVMe temperatures count against the Proxmox tile.
+- A widget's service card and its Most used card show the same two facts (on the service card as one line), and a problem the widget sees, such as overdue backups or a stopped container, comes first in both.
 - Each widget has 25 s per poll. If a call fails, the tile shows *Stats unavailable* with a short reason, keeps its last stats, and the full error goes to the container log.
 
 | Type | Product | Auth | Read-only possible |
@@ -65,7 +66,7 @@ PBS storages attached to PVE are left out here; the PBS widget reports them.
 
 ## Proxmox Backup Server
 
-Provides the PBS rows in **Storage**, **backup age** for each guest, a *Backups completed* event when new backups arrive, and disks passed into the PBS VM (such as a removable offsite disk while it's plugged in) in [**Drives**](#drives).
+Provides the PBS rows in **Storage**, **backup age** for each guest, a *Backups completed* event when new backups arrive, and disks passed into the PBS VM (such as a removable offsite disk while it's plugged in) in [**Drives**](#drives). The tile shows how long ago the **last backup** finished and how full the first **datastore** is; while backups are overdue, how many comes first.
 
 ```yaml
 widget:
@@ -131,7 +132,7 @@ Traffic rates come from the difference between two polls, so the first value app
 
 ## OpenMediaVault
 
-Provides the NAS rows in **Storage** (with each disk's SMART result) and the disks with SMART monitoring in [**Drives**](#drives). The tile shows running / enabled **services**, pending package **updates**, and **storage**: how full the fullest data file system is (the system disk is left out), amber and red at the `storageAmberPct` / `storageWarnPct` thresholds.
+Provides the NAS rows in **Storage** (with each disk's SMART result) and the disks with SMART monitoring in [**Drives**](#drives). The tile shows how **full** the fullest data file system is (the system disk is left out; amber and red at the `storageAmberPct` / `storageWarnPct` thresholds) and the pending package **updates** (only an admin login sees them), the same in the service card and the Most used card. While an enabled service is stopped, **services** (running / enabled) comes first.
 
 ```yaml
 widget:
@@ -203,7 +204,7 @@ widget:
 
 ## Portainer
 
-Provides **container counts**, alerts for failed and unhealthy containers, and the container labels used for [label discovery](configuration.md#services-from-container-labels).
+Provides **container counts**, alerts for failed and unhealthy containers, and the container labels used for [label discovery](configuration.md#services-from-container-labels). The tile shows running / total containers, then how many failed (red) or are unhealthy (amber), if any.
 
 ```yaml
 widget:
@@ -249,7 +250,7 @@ widget:
 
 ## FRITZ!Box
 
-Provides internet status and line speed on the tile. It also provides **WAN traffic** when no OPNsense widget is configured, or when `network.service` selects it.
+The tile shows the line's sync rates (↓ / ↑ Mbit/s) and how long the connection has been up; while the internet is offline, that comes first. It also provides **WAN traffic** when no OPNsense widget is configured, or when `network.service` selects it.
 
 ```yaml
 widget:
@@ -308,7 +309,7 @@ widget:
 | `remap` | Replace values: `[{ value: 1, to: up }, { any: true, to: down }]`. The first match wins. |
 | `warn`, `crit` | Thresholds: `{ above: n }`, `{ below: n }`, `{ equals: v }` or `{ not: v }`. They are compared with the value after `scale` and before `remap`. A boolean counts as 0 or 1. |
 
-The tile shows the stats in mapping order; the first mapping is the tile's line. `display` is accepted and ignored. A widget with thresholds only raises alerts: the service's status (Up, Down) stays its reachability check.
+The tile shows the first two mappings, in mapping order (any more are read for their thresholds). `display` is accepted and ignored. A widget with thresholds only raises alerts: the service's status (Up, Down) stays its reachability check.
 
 **Account.** Whatever the API needs. Prefer a read-only token in `headers`, passed as a secret.
 

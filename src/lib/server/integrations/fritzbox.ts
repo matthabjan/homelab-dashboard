@@ -1,6 +1,6 @@
 // FRITZ!Box — TR-064/UPnP on port 49000 (no login needed; "Statusinformationen über UPnP übertragen" must be enabled).
-import { fmtDuration } from '../format.ts';
-import type { Alert, Context, Widget, WidgetResult } from '$lib/types';
+import { card, fmtDuration } from '../format.ts';
+import type { Alert, Context, Stat, Widget, WidgetResult } from '$lib/types';
 
 // The TR-064 values read here: the <New…> elements of each SOAP answer, all text.
 
@@ -59,13 +59,15 @@ export async function collect(w: Widget, ctx: Context): Promise<WidgetResult> {
   if (down != null) { ctx.metric('fritz.down', down); ctx.metric('fritz.up', up); }
 
   const alerts: Alert[] = connected ? [] : [{ sev: 'crit', key: 'wan-down', title: 'Internet connection down', detail: `FRITZ!Box reports ${status.NewConnectionStatus || 'unknown'}` }];
+  // the connection only when it is down
+  const facts: [Stat, string][] = [];
+  if (!connected) facts.push([{ k: 'internet', v: 'offline', level: 'crit' }, 'Internet offline']);
+  const rates = `${Math.round(maxDown)} / ${Math.round(maxUp)}`;
+  facts.push([{ k: 'max ↓ / ↑ Mbit/s', v: rates }, `${rates} Mbit/s`]);
+  const uptime = fmtDuration(Number(status.NewUptime || 0) * 1000);
+  if (connected) facts.push([{ k: 'up', v: uptime }, `up ${uptime}`]);
   return {
-    stats: [
-      { k: 'internet', v: connected ? 'online' : 'offline', level: connected ? 'ok' : 'crit' },
-      { k: 'max ↓ Mbit/s', v: String(Math.round(maxDown)) },
-      { k: 'max ↑ Mbit/s', v: String(Math.round(maxUp)) }
-    ],
-    line: connected ? `Online · ${Math.round(maxDown)} / ${Math.round(maxUp)} Mbit/s · up ${fmtDuration(Number(status.NewUptime || 0) * 1000)}` : 'Internet offline',
+    ...card(facts),
     alerts,
     network: down != null ? { down, up, source: 'FRITZ!Box', fallback: true } : null
   };

@@ -2,7 +2,7 @@
 // username/password, refreshInterval, mappings). Our addition: per-mapping `warn` / `crit` thresholds, which raise
 // alerts only (the service's status stays its reachability).
 import { basicAuth } from '../http.ts';
-import { fmtBitrate, fmtBytes, fmtDuration, fmtRelative } from '../format.ts';
+import { card, fmtBitrate, fmtBytes, fmtDuration, fmtRelative } from '../format.ts';
 import type { Alert, Context, CustomApiMapping, Json, Stat, Threshold, Widget, WidgetResult } from '$lib/types';
 
 type CustomApiWidget = Widget & {
@@ -140,10 +140,8 @@ export async function collect(widget: Widget, ctx: Context): Promise<WidgetResul
   const data = await fetchJson(w, ctx);
   const mappings: CustomApiMapping[] = Array.isArray(w.mappings) ? w.mappings : [];
   const read = mappings.map((m, i) => readMapping(data, m, i, ctx.now));
-  const stats = read.map((r) => r.stat);
   const alerts = read.flatMap((r) => (r.alert ? [r.alert] : []));
-  const first = stats[0];
-  const result: WidgetResult = { stats, line: first ? `${first.k} ${first.v}` : 'No mappings', alerts };
+  const result: WidgetResult = { ...card(read.map((r): [Stat, string] => [r.stat, `${r.stat.k} ${r.stat.v}`]), 'No mappings'), alerts };
   state.last = result;
   state.lastRun = ctx.now;
   state.config = config;

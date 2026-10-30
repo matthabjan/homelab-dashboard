@@ -3,10 +3,10 @@
 // Removable datastores (PBS 3.3+, mount-status other than "nonremovable") are an offsite disk that is plugged
 // in now and then: detached is normal, they only alert after offsiteMaxDetachedDays, and backup freshness skips them.
 import { trimUrl } from '../http.ts';
-import { fmtPair, fmtDuration, fmtPct, pct } from '../format.ts';
+import { card, fmtPair, fmtDuration, fmtPct, pct } from '../format.ts';
 import { fromAttributes, isVirtual, kindOf, slowly, toDrive } from './smart.ts';
 import type { SmartAttribute } from './smart.ts';
-import type { Alert, Drive, Kv, SmartReading, StorageRow, UsageRow, WidgetEvent, Context, Widget, WidgetResult } from '$lib/types';
+import type { Alert, Drive, Kv, SmartReading, Stat, StorageRow, UsageRow, WidgetEvent, Context, Widget, WidgetResult } from '$lib/types';
 
 /** Every PBS API answer wraps its payload in `data`. */
 export interface PbsResponse<T> {
@@ -171,17 +171,21 @@ export async function collect(w: Widget, ctx: Context): Promise<WidgetResult> {
   }
 
   const store = regular[0] ?? null;
-  const stats = [
-    { k: 'oldest backup', v: oldest ? fmtDuration(oldest.age) : '—', level: oldest && oldest.age > maxAge ? 'warn' : null },
-    { k: 'datastore', v: fmtPct(store?.pct) },
-    { k: 'groups', v: String(relevant.length || latestOf.size || '—') }
-  ];
   if (freshnessError) alerts.push({ sev: 'info', key: 'pbs-perm', title: 'Backup freshness unavailable', detail: freshnessError });
 
   const overdue = alerts.filter((a) => a.title === 'Backup overdue').length;
+  // overdue backups only when there are any; the line starts with a capital
+  const facts: [Stat, string][] = [];
+  if (overdue) facts.push([{ k: 'overdue', v: String(overdue), level: 'warn' }, `${overdue} backup${overdue > 1 ? 's' : ''} overdue`]);
+  if (latest) {
+    const ago = fmtDuration(now - latest * 1000);
+    facts.push([{ k: 'last backup', v: ago }, `${facts.length ? 'last' : 'Last'} backup ${ago} ago`]);
+  }
+  if (store) facts.push([{ k: 'datastore', v: fmtPct(store.pct) }, `${facts.length ? 'store' : 'Store'} ${fmtPct(store.pct)}`]);
+  const groupCount = relevant.length || latestOf.size;
+  if (groupCount) facts.push([{ k: 'groups', v: String(groupCount) }, `${groupCount} group${groupCount > 1 ? 's' : ''}`]);
   return {
-    stats,
-    line: overdue ? `${overdue} backup${overdue > 1 ? 's' : ''} overdue` : oldest ? `Last backup ${fmtDuration(now - latest * 1000)} ago · store ${fmtPct(store?.pct)}` : store ? `Store ${fmtPct(store.pct)}` : 'Online',
+    ...card(facts),
     alerts,
     events,
     storage,

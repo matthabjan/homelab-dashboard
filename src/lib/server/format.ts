@@ -1,3 +1,5 @@
+import type { Stat } from '$lib/types';
+
 export const GiB = 1024 ** 3;
 export const TiB = 1024 ** 4;
 
@@ -68,4 +70,12 @@ export function fmtRelative(ts: number | null | undefined, now: number): string 
   const d = ts - now;
   if (Math.abs(d) < 60_000) return 'now';
   return d < 0 ? `${fmtDuration(-d)} ago` : `in ${fmtDuration(d)}`;
+}
+
+/**
+ * A widget's card from its facts, each a stat and the same as text: the Most used card shows the first two stats,
+ * the service card the line, so the line is the first two texts and both say the same.
+ */
+export function card(facts: [Stat, string][], empty = 'Online'): { stats: Stat[]; line: string } {
+  return { stats: facts.map(([stat]) => stat), line: facts.slice(0, 2).map(([, text]) => text).join(' · ') || empty };
 }

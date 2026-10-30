@@ -30,7 +30,7 @@ In Portainer, open **Stacks → Add stack → Web editor** and paste:
 ```yaml
 services:
   dashboard:
-    image: matthabjan/homelab-dashboard:0.0.2   # pin a release; see Updating
+    image: matthabjan/homelab-dashboard:0.1.11  # pin a release; see Updating
     container_name: dashboard
     restart: unless-stopped
     environment:
