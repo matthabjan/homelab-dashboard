@@ -64,12 +64,14 @@ export function mergeBackups(pbs: BackupStatus | undefined, beats: (HeartbeatSta
 export const named = (service: string, title: string) => (title.toLowerCase().includes(service.toLowerCase()) ? title : `${service}: ${title}`);
 
 /**
- * A drive's row in the Drives panel, and what is wrong with it (each problem becomes an alert).
+ * A drive's row in the Drives panel, and what is wrong with it (each problem becomes an alert, and colours the tile of
+ * the service that reported the drive, as a widget alert does).
  */
 function driveStatus(d: Drive, where: string, th: Settings['thresholds']) {
   /** severity, alert text, alert key */
   const problems: ['crit' | 'warn', string, string][] = [];
   if (d.health === 'failing') problems.push(['crit', 'SMART reports failing', 'health']);
+  if (d.health === 'warning') problems.push(['warn', 'SMART reports a past or minor problem', 'health']);
   if (d.lifeLeft != null && d.lifeLeft <= th.driveLifeWarnPct) problems.push(['warn', `${d.lifeLeft}% life left`, 'life']);
   if (d.errors) problems.push(['warn', `${d.errors} media errors or bad sectors`, 'errors']);
   if (d.tempC != null && d.tempC >= th.driveTempWarnC) problems.push(['warn', `${d.tempC} °C`, 'temp']);
@@ -219,8 +221,8 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
       const span = th.tempWarnC + 15 - th.tempMinC;
       const tp = Math.max(0, Math.min(100, ((temps.cpu - th.tempMinC) / span) * 100));
       gauges.push({ key: 'temp', label: 'CPU temp', val: Math.round(temps.cpu), unit: '°C', pct: tp, level: level(temps.cpu, th.tempWarnC, th.tempWarnC + 10), sub: `warn at ${th.tempWarnC} °C`, series: spark('host.temp'), max: null });
-      if (temps.cpu >= th.tempWarnC) attention.push({ sev: temps.cpu >= th.tempWarnC + 10 ? 'crit' : 'warn', title: `CPU at ${Math.round(temps.cpu)} °C`, detail: `limit ${th.tempWarnC} °C`, href: hostSvc?.href, ts: now });
-      for (const n of temps.nvme) if (n >= 70) attention.push({ sev: 'warn', title: `NVMe at ${Math.round(n)} °C`, detail: 'drive is running hot', href: hostSvc?.href, ts: now });
+      if (temps.cpu >= th.tempWarnC) attention.push({ key: 'cpu-temp', sev: temps.cpu >= th.tempWarnC + 10 ? 'crit' : 'warn', title: `CPU at ${Math.round(temps.cpu)} °C`, detail: `limit ${th.tempWarnC} °C`, href: hostSvc?.href, ts: now });
+      temps.nvme.forEach((n, i) => { if (n >= th.driveTempWarnC) attention.push({ key: `nvme-temp-${i}`, sev: 'warn', title: `NVMe at ${Math.round(n)} °C`, detail: 'drive is running hot', href: hostSvc?.href, ts: now }); });
     }
     host = {
       name: settings.host.name || (hw?.node ?? 'host'),
@@ -241,10 +243,10 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
     // and an offline row keeps its place instead of jumping to the end
     for (const x of [...(w?.storage || [])].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))) {
       // unavailable, detached or of unknown size: a grey bar (last known fill, if any), the widget raises any alert itself
-      if (x.offline || x.pct == null) { storage.push({ name: x.name, pct: x.pct ?? null, level: 'off', sub: x.sub, href: s.href }); continue; }
+      if (x.offline || x.pct == null) { storage.push({ name: x.name, pct: x.pct ?? null, level: 'off', sub: x.sub }); continue; }
       const lv: Level = x.pct >= th.storageWarnPct ? 'crit' : x.pct >= th.storageAmberPct ? 'warn' : 'ok';
-      storage.push({ name: x.name, pct: x.pct, level: lv, sub: x.sub, href: s.href });
-      if (x.pct >= th.storageWarnPct) attention.push({ sev: 'warn', title: `${x.name} is ${Math.round(x.pct)}% full`, detail: x.sub, href: s.href, ts: now });
+      storage.push({ name: x.name, pct: x.pct, level: lv, sub: x.sub });
+      if (x.pct >= th.storageWarnPct) attention.push({ sev: 'warn', key: `storage-${s.id}-${x.name}`, title: `${x.name} is ${Math.round(x.pct)}% full`, detail: x.sub, href: s.href, ts: now });
     }
   }
 
@@ -258,8 +260,16 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
       if (d.serial && seenSerials.has(d.serial)) continue;
       if (d.serial) seenSerials.add(d.serial);
       const { row, problems } = driveStatus(d, d.where ?? s.name, th);
-      for (const [sev, text, key] of problems) attention.push({ sev, key: `drive-${d.serial ?? d.model}-${key}`, title: `${d.model}: ${text}`, detail: row.meta, href: s.href, ts: now });
-      drives.push({ ...row, href: s.href });
+      const tile = tiles.get(s.id);
+      for (const [sev, text, key] of problems) {
+        const title = `${d.model}: ${text}`;
+        attention.push({ sev, key: `drive-${d.serial ?? d.model}-${key}`, sid: s.id, service: s.name, title, detail: row.meta, href: s.href, ts: now });
+        if (tile && RANK[sev] > RANK[tile.level === 'unknown' ? 'ok' : tile.level]) {
+          tile.level = sev;
+          if (tile.status !== 'Down') { tile.line = title; tile.lineLevel = sev; }
+        }
+      }
+      drives.push(row);
     }
   }
 

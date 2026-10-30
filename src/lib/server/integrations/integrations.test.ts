@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { INTEGRATIONS, ORDER, createContext } from './index.ts';
 import { FIXTURES, fixtureTransport } from '../demo/index.ts';
+import { container } from '../demo/portainer.ts';
 import { DEFAULT_SETTINGS } from '../config.ts';
 import { crossed, fieldPath, formatValue } from './customapi.ts';
 import { memoryKv } from '../test-helpers.ts';
@@ -51,6 +52,26 @@ test('PBS reports backups made while the dashboard was restarting', async () => 
   assert.equal(after.events?.[0]?.title, 'Backups completed');
 });
 
+test('PBS: a guest is as fresh as its latest backup in any store; guests of every Proxmox widget count', async () => {
+  const now = Date.now();
+  const sec = (hoursAgo: number) => Math.floor((now - hoursAgo * 3600_000) / 1000);
+  const groups: Record<string, [string, number][]> = { main: [['100', 2], ['200', 2], ['300', 2]], offsite: [['100', 200], ['200', 200]] };
+  const transport: Transport = async (url) => {
+    const path = new URL(url).pathname;
+    if (path.endsWith('/status/datastore-usage')) return Response.json({ data: ['main', 'offsite'].map((store) => ({ store, total: 100, used: 10 })) });
+    const store = path.match(/datastore\/([^/]+)\/groups$/)?.[1];
+    if (store) return Response.json({ data: groups[store].map(([id, h]) => ({ 'backup-type': 'vm', 'backup-id': id, 'last-backup': sec(h) })) });
+    return new Response('', { status: 404 });
+  };
+  // two PVE hosts: 100 lives on one, 300 on the other; 200 no longer exists
+  const shared: Shared = { guests: { 'https://pve1.test pve1': { 100: 'web' }, 'https://pve2.test pve2': { 300: 'db' } } };
+  const res = await INTEGRATIONS.proxmoxbackupserver.collect({ type: 'proxmoxbackupserver', ...WIDGETS.proxmoxbackupserver },
+    createContext({ transport, kv: memoryKv(), settings: DEFAULT_SETTINGS, now, shared }));
+  assert.deepEqual(res.alerts.filter((a) => a.title === 'Backup overdue'), []);
+  assert.equal(res.stats.find((s) => s.k === 'groups')?.v, '2');
+  assert.equal(res.backups?.overdue, 0);
+});
+
 test('Portainer: a stopped container is a failure, a finished one-shot job is not', async () => {
   const run = async (scenario: string) => {
     const ctx = createContext({ transport: fixtureTransport(FIXTURES.portainer, { scenario }), kv: memoryKv(), settings: DEFAULT_SETTINGS, now: Date.now() });
@@ -65,6 +86,30 @@ test('Portainer: a stopped container is a failure, a finished one-shot job is no
   // wud is its own tile (labels, no siteMonitor), so only music-assistant alerts here
   assert.deepEqual(issues.alerts.map((a) => a.title), ['Container music-assistant stopped']);
   assert.equal(issues.discovered?.find((d) => d.name === "What's Up Docker")?.container.state, 'exited');
+});
+
+test('Portainer: a dead container is a failure; a labelled job that finished is done, not down', async () => {
+  const table: Fixtures = {
+    ...FIXTURES.portainer,
+    'GET /api/endpoints/:env/docker/containers/json': () => [
+      container('postgres'),
+      container('old-db', 'dead', 'Dead'),
+      container('certbot-renew', 'exited', 'Exited (0) 6 hours ago', { 'dashboard.group': 'Jobs', 'dashboard.name': 'Certbot' })
+    ]
+  };
+  const res = await INTEGRATIONS.portainer.collect({ type: 'portainer', ...WIDGETS.portainer },
+    createContext({ transport: fixtureTransport(table, { scenario: 'calm' }), kv: memoryKv(), settings: DEFAULT_SETTINGS, now: Date.now() }));
+  assert.equal(res.containers?.failed, 1);
+  assert.deepEqual(res.alerts.map((a) => a.title), ['Container old-db stopped']);
+  assert.deepEqual(res.discovered?.find((d) => d.name === 'Certbot')?.container, { state: 'exited', health: null, exitCode: 0, done: true });
+});
+
+test('Portainer without env is a config problem, not a request to /endpoints/undefined', async () => {
+  const requested: string[] = [];
+  const transport: Transport = async (url) => { requested.push(url); return new Response('[]'); };
+  await assert.rejects(INTEGRATIONS.portainer.collect({ type: 'portainer', url: 'https://portainer.test', key: 'k' },
+    createContext({ transport, kv: memoryKv(), settings: DEFAULT_SETTINGS, now: Date.now() })), /env/);
+  assert.deepEqual(requested, []);
 });
 
 test('Portainer looks up a restart policy once per container', async () => {
@@ -189,6 +234,9 @@ test('customapi: alerts for crossed thresholds and missing fields; refreshInterv
   const again = await run('issues', { ...WIDGETS.customapi, refreshInterval: 300_000 }, state, t0 + 120_000);
   assert.deepEqual(again.alerts, []);
   assert.equal((await run('issues', { ...WIDGETS.customapi, refreshInterval: 300_000 }, state, t0 + 300_000)).alerts.length, 1);
+  // an edited widget block reads again at once, refreshInterval or not
+  const edited = await run('calm', { ...WIDGETS.customapi, refreshInterval: 300_000, mappings: [{ field: 'sessions.active', label: '' }] }, state, t0 + 310_000);
+  assert.deepEqual(edited.stats.map((x) => x.v), ['3']);
 });
 
 test('customapi: a non-JSON answer is an error with the body for the log only', async () => {
@@ -231,6 +279,11 @@ test('OPNsense: WAN rates are text, rounded from 100 Mbit/s up', async () => {
   const res = await poll(t0 + 60_000);
   assert.deepEqual(res.stats.slice(0, 2).map((s) => s.v), ['160', '1.0']);
   assert.equal(res.line, 'WAN 160 / 1.0 Mbit/s');
+  // a reboot resets the counters: no rate for that sample rather than a negative one
+  const reset: Fixtures = { ...FIXTURES.opnsense, 'GET /api/diagnostics/traffic/interface': () => ({ interfaces: { wan: { 'bytes received': String(t0 * 40_000), 'bytes transmitted': '0' } } }) };
+  const after = await INTEGRATIONS.opnsense.collect({ type: 'opnsense', ...WIDGETS.opnsense },
+    createContext({ transport: fixtureTransport(reset, { scenario: 'calm', now: t0 + 120_000 }), kv: memoryKv(), settings: DEFAULT_SETTINGS, now: t0 + 120_000, state }));
+  assert.equal(after.network?.up, null);
 });
 
 for (const scenario of ['issues', 'calm']) {

@@ -67,6 +67,8 @@ export interface ContainerState {
   state: string;
   health: string | null;
   exitCode: number;
+  /** exited cleanly and not meant to be running (restart policy no or on-failure): a one-shot job that finished */
+  done: boolean;
 }
 
 /**
@@ -228,8 +230,8 @@ export interface Kv {
 
 /** Hand-offs between integrations within one widget round. */
 export interface Shared {
-  guestIds?: Set<string>;
-  guestNames?: Record<string, string>;
+  /** per Proxmox widget (API URL and node): guest id → name, so several PVE hosts each add theirs */
+  guests?: Record<string, Record<string, string>>;
   /** per Docker engine id (from /info), so Portainer and a docker widget on one engine count it once */
   containers?: Record<string, ContainerCounts>;
 }
@@ -342,7 +344,8 @@ export interface Drive extends Omit<SmartReading, 'failing'> {
   size: number;
   /** which system sees it: the PVE node; unset means the widget's own service (the snapshot fills in its name) */
   where?: string;
-  health: 'ok' | 'failing' | 'unknown';
+  /** warning: a past or minor SMART problem (OMV's BAD_ATTRIBUTE_IN_THE_PAST, BAD_SECTOR) */
+  health: 'ok' | 'warning' | 'failing' | 'unknown';
 }
 
 /** Current rates plus their 24 h series, as the Network panel draws them. */
@@ -624,7 +627,7 @@ export interface Snapshot {
   /** `name` is the Proxmox node; `facts` are labelled pairs shown beside it (uptime, guests) */
   host: { name: string; href: string | null; facts: { label: string; value: string }[]; gauges: Gauge[] } | null;
   /** `off` rows (unavailable, detached, size unknown) draw `pct` as a grey bar: the last known fill, or empty */
-  storage: { name: string; pct: number | null; level: Level | 'off'; sub: string; href: string | null }[];
+  storage: { name: string; pct: number | null; level: Level | 'off'; sub: string }[];
   /** the vitals card's Drives panel; empty when no widget reports drives */
   drives: {
     name: string;
@@ -637,7 +640,6 @@ export interface Snapshot {
     life: number | null;
     lifeLevel: Level;
     facts: Fact[];
-    href: string | null;
   }[];
   network: (Traffic & {
     /** the Proxmox host NIC, shown under WAN on its own scale */

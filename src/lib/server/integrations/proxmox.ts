@@ -164,8 +164,7 @@ export async function collect(w: Widget, ctx: Context): Promise<WidgetResult> {
   const rootPct = pct(node.disk, node.maxdisk);
   ctx.metric('host.root', rootPct);
   for (const s of storages) ctx.metric(`storage.pve.${s.name}`, s.pct);
-  ctx.shared.guestIds = new Set(guests.map((g) => String(g.id)));
-  ctx.shared.guestNames = Object.fromEntries(guests.map((g) => [String(g.id), g.name]));
+  (ctx.shared.guests ??= {})[`${base} ${node.node}`] = Object.fromEntries(guests.map((g) => [String(g.id), g.name]));
 
   const alerts: Alert[] = [];
   if (node.status !== 'online') alerts.push({ sev: 'crit', title: `Node ${node.node} is offline`, detail: 'Proxmox reports the node as ' + node.status });

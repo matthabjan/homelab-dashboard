@@ -16,8 +16,9 @@ const { insertProbe } = await import('./db.ts');
 const { fmtClock } = await import('./format.ts');
 const { record } = await import('./check.ts');
 const { heartbeatState } = await import('./heartbeat.ts');
+const { toDrive } = await import('./integrations/smart.ts');
 import type { TestService } from './test-helpers.ts';
-import type { Alert, Snapshot, Tile, WidgetState } from '$lib/types';
+import type { Alert, Drive, Snapshot, Tile, WidgetState } from '$lib/types';
 
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
@@ -76,6 +77,22 @@ test("precedence: a widget's crit alert outranks a cert warning; a down probe ke
   assert.deepEqual([backup.level, backup.status, backup.line], ['crit', 'Down', `Down since ${fmtClock(now - MIN)} · Timed out`]);
 });
 
+test('drives: a failing drive turns the reporting tile red, a past SMART problem amber; a down tile keeps its line', () => {
+  const now = day(9);
+  const drive = (model: string, serial: string, status: string) => toDrive({ model, serial, kind: 'HDD', size: 8e12, status, smart: null });
+  const withDrives = (drives: Drive[]): WidgetState => ({ ...widget(now, []), drives });
+  const snap = build([
+    probed('NAS', now, { state: { widget: withDrives([drive('Disk A', 'A', 'BAD_STATUS')]) } }),
+    probed('Backup', now, { state: { widget: withDrives([drive('Disk B', 'B', 'BAD_ATTRIBUTE_IN_THE_PAST')]) } }),
+    probed('Old', now, { state: { check: { fails: 2, down: true, since: now - MIN, reason: 'Timed out', ms: null, checked: now }, widget: withDrives([drive('Disk C', 'C', 'BAD_SECTOR_MANY')]) } })
+  ], now);
+  assert.deepEqual(alertsOf(snap, 'NAS').map((a) => [a.sev, a.title]), [['crit', 'Disk A: SMART reports failing']], 'one alert, not one from OMV too');
+  assert.deepEqual([tile(snap, 'NAS').level, tile(snap, 'NAS').line, tile(snap, 'NAS').lineLevel], ['crit', 'Disk A: SMART reports failing', 'crit']);
+  assert.deepEqual([tile(snap, 'Backup').level, tile(snap, 'Backup').line], ['warn', 'Disk B: SMART reports a past or minor problem']);
+  assert.deepEqual(snap.drives.map((d) => d.status), ['failing', 'check', 'failing']);
+  assert.deepEqual([tile(snap, 'Old').level, tile(snap, 'Old').status, tile(snap, 'Old').line], ['crit', 'Down', `Down since ${fmtClock(now - MIN)} · Timed out`]);
+});
+
 test('certificates: a warning under certWarnDays, critical under 3 days, then expired', () => {
   const now = day(4);
   const cert = (days: number) => ({ state: { cert: { validTo: now + days * D + MIN, trusted: true, selfSigned: false } } });
@@ -124,7 +141,7 @@ test('checks other than probes: a stopped container is down, a heartbeat that mi
   const now = day(8);
   const hb = { id: 'restic', every: 24 * 60 * MIN, grace: 60 * MIN, token: 't', backup: true };
   const input = snapshotInput({ services: [
-    { name: 'Jellyfin', container: { state: 'exited', health: null, exitCode: 1 } },
+    { name: 'Jellyfin', container: { state: 'exited', health: null, exitCode: 1, done: false } },
     { name: 'Restic', heartbeat: hb }
   ] });
   const [jellyfin, restic] = input.cfg.services;

@@ -52,7 +52,13 @@ export async function getJson(url: string, opts: RequestOptions = {}, transport:
     err.body = (await res.text().catch(() => '')).slice(0, 300);
     throw err;
   }
-  return res.json();
+  // not res.json(): its SyntaxError quotes the start of the body ("<html><tit"...), and the message is shown
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw Object.assign(new Error('Response is not JSON'), { body: text.slice(0, 300) });
+  }
 }
 
 export const basicAuth = (u: string | undefined, p: string | undefined) => 'Basic ' + Buffer.from(`${u ?? ''}:${p ?? ''}`).toString('base64');

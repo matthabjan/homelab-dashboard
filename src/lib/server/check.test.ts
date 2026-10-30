@@ -36,7 +36,7 @@ const events = (sid: string) => recentEvents(0, 100).filter((e) => e.sid === sid
 const history = (sid: string) => lastProbes(sid, 100).reverse().map((r) => r.ok);
 
 test('kindOf: heartbeat, tcp:// or http probe, container, none', () => {
-  const container = { state: 'running', health: null, exitCode: 0 };
+  const container = { state: 'running', health: null, exitCode: 0, done: false };
   const hb = { id: 'x', every: H, grace: H, token: 't', backup: false };
   assert.equal(kindOf({ heartbeat: hb, probe: null, container: null }), 'heartbeat');
   assert.equal(kindOf({ heartbeat: null, probe: 'tcp://nas.home.arpa:22', container: null }), 'tcp');
@@ -72,24 +72,30 @@ test('probe: down after the second failure in a row, one event each way', () => 
 });
 
 test('container: down at once when not running; unhealthy stays up but fails in the history', () => {
-  const { s, st } = one({ name: 'Jellyfin', container: { state: 'running', health: null, exitCode: 0 } });
+  const { s, st } = one({ name: 'Jellyfin', container: { state: 'running', health: null, exitCode: 0, done: false } });
   /** The engine records the state label discovery just put on the service. */
   const see = (c: ContainerState, now: number) => { s.container = c; record(s, st, c, now); };
 
-  see({ state: 'running', health: null, exitCode: 0 }, T);
+  see({ state: 'running', health: null, exitCode: 0, done: false }, T);
   assert.deepEqual(status(s, st, T), { lvl: 'ok', status: 'Up', line: null });
-  see({ state: 'running', health: 'unhealthy', exitCode: 0 }, T + 60 * S);
+  see({ state: 'running', health: 'unhealthy', exitCode: 0, done: false }, T + 60 * S);
   assert.equal(st.check.down, false);
   assert.deepEqual(status(s, st, T), { lvl: 'warn', status: 'Unhealthy', line: 'Container unhealthy', alert: { sev: 'warn', title: 'is unhealthy', detail: 'container health check failing' } });
 
-  see({ state: 'exited', health: null, exitCode: 137 }, T + 120 * S);
+  see({ state: 'exited', health: null, exitCode: 137, done: false }, T + 120 * S);
   assert.deepEqual([st.check.down, st.check.since, st.check.reason], [true, T + 120 * S, 'Container exited · exit 137']);
   assert.equal(status(s, st, T)?.line, `Down since ${fmtClock(T + 120 * S)} · Container exited · exit 137`);
   assert.deepEqual(events(s.id), [['crit', 'Jellyfin went down', 'Container exited · exit 137']]);
   assert.deepEqual(history(s.id), [1, 0, 0]);
 
+  // a one-shot job that finished is up, and leaves the down state
+  see({ state: 'exited', health: null, exitCode: 0, done: true }, T + 180 * S);
+  assert.equal(st.check.down, false);
+  assert.deepEqual(status(s, st, T), { lvl: 'ok', status: 'Done', line: 'Job finished', lineLevel: 'muted' });
+  assert.deepEqual(history(s.id), [1, 0, 0, 1]);
+
   // before its first reading the tile shows the state from the labels
-  const fresh = one({ name: 'Sonarr', container: { state: 'restarting', health: null, exitCode: 0 } });
+  const fresh = one({ name: 'Sonarr', container: { state: 'restarting', health: null, exitCode: 0, done: false } });
   assert.deepEqual(status(fresh.s, fresh.st, T), { lvl: 'crit', status: 'Down', line: 'Container restarting' });
   record(fresh.s, fresh.st, (fresh.s.container as ContainerState), T);
   assert.deepEqual([fresh.st.check.down, fresh.st.check.reason], [true, 'Container restarting']);

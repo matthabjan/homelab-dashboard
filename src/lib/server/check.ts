@@ -33,9 +33,10 @@ export function record(s: Service, st: ServiceState, reading: ProbeResult | Cont
     apply(s, st.check, now, hb.state === 'up' ? null : hb.failed ? 'Reported a failure' : 'Missed its run', 1);
   } else if (kind === 'container') {
     const c = (reading as ContainerState);
-    // unhealthy stays up (the tile warns) but counts as a failure in the history
-    if (history) insertProbe(s.id, now, c.state === 'running' && c.health !== 'unhealthy', null);
-    apply(s, st.check, now, c.state === 'running' ? null : containerReason(c), 1);
+    // unhealthy stays up (the tile warns) but counts as a failure in the history; a finished one-shot job is up
+    const up = c.state === 'running' || c.done;
+    if (history) insertProbe(s.id, now, up && c.health !== 'unhealthy', null);
+    apply(s, st.check, now, up ? null : containerReason(c), 1);
   } else if (kind) {
     const r = (reading as ProbeResult);
     if (history) insertProbe(s.id, now, r.ok, r.ms);
@@ -85,6 +86,7 @@ export function status(s: Service, st: ServiceState, now: number): CheckStatus |
 function containerStatus(c: ContainerState): CheckStatus {
   if (c.state === 'running' && c.health === 'unhealthy') return { lvl: 'warn', status: 'Unhealthy', line: 'Container unhealthy', alert: { sev: 'warn', title: 'is unhealthy', detail: 'container health check failing' } };
   if (c.state === 'running') return { lvl: 'ok', status: 'Up', line: null };
+  if (c.done) return { lvl: 'ok', status: 'Done', line: 'Job finished', lineLevel: 'muted' };
   return { lvl: 'crit', status: 'Down', line: containerReason(c) };
 }
 

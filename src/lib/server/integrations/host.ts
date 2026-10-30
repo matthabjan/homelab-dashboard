@@ -28,7 +28,7 @@ export async function readTemps(): Promise<Temps | null> {
     const temps: { label: string; c: number }[] = [];
     for (const f of files) {
       const v = await readNum(path.join(dir, f));
-      if (v == null || v <= 0) continue;
+      if (v == null || !Number.isFinite(v) || v <= 0) continue;
       temps.push({ label: (await readStr(path.join(dir, f.replace('_input', '_label')))) || '', c: v / 1000 });
     }
     if (!temps.length) continue;

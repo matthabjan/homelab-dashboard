@@ -38,14 +38,15 @@ export async function collect(widget: Widget, ctx: Context): Promise<WidgetResul
   // counters are cumulative: derive the rate from the previous sample
   let down: number | null = null, up: number | null = null;
   const prev = state.prev;
-  if (prev && Number.isFinite(rx) && rx >= prev.rx) {
+  // a counter that went down was reset (reboot): skip that sample instead of a negative rate
+  if (prev && Number.isFinite(rx) && Number.isFinite(tx) && rx >= prev.rx && tx >= prev.tx) {
     const dt = (ctx.now - prev.ts) / 1000;
     if (dt > 0) {
       down = ((rx - prev.rx) * 8) / dt / 1e6;
       up = ((tx - prev.tx) * 8) / dt / 1e6;
     }
   }
-  if (Number.isFinite(rx)) state.prev = { rx, tx, ts: ctx.now };
+  if (Number.isFinite(rx) && Number.isFinite(tx)) state.prev = { rx, tx, ts: ctx.now };
   if (down != null) { ctx.metric('net.down', down); ctx.metric('net.up', up); }
   if (cpu != null) ctx.metric('opnsense.cpu', cpu);
 

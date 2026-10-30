@@ -72,7 +72,7 @@ test.after(() => fs.rmSync(dir, { recursive: true, force: true }));
 function fakeEngine() {
   const base = loadConfig();
   // label values reach the page only as group and name; this one carries a secret in its widget and href
-  const discovered = [{ group: 'Apps', name: 'Labelled', def: { href: `https://x.home.arpa/?k=${SECRETS.CV_QUERY}`, widget: { type: 'adguard', url: `https://u:${SECRETS.CV_USERINFO}@adg2.home.arpa`, password: SECRETS.CV_ADGUARD } }, container: { state: 'running', health: null, exitCode: 0 }, image: null }];
+  const discovered = [{ group: 'Apps', name: 'Labelled', def: { href: `https://x.home.arpa/?k=${SECRETS.CV_QUERY}`, widget: { type: 'adguard', url: `https://u:${SECRETS.CV_USERINFO}@adg2.home.arpa`, password: SECRETS.CV_ADGUARD } }, container: { state: 'running', health: null, exitCode: 0, done: false }, image: null }];
   const cfg = withDiscovered(base, discovered);
   const portainer = cfg.services.find((s) => s.name === 'Portainer');
   const states = new Map<string, ServiceState>();

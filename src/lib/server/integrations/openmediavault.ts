@@ -173,10 +173,8 @@ export async function collect(w: Widget, ctx: Context): Promise<WidgetResult> {
   if (updates) alerts.push({ sev: 'info', key: 'updates', title: `${updates} updates available on ${info?.hostname || 'NAS'}`, detail: 'apt packages pending' });
 
   const disks = (smart || []).filter((d) => d.monitor);
+  // a drive that isn't GOOD is raised by the Drives panel, which also colours this tile
   const good = disks.filter((d) => d.overallstatus === 'GOOD').length;
-  for (const d of disks.filter((d) => d.overallstatus !== 'GOOD')) {
-    alerts.push({ sev: 'crit', title: `SMART warning on ${d.devicefile || d.model}`, detail: `Status ${d.overallstatus}` });
-  }
 
   const storage: UsageRow[] = (Array.isArray(fs) ? fs : [])
     .filter((f) => Number(f.size) > 0 && f.mountpoint !== '/')

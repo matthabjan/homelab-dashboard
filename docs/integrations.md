@@ -146,11 +146,10 @@ widget:
 
 | Severity | When |
 |---|---|
-| critical | A monitored disk's SMART status isn't `GOOD`. |
 | warning | A service enabled in OMV isn't running. |
 | info | Package updates are available. |
 
-Only disks with SMART monitoring enabled in OMV are checked. Virtual disks have no SMART data and are shown without it.
+Disk health alerts come from [Drives](#drives). Only disks with SMART monitoring enabled in OMV are checked. Virtual disks have no SMART data and are shown without it.
 
 ---
 
@@ -209,7 +208,7 @@ Provides **container counts**, alerts for failed and unhealthy containers, and t
 widget:
   type: portainer
   url: https://portainer.home.arpa
-  env: 1                  # environment (endpoint) id, from the URL in Portainer
+  env: 1                  # environment (endpoint) id, from the URL in Portainer; required
   key: ${PORTAINER_KEY}
 ```
 
@@ -222,7 +221,7 @@ widget:
 | Severity | When |
 |---|---|
 | critical | A container is restarting. |
-| warning | A container stopped: it exited with a non-zero code, or with code 0 although its restart policy is `always` or `unless-stopped` (a `docker stop`). The alert includes the restart count. |
+| warning | A container stopped: it is dead, it exited with a non-zero code, or it exited with code 0 although its restart policy is `always` or `unless-stopped` (a `docker stop`). The alert includes the restart count. |
 | warning | A container's health check reports `unhealthy`. |
 
 Containers that exited with code 0 under restart policy `no` or `on-failure` count as finished jobs, not failures. A container that is its own tile through [label discovery](configuration.md#services-from-container-labels) without `siteMonitor` gets no alert here: its tile reports it. Add the label `dashboard.ignore=true` to hide a container entirely.
@@ -340,9 +339,12 @@ Virtual disks (QEMU, virtio) are skipped, since the host reports the real drive.
 | Severity | When |
 |---|---|
 | critical | SMART reports the drive as failing (or an NVMe critical warning is set). |
+| warning | OMV reports `BAD_ATTRIBUTE_IN_THE_PAST` (a threshold was crossed once) or `BAD_SECTOR` (a few bad sectors). |
 | warning | Life left is at or below `thresholds.driveLifeWarnPct`. |
 | warning | The drive reports media errors, or reallocated, pending or uncorrectable sectors. |
 | warning | The drive is at or above `thresholds.driveTempWarnC`. |
+
+A drive's alert also turns the tile of the service that reports it amber or red, like the service's own alerts.
 
 ---
 
