@@ -11,7 +11,7 @@ import { hostSource, readLocal } from './local.js';
 import { checkIn, createLimiter, heartbeatState, record as heartbeatRecord } from './heartbeat.js';
 import { DEMO, SCENARIO, demoProbe, demoCert, demoTemps, demoLocal, seedHistory } from './demo.js';
 import { FIXTURES, fixtureTransport } from './demo/index.js';
-import { buildSnapshot } from './snapshot.js';
+import { createSnapshot } from './snapshot.js';
 import { createIconFinder, iconCandidates } from './icons.js';
 import { INTEGRATIONS, ORDER, createContext } from './integrations/index.js';
 /** @import { Config, Discovered, HostVitals, Service, ServiceState, Shared, Snapshot, Temps, Widget } from '$lib/types' */
@@ -44,6 +44,7 @@ export class Engine extends EventEmitter {
   icons = createIconFinder({ kv });
   /** @type {Map<string, { icon: string, iconDark: string | null }>} service id → icon found for a service without `icon` */
   autoIcons = new Map();
+  buildSnapshot = createSnapshot();
   /** @type {Snapshot | null} */
   snapshot = null;
   started = false;
@@ -295,7 +296,7 @@ export class Engine extends EventEmitter {
 
   publish() {
     try {
-      this.snapshot = buildSnapshot(this);
+      this.snapshot = this.buildSnapshot(this, Date.now());
       this.emit('update', this.snapshot);
     } catch (e) {
       console.error('[snapshot]', e);

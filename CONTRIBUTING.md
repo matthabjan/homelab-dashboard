@@ -40,7 +40,7 @@ src/
 
 [CONTEXT.md](CONTEXT.md) defines the terms (service, widget, integration, context, transport, fixture …). Please use them in code and discussion.
 
-**Runtime in short:** the engine starts with the server and runs three timers: probes every 30 s, widgets every 60 s and certificates every 6 h. Integrations reach the network only through `ctx`, which is undici in production and the fixture transport in the demo and tests. After each poll, `buildSnapshot` turns the state and history into one JSON document. It is rendered on the server for the first page load and then pushed to browsers over Server-Sent Events (`/api/stream`). History lives in `DATA_DIR/dashboard.db`.
+**Runtime in short:** the engine starts with the server and runs three timers: probes every 30 s, widgets every 60 s and certificates every 6 h. Integrations reach the network only through `ctx`, which is undici in production and the fixture transport in the demo and tests. After each poll, the snapshot builder (`createSnapshot` in `snapshot.js`) turns the state and history into one JSON document. It is rendered on the server for the first page load and then pushed to browsers over Server-Sent Events (`/api/stream`). History lives in `DATA_DIR/dashboard.db`.
 
 ## Code style
 

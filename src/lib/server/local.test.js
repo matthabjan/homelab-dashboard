@@ -12,7 +12,9 @@ process.env.CONFIG_DIR = tmp;
 delete process.env.HOST_NAME;
 const { readLocal, hostSource } = await import('./local.js');
 const { DEFAULT_SETTINGS } = await import('./config.js');
-const { buildSnapshot } = await import('./snapshot.js');
+const { createSnapshot } = await import('./snapshot.js');
+const { snapshotInput } = await import('./test-helpers.js');
+const buildSnapshot = (/** @type {import('./snapshot.js').SnapshotInput} */ input) => createSnapshot()(input, Date.now());
 
 const proc = path.join(tmp, 'proc');
 fs.mkdirSync(proc);
@@ -68,30 +70,13 @@ test('host.source auto picks Proxmox only when there is a proxmox widget', () =>
   assert.equal(hostSource(cfg([], 'proxmox')), 'proxmox');
 });
 
-/**
- * A small engine for buildSnapshot: services with a widget result each, and the local host.
- * @param {{ local?: any, services?: { name: string, widget: any }[] }} opts
- */
-function fakeEngine({ local = null, services = [] }) {
-  const svcs = services.map(({ name }) => ({ id: name.toLowerCase(), name, group: 'G', href: null, description: '', icon: 'x', iconDark: null, probe: null, insecure: false, latencyWarnMs: null, widget: { type: 'x', url: '' }, heartbeat: null }));
-  const results = new Map(services.map(({ name, widget }) => [name.toLowerCase(), widget]));
-  return /** @type {any} */ ({
-    cfg: { settings: DEFAULT_SETTINGS, groups: [{ name: 'G', services: svcs }], services: svcs, bookmarks: [], problems: [] },
-    state: (id) => ({ probe: { fails: 0, down: false, since: null, reason: null, ms: null, checked: null }, widget: results.get(id) ?? null, wstate: {}, cert: null }),
-    autoIcons: new Map(),
-    shared: {},
-    temps: null,
-    local
-  });
-}
-
 test('the System panel shows local vitals without a Guests fact', async () => {
   write('stat', stat(1000, 9000));
   const state = {};
   await readLocal(host, state, { procDir: proc });
   write('stat', stat(1100, 9900));
   const local = await readLocal(host, state, { procDir: proc });
-  const snap = buildSnapshot(fakeEngine({ local }));
+  const snap = buildSnapshot(snapshotInput({ local }));
   assert.equal(snap.host?.name, 'this host');
   assert.equal(snap.host?.href, null);
   assert.deepEqual(snap.host?.facts, [{ label: 'Uptime', value: '26 h' }]);
@@ -100,18 +85,20 @@ test('the System panel shows local vitals without a Guests fact', async () => {
 
 test('a nearly full local disk raises the storage warning', async () => {
   const local = await readLocal(host, {}, { procDir: proc });
+  assert.ok(local);
   const full = { ...local, disk: { name: '/', pct: 91.4, sub: '426 / 466 GiB' } };
-  const alerts = buildSnapshot(fakeEngine({ local: full })).attention.filter((a) => a.key === 'local-disk');
+  const alerts = buildSnapshot(snapshotInput({ local: full })).attention.filter((a) => a.key === 'local-disk');
   assert.deepEqual(alerts.map((a) => [a.sev, a.title, a.detail]), [['warn', 'Disk / is 91% full', 'this host · 426 / 466 GiB']]);
   const ok = { ...local, disk: { name: '/', pct: 84, sub: '' } };
-  assert.equal(buildSnapshot(fakeEngine({ local: ok })).attention.filter((a) => a.key === 'local-disk').length, 0);
+  assert.equal(buildSnapshot(snapshotInput({ local: ok })).attention.filter((a) => a.key === 'local-disk').length, 0);
 });
 
 test('a widget alert names its service in the attention list and headline, not on its own tile', () => {
+  /** @param {string} title @returns {import('$lib/types').WidgetState} */
   const widget = (title) => ({ ok: true, ts: Date.now(), lastOk: Date.now(), stats: [], line: '', alerts: [{ sev: 'crit', title, detail: 'critical when below 1' }] });
-  const snap = buildSnapshot(fakeEngine({ services: [
-    { name: 'Media server', widget: widget('Health is Degraded') },
-    { name: 'Pi-hole', widget: widget('Pi-hole is not filtering') }
+  const snap = buildSnapshot(snapshotInput({ services: [
+    { name: 'Media server', state: { widget: widget('Health is Degraded') } },
+    { name: 'Pi-hole', state: { widget: widget('Pi-hole is not filtering') } }
   ] }));
   assert.deepEqual(snap.attention.map((a) => a.title).sort(), ['Media server: Health is Degraded', 'Pi-hole is not filtering']);
   assert.match(snap.verdict.title, /^(Media server: Health is Degraded|Pi-hole is not filtering)\.$/);

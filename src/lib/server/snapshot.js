@@ -14,19 +14,36 @@ const VERSION = (() => { try { return String(JSON.parse(fs.readFileSync('package
 const H = 3600_000;
 const MIN_SLOW_SAMPLES = 10; // ~5 min of probes before a service can be called slow
 
-let statCache = { ts: 0, data: new Map() };
-function stats(sid, now) {
-  if (now - statCache.ts > 60_000) statCache = { ts: now, data: new Map() };
-  if (!statCache.data.has(sid)) {
-    const d = probeStats(sid, now - 24 * H);
-    const h1 = probeStats(sid, now - H);
-    statCache.data.set(sid, { up24: d.uptime, p95: d.p95, p95h: h1.p95, n1: h1.n, up7: uptimeSince(sid, now - 7 * 24 * H) });
-  }
-  return statCache.data.get(sid);
+/**
+ * What the snapshot reads from the engine; the Engine itself satisfies it.
+ * @typedef {Pick<Engine, 'cfg' | 'state' | 'autoIcons' | 'shared' | 'temps' | 'local'>} SnapshotInput
+ */
+/** @typedef {{ up24: number | null, p95: number | null, p95h: number | null, n1: number, up7: number | null }} ProbeSummary */
+/** @typedef {{ stats: { ts: number, data: Map<string, ProbeSummary> }, firstSeen: Map<string, number> }} Memory */
+
+/**
+ * A snapshot builder. It remembers when each alert first appeared (so attention shows "since" instead of
+ * "last polled") and caches probe statistics for a minute, so keep one per engine.
+ * @returns {(input: SnapshotInput, now: number) => Snapshot}
+ */
+export function createSnapshot() {
+  /** @type {Memory} */
+  const mem = { stats: { ts: 0, data: new Map() }, firstSeen: new Map() };
+  return (input, now) => build(input, now, mem);
 }
 
-// remembers when each alert first appeared, so the feed shows "since" instead of "last polled"
-const firstSeen = new Map();
+/** @param {Memory} mem @param {string} sid @param {number} now @returns {ProbeSummary} */
+function stats(mem, sid, now) {
+  if (now - mem.stats.ts > 60_000) mem.stats = { ts: now, data: new Map() };
+  let s = mem.stats.data.get(sid);
+  if (!s) {
+    const d = probeStats(sid, now - 24 * H);
+    const h1 = probeStats(sid, now - H);
+    s = { up24: d.uptime, p95: d.p95, p95h: h1.p95, n1: h1.n, up7: uptimeSince(sid, now - 7 * 24 * H) };
+    mem.stats.data.set(sid, s);
+  }
+  return s;
+}
 
 /** @returns {Level | 'none'} */
 const level = (v, warn, crit) => (v == null ? 'none' : v >= crit ? 'crit' : v >= warn ? 'warn' : 'ok');
@@ -122,13 +139,12 @@ function driveStatus(d, where, th) {
 }
 
 /**
- * @param {Engine} engine
+ * @param {SnapshotInput} engine @param {number} now @param {Memory} mem
  * @returns {Snapshot}
  */
-export function buildSnapshot(engine) {
+function build(engine, now, mem) {
   const { settings, groups, bookmarks } = engine.cfg;
   const th = settings.thresholds;
-  const now = Date.now();
   /** @type {AttentionItem[]} */
   const attention = [];
   /** @type {Map<string, Tile>} */
@@ -157,7 +173,7 @@ export function buildSnapshot(engine) {
       const st = engine.state(s.id);
       const p = st.probe;
       const w = st.widget;
-      const ps = s.probe || s.container || s.heartbeat ? stats(s.id, now) : null; // container and heartbeat states are recorded like probes
+      const ps = s.probe || s.container || s.heartbeat ? stats(mem, s.id, now) : null; // container and heartbeat states are recorded like probes
       const host = (() => { try { return new URL(s.href || s.probe || '').host; } catch { return ''; } })();
       /** @type {Tile['level']} */
       let lvl = s.probe ? (p.checked ? 'ok' : 'unknown') : w ? 'ok' : 'unknown';
@@ -376,10 +392,11 @@ export function buildSnapshot(engine) {
   for (const a of attention) {
     const k = `${a.sid ?? ''}|${a.key ?? a.title}`;
     seenNow.add(k);
-    if (!firstSeen.has(k)) firstSeen.set(k, Math.min(a.ts ?? now, now));
-    a.ts = Math.min(a.ts ?? now, firstSeen.get(k));
+    const first = mem.firstSeen.get(k) ?? Math.min(a.ts ?? now, now);
+    mem.firstSeen.set(k, first);
+    a.ts = Math.min(a.ts ?? now, first);
   }
-  for (const k of firstSeen.keys()) if (!seenNow.has(k)) firstSeen.delete(k);
+  for (const k of mem.firstSeen.keys()) if (!seenNow.has(k)) mem.firstSeen.delete(k);
 
   // ---- verdict ----
   attention.sort((a, b) => RANK[b.sev] - RANK[a.sev] || b.ts - a.ts);

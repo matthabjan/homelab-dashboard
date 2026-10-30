@@ -18,6 +18,12 @@ Terms used in the code and in design discussions.
 
 **Scenario** — which story the fixtures tell: `issues` (default; things to look at) or `calm` (all fine). Set with `DEMO_SCENARIO`.
 
+**Snapshot** — the one JSON document the page renders: tiles, attention, verdict, vitals card panels, fleet strip. Built from engine state and history by the snapshot module (`createSnapshot` in `snapshot.js`) and pushed over SSE on every change.
+
+**Attention** — the list of alerts that need looking at, most severe first; each keeps the time it first appeared.
+
+**Verdict** — the headline of the status card: "All systems normal", or the top attention item and how many need attention.
+
 **Vitals card** — the card under the status overview with four panels behind tabs: System (the host's gauges), Storage, Drives and Network. A tab is marked with the worst level in its panel; only panels with data get a tab.
 
 **Local host** — the machine the dashboard runs on, shown in the System panel when there is no Proxmox widget (`host.source`). Its vitals come from `/proc` and `statfs` (`local.js`); in Docker that is the host, under lxcfs the container.
