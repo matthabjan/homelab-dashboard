@@ -49,8 +49,7 @@ export async function collect(widget: Widget, ctx: Context): Promise<WidgetResul
   if (down != null) { ctx.metric('net.down', down); ctx.metric('net.up', up); }
   if (cpu != null) ctx.metric('opnsense.cpu', cpu);
 
-  // ≥ 100 stays a number, as before; Stat.v is declared string (it renders the same)
-  const f = (v: number | null) => (v == null ? '—' : v >= 100 ? (Math.round(v) as unknown as string) : v.toFixed(1));
+  const f = (v: number | null) => (v == null ? '—' : v >= 100 ? String(Math.round(v)) : v.toFixed(1));
   return {
     stats: [
       { k: 'WAN ↓ Mbit/s', v: f(down) },

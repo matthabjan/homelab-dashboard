@@ -217,6 +217,22 @@ test('OMV: services, updates and the fullest data disk, not the largest', async 
   assert.deepEqual(issues.alerts.map((a) => a.title), ['4 updates available on nas']);
 });
 
+test('OPNsense: WAN rates are text, rounded from 100 Mbit/s up', async () => {
+  // ~160 Mbit/s down, ~1 Mbit/s up: the counters grow 20 000 and 125 bytes per ms
+  const table: Fixtures = {
+    ...FIXTURES.opnsense,
+    'GET /api/diagnostics/traffic/interface': ({ now }) => ({ interfaces: { wan: { 'bytes received': String(now * 20_000), 'bytes transmitted': String(now * 125) } } })
+  };
+  const state = {};
+  const poll = (now: number) => INTEGRATIONS.opnsense.collect({ type: 'opnsense', ...WIDGETS.opnsense },
+    createContext({ transport: fixtureTransport(table, { scenario: 'calm', now }), kv: memoryKv(), settings: DEFAULT_SETTINGS, now, state }));
+  const t0 = Date.now();
+  assert.equal((await poll(t0)).line, 'Collecting traffic…');
+  const res = await poll(t0 + 60_000);
+  assert.deepEqual(res.stats.slice(0, 2).map((s) => s.v), ['160', '1.0']);
+  assert.equal(res.line, 'WAN 160 / 1.0 Mbit/s');
+});
+
 for (const scenario of ['issues', 'calm']) {
   test(`all integrations collect from the ${scenario} fixtures`, async (t) => {
     const shared = {};
@@ -226,6 +242,7 @@ for (const scenario of ['issues', 'calm']) {
         const ctx = createContext({ transport: fixtureTransport(TABLES[type], { scenario }), kv: memoryKv(), settings: DEFAULT_SETTINGS, now: Date.now(), shared });
         const res = await INTEGRATIONS[type].collect({ type, ...WIDGETS[type] }, ctx);
         assert.ok(Array.isArray(res.stats) && res.stats.length > 0, 'stats');
+        assert.ok(res.stats.every((s) => typeof s.v === 'string'), 'stat values are text');
         assert.equal(typeof res.line, 'string');
         assert.ok(Array.isArray(res.alerts), 'alerts');
       });
