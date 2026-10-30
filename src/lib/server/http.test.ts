@@ -5,7 +5,7 @@ import http from 'node:http';
 import type dns from 'node:dns';
 import type { AddressInfo } from 'node:net';
 import { Agent, fetch } from 'undici';
-import { cachedLookup } from './http.ts';
+import { cachedLookup, getJson } from './http.ts';
 
 test('lookup: cached, and a host with an unreachable IPv6 address still connects every time', async () => {
   const srv = http.createServer((_, res) => res.end('ok')).listen(0, '127.0.0.1');
@@ -25,4 +25,12 @@ test('lookup: cached, and a host with an unreachable IPv6 address still connects
     srv.close();
     await dispatcher.close();
   }
+});
+
+test('getJson: an answer that is not JSON is a short error; the body goes to the log only', async () => {
+  const err = await getJson('https://x.test/', {}, async () => new Response('<html><title>Sign in</title>', { status: 200 }))
+    .then(() => null, (e: Error & { body?: string }) => e);
+  // res.json() would say: Unexpected token '<', "<html><tit"... is not valid JSON
+  assert.equal(err?.message, 'Response is not JSON');
+  assert.equal(err?.body, '<html><title>Sign in</title>');
 });

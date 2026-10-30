@@ -18,6 +18,7 @@ export const GET: RequestHandler = ({ params, request }) => {
   if (!TYPES[ext]) error(404);
   let st;
   try { st = fs.statSync(file); } catch { error(404); }
+  if (!st.isFile()) error(404); // a directory named like an image
   const etag = `"${st.size.toString(16)}-${Math.floor(st.mtimeMs).toString(16)}"`;
   if (request.headers.get('if-none-match') === etag) return new Response(null, { status: 304, headers: { etag } });
   return new Response(fs.readFileSync(file), {

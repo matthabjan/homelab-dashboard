@@ -93,6 +93,17 @@ export function kindOf(type: unknown, rpm: unknown): Drive['kind'] {
   return 'HDD';
 }
 
+/**
+ * A drive's SMART verdict: PVE's PASSED / FAILED, OMV's GOOD or BAD_*. OMV's own UI shows a threshold crossed in the
+ * past and a few bad sectors in amber, the rest in red.
+ */
+function healthOf(status: string | null | undefined): Drive['health'] {
+  const s = status ?? '';
+  if (/^(BAD_ATTRIBUTE_IN_THE_PAST|BAD_SECTOR)$/i.test(s)) return 'warning';
+  if (/fail|bad/i.test(s)) return 'failing';
+  return /pass|ok|good/i.test(s) ? 'ok' : 'unknown';
+}
+
 export function toDrive({ model, serial, kind, size, status, wearout, smart, where }: { model: string; serial: string | null; kind: Drive['kind']; size: number; status?: string | null; wearout?: unknown; smart: SmartReading | null; where?: string }): Drive {
   const wear = Number(wearout);
   return {
@@ -101,7 +112,7 @@ export function toDrive({ model, serial, kind, size, status, wearout, smart, whe
     kind,
     size,
     where,
-    health: smart?.failing || /fail|bad/i.test(status ?? '') ? 'failing' : /pass|ok|good/i.test(status ?? '') ? 'ok' : 'unknown',
+    health: smart?.failing ? 'failing' : healthOf(status),
     lifeLeft: wearout != null && Number.isFinite(wear) ? wear : smart?.lifeLeft ?? null,
     tempC: smart?.tempC ?? null,
     hours: smart?.hours ?? null,

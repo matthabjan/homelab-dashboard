@@ -135,15 +135,21 @@ export async function collect(w: Widget, ctx: Context): Promise<WidgetResult> {
     }
   }
 
+  // A guest backed up to several stores is as fresh as its latest backup in any of them.
+  const latestOf = new Map<string, PbsBackupGroup & { store: string }>();
+  for (const g of groups) {
+    const k = `${g['backup-type']}/${g['backup-id']}`;
+    if (!latestOf.has(k) || g['last-backup'] > (latestOf.get(k) as PbsBackupGroup)['last-backup']) latestOf.set(k, g);
+  }
   // Only judge groups that still matter: guests that exist in PVE, or (without PVE data) backed up in the last 14 days.
-  const guestIds = ctx.shared.guestIds;
-  const relevant = groups.filter((g) =>
-    guestIds ? g['backup-type'] === 'host' || guestIds.has(String(g['backup-id'])) : now - g['last-backup'] * 1000 < 14 * 86_400_000
+  const guests = ctx.shared.guests ? Object.assign({}, ...Object.values(ctx.shared.guests)) as Record<string, string> : null;
+  const relevant = [...latestOf.values()].filter((g) =>
+    guests ? g['backup-type'] === 'host' || Object.hasOwn(guests, String(g['backup-id'])) : now - g['last-backup'] * 1000 < 14 * 86_400_000
   );
   let oldest: { age: number; id: string; name: string } | null = null;
   for (const g of relevant) {
     const age = now - g['last-backup'] * 1000;
-    const name = ctx.shared.guestNames?.[g['backup-id']] || g.comment || '';
+    const name = (guests && Object.hasOwn(guests, g['backup-id']) ? guests[g['backup-id']] : '') || g.comment || '';
     if (!oldest || age > oldest.age) oldest = { age, id: g['backup-id'], name };
     if (age > maxAge) {
       alerts.push({ sev: 'warn', key: `backup-${g['backup-id']}`, title: 'Backup overdue', detail: `${g['backup-id']} ${name} · last success ${fmtDuration(age)} ago` });
@@ -168,7 +174,7 @@ export async function collect(w: Widget, ctx: Context): Promise<WidgetResult> {
   const stats = [
     { k: 'oldest backup', v: oldest ? fmtDuration(oldest.age) : '—', level: oldest && oldest.age > maxAge ? 'warn' : null },
     { k: 'datastore', v: fmtPct(store?.pct) },
-    { k: 'groups', v: String(relevant.length || groups.length || '—') }
+    { k: 'groups', v: String(relevant.length || latestOf.size || '—') }
   ];
   if (freshnessError) alerts.push({ sev: 'info', key: 'pbs-perm', title: 'Backup freshness unavailable', detail: freshnessError });
 

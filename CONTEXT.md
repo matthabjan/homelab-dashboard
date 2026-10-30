@@ -22,7 +22,9 @@ Terms used in the code and in design discussions.
 
 **Snapshot** — the one JSON document the page renders: tiles, attention, verdict, vitals card panels, fleet strip. Built from engine state and history by the snapshot module (`createSnapshot` in `snapshot.ts`) and pushed over SSE on every change.
 
-**Attention** — the list of alerts that need looking at, most severe first; each keeps the time it first appeared.
+**Attention** — the list of alerts that need looking at, most severe first. Checks, widgets, the vitals panels and the config raise them, each with a key that is unique within its service (or source, such as `host` or `config`); the attention module (`attention.ts`) names each after its service, keeps the time it first appeared by that key, and gives each tile its worst alert: a tile is as bad as what is raised for it.
+
+**Feed** — what the attention section lists: the attention list while anything needs attention, else every alert and the last day's events, newest first, without an event that repeats what an alert or a newer event says. Built on the server.
 
 **Verdict** — the headline of the status card: "All systems normal", or the top attention item and how many need attention.
 

@@ -89,7 +89,7 @@ export async function collect(widget: Widget, ctx: Context): Promise<WidgetResul
   const base = trimUrl(w.url);
   const r = Number(w.version) === 5 ? await readV5(base, w, ctx) : await readV6(base, w, ctx);
   const alerts: Alert[] = [];
-  if (!r.blocking) alerts.push({ sev: 'warn', title: 'Blocking is disabled', detail: 'DNS queries are not filtered' });
+  if (!r.blocking) alerts.push({ sev: 'warn', key: 'blocking', title: 'Blocking is disabled', detail: 'DNS queries are not filtered' });
   return {
     stats: [
       { k: 'queries', v: fmtNum(r.queries) },

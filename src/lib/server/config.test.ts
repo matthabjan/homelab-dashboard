@@ -84,6 +84,11 @@ test('config files with mistakes', async (t) => {
     assert.deepEqual(loadConfig().problems.map((p) => p.message), ['"Box": a docker widget needs an http(s):// url (a socket proxy, see docs/integrations.md#docker)']);
   });
 
+  await t.test('a portainer widget without env is a problem', () => {
+    write('services.yaml', SERVICES + '- Docker:\n    - Portainer:\n        widget:\n          type: portainer\n          url: https://portainer.home.arpa\n          key: k\n');
+    assert.deepEqual(loadConfig().problems.map((p) => p.message), ['"Portainer": a portainer widget needs `env`, the environment id (see docs/integrations.md#portainer)']);
+  });
+
   await t.test('heartbeats: durations, default grace and id; no token or a duplicate id is a problem', () => {
     process.env.HB_TEST = 'tok';
     write('services.yaml', `

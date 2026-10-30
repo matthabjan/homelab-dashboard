@@ -16,6 +16,8 @@ type CustomApiWidget = Widget & {
 interface CustomApiState {
   last?: WidgetResult;
   lastRun?: number;
+  /** the widget config the last result was read with: an edit to services.yaml reads again at once */
+  config?: string;
 }
 
 type JsonObject = { [key: string]: Json };
@@ -104,7 +106,7 @@ function readMapping(data: Json, m: CustomApiMapping, i: number, now: number): {
   const sev = crossed(scaled, m.crit) ? 'crit' : crossed(scaled, m.warn) ? 'warn' : null;
   return {
     stat: { k: label, v, level: sev },
-    alert: sev && { sev, key: `threshold-${i}`, title: `${label[0].toUpperCase()}${label.slice(1)} is ${v}`, detail: `${sev === 'crit' ? 'critical' : 'warning'} when ${describe(m[sev] as Threshold)}` }
+    alert: sev && { sev, key: `threshold-${i}`, title: `${label.charAt(0).toUpperCase()}${label.slice(1)} is ${v}`, detail: `${sev === 'crit' ? 'critical' : 'warning'} when ${describe(m[sev] as Threshold)}` }
   };
 }
 
@@ -132,7 +134,8 @@ export async function collect(widget: Widget, ctx: Context): Promise<WidgetResul
   const state = ctx.state as CustomApiState;
   // refreshInterval (ms) is at least the widget interval: in between, the last result stands
   const every = Math.max(Number(w.refreshInterval) || 0, ctx.settings.intervals.widgets * 1000);
-  if (state.last && state.lastRun != null && ctx.now - state.lastRun < every - 1000) return state.last;
+  const config = JSON.stringify(w);
+  if (state.last && state.lastRun != null && state.config === config && ctx.now - state.lastRun < every - 1000) return state.last;
 
   const data = await fetchJson(w, ctx);
   const mappings: CustomApiMapping[] = Array.isArray(w.mappings) ? w.mappings : [];
@@ -143,5 +146,6 @@ export async function collect(widget: Widget, ctx: Context): Promise<WidgetResul
   const result: WidgetResult = { stats, line: first ? `${first.k} ${first.v}` : 'No mappings', alerts };
   state.last = result;
   state.lastRun = ctx.now;
+  state.config = config;
   return result;
 }

@@ -8,7 +8,7 @@ export interface DockerContainer {
   Id: string;
   Names?: string[];
   Image?: string;
-  /** running, exited, restarting, … */
+  /** running, exited, restarting, dead, … */
   State: string;
   /** "Up 3 hours (healthy)", "Exited (1) 2 minutes ago" */
   Status: string;
@@ -79,10 +79,11 @@ export async function failedExit(exited: DockerContainer[], inspect: Inspect, st
  * Container state is the health check for discovered services without a siteMonitor.
  * Only stable fields: the Status text ("Up 3 hours") changes every poll.
  */
-export const containerOf = (c: DockerContainer): ContainerState => ({
+export const containerOf = (c: DockerContainer, failed: DockerContainer[]): ContainerState => ({
   state: c.State,
   health: c.Status?.match(/\((healthy|unhealthy|health: starting)\)/)?.[1] ?? null,
-  exitCode: Number(c.Status?.match(/^Exited \((-?\d+)\)/)?.[1] ?? 0)
+  exitCode: Number(c.Status?.match(/^Exited \((-?\d+)\)/)?.[1] ?? 0),
+  done: c.State === 'exited' && !failed.includes(c)
 });
 
 /** The engine's id from /info, looked up once per service; the base URL when /info isn't allowed. */
@@ -120,7 +121,8 @@ export async function collectContainers(base: string, opts: RequestOptions, ctx:
   const list = (await ctx.getJson<DockerContainer[]>(`${base}/containers/json?all=1`, opts)).filter((c) => c.Labels?.['dashboard.ignore'] !== 'true');
 
   const running = list.filter((c) => c.State === 'running');
-  const exited = list.filter((c) => c.State === 'exited');
+  // a dead container (removal failed, or a broken storage driver) is stopped and counts as crashed: its Status isn't "Exited (0)"
+  const exited = list.filter((c) => c.State === 'exited' || c.State === 'dead');
   const restarting = list.filter((c) => c.State === 'restarting');
   const unhealthy = running.filter((c) => /\(unhealthy\)/.test(c.Status));
   const inspect: Inspect = async (c) => {
@@ -129,7 +131,7 @@ export async function collectContainers(base: string, opts: RequestOptions, ctx:
   const { crashed, failed } = await failedExit(exited, inspect, ctx.state as ContainersState);
 
   const alerts = await containerAlerts({ restarting, failed, crashed, unhealthy }, inspect);
-  const discovered = list.map((c) => { const d = fromLabels(c.Labels); return d && { ...d, container: containerOf(c), image: c.Image ?? null }; }).filter((d) => d !== null)
+  const discovered = list.map((c) => { const d = fromLabels(c.Labels); return d && { ...d, container: containerOf(c, failed), image: c.Image ?? null }; }).filter((d) => d !== null)
     .sort((a, b) => a.weight - b.weight || a.name.localeCompare(b.name))
     .map(({ weight, ...d }) => d);
 

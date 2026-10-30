@@ -16,8 +16,9 @@ const { insertProbe } = await import('./db.ts');
 const { fmtClock } = await import('./format.ts');
 const { record } = await import('./check.ts');
 const { heartbeatState } = await import('./heartbeat.ts');
+const { toDrive } = await import('./integrations/smart.ts');
 import type { TestService } from './test-helpers.ts';
-import type { Alert, Snapshot, Tile, WidgetState } from '$lib/types';
+import type { Alert, Drive, Snapshot, Tile, WidgetState } from '$lib/types';
 
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
@@ -64,16 +65,32 @@ test('slow: an hourly p95 over latencyWarnMs, from 10 samples on', () => {
 test("precedence: a widget's crit alert outranks a cert warning; a down probe keeps its line", () => {
   const now = day(3);
   const cert = { validTo: now + 10 * D + MIN, trusted: true, selfSigned: false };
-  const alert: Alert = { sev: 'crit', title: 'Pool degraded', detail: 'raidz1' };
+  const alert: Alert = { sev: 'crit', key: 'pool', title: 'Pool degraded', detail: 'raidz1' };
   const snap = build([
     probed('NAS', now, { state: { cert, widget: widget(now, [alert]) } }),
     probed('Backup', now, { state: { check: { fails: 2, down: true, since: now - MIN, reason: 'Timed out', ms: null, checked: now }, widget: widget(now, [alert]) } })
   ], now);
   const nas = tile(snap, 'NAS');
   assert.deepEqual([nas.level, nas.line, nas.lineLevel], ['crit', 'Pool degraded · raidz1', 'crit']);
-  assert.deepEqual(alertsOf(snap, 'NAS').map((a) => [a.sev, a.title]), [['crit', 'NAS: Pool degraded'], ['warn', 'Certificate expires in 10 d']]);
+  assert.deepEqual(alertsOf(snap, 'NAS').map((a) => [a.sev, a.title]), [['crit', 'NAS: Pool degraded'], ['warn', 'NAS: Certificate expires in 10 d']]);
   const backup = tile(snap, 'Backup');
   assert.deepEqual([backup.level, backup.status, backup.line], ['crit', 'Down', `Down since ${fmtClock(now - MIN)} · Timed out`]);
+});
+
+test('drives: a failing drive turns the reporting tile red, a past SMART problem amber; a down tile keeps its line', () => {
+  const now = day(9);
+  const drive = (model: string, serial: string, status: string) => toDrive({ model, serial, kind: 'HDD', size: 8e12, status, smart: null });
+  const withDrives = (drives: Drive[]): WidgetState => ({ ...widget(now, []), drives });
+  const snap = build([
+    probed('NAS', now, { state: { widget: withDrives([drive('Disk A', 'A', 'BAD_STATUS')]) } }),
+    probed('Backup', now, { state: { widget: withDrives([drive('Disk B', 'B', 'BAD_ATTRIBUTE_IN_THE_PAST')]) } }),
+    probed('Old', now, { state: { check: { fails: 2, down: true, since: now - MIN, reason: 'Timed out', ms: null, checked: now }, widget: withDrives([drive('Disk C', 'C', 'BAD_SECTOR_MANY')]) } })
+  ], now);
+  assert.deepEqual(alertsOf(snap, 'NAS').map((a) => [a.sev, a.title]), [['crit', 'NAS: Disk A is failing SMART']], 'one alert, not one from OMV too');
+  assert.deepEqual([tile(snap, 'NAS').level, tile(snap, 'NAS').line, tile(snap, 'NAS').lineLevel], ['crit', 'Disk A is failing SMART · HDD · 8 TB · NAS', 'crit']);
+  assert.deepEqual([tile(snap, 'Backup').level, tile(snap, 'Backup').line], ['warn', 'Disk B has a past or minor SMART problem · HDD · 8 TB · Backup']);
+  assert.deepEqual(snap.drives.map((d) => d.status), ['failing', 'check', 'failing']);
+  assert.deepEqual([tile(snap, 'Old').level, tile(snap, 'Old').status, tile(snap, 'Old').line], ['crit', 'Down', `Down since ${fmtClock(now - MIN)} · Timed out`]);
 });
 
 test('certificates: a warning under certWarnDays, critical under 3 days, then expired', () => {
@@ -81,11 +98,13 @@ test('certificates: a warning under certWarnDays, critical under 3 days, then ex
   const cert = (days: number) => ({ state: { cert: { validTo: now + days * D + MIN, trusted: true, selfSigned: false } } });
   const snap = build([probed('Soon', now, cert(10)), probed('Close', now, cert(2)), probed('Gone', now, cert(-1)), probed('Fine', now, cert(60))], now);
   const certAlert = (name: string) => alertsOf(snap, name).map((a) => [a.sev, a.title, a.detail]);
-  assert.deepEqual(certAlert('Soon'), [['warn', 'Certificate expires in 10 d', 'soon.home.arpa']]);
-  assert.deepEqual(certAlert('Close'), [['crit', 'Certificate expires in 2 d', 'close.home.arpa']]);
-  assert.deepEqual(certAlert('Gone'), [['crit', 'Certificate expired', 'gone.home.arpa']]);
+  assert.deepEqual(certAlert('Soon'), [['warn', 'Soon: Certificate expires in 10 d', 'soon.home.arpa']]);
+  assert.deepEqual(certAlert('Close'), [['crit', 'Close: Certificate expires in 2 d', 'close.home.arpa']]);
+  assert.deepEqual(certAlert('Gone'), [['crit', 'Gone: Certificate expired', 'gone.home.arpa']]);
   assert.deepEqual(certAlert('Fine'), []);
-  assert.deepEqual([tile(snap, 'Gone').level, tile(snap, 'Gone').line], ['warn', 'Certificate expired']);
+  // the tile is as bad as its alert, without its own name in front
+  assert.deepEqual([tile(snap, 'Soon').level, tile(snap, 'Soon').line], ['warn', 'Certificate expires in 10 d · soon.home.arpa']);
+  assert.deepEqual([tile(snap, 'Gone').level, tile(snap, 'Gone').line], ['crit', 'Certificate expired · gone.home.arpa']);
   assert.equal(tile(snap, 'Fine').cert?.days, 60);
 });
 
@@ -103,28 +122,24 @@ test('verdict and facts: all normal, or the top attention item and how many need
   assert.deepEqual(issues.facts.map((f) => [f.k, f.v, f.level]), [['services up', '1 / 2', 'crit'], ['next cert', '5 d', 'warn']]);
 });
 
-test('alert age: an alert keeps the time it first appeared until it clears', () => {
-  const now = day(6);
-  const input = snapshotInput({ services: [{ name: 'Pi-hole', state: { widget: widget(now, [{ sev: 'warn', title: 'Blocking is disabled' }]) } }] });
-  const st = input.state('g-pi-hole');
-  const build = createSnapshot();
-  const ts = (snap: Snapshot) => snap.attention.find((a) => a.service === 'Pi-hole')?.ts;
-  assert.equal(ts(build(input, now)), now);
-  st.widget = widget(now + MIN, st.widget?.alerts ?? []);
-  assert.equal(ts(build(input, now + MIN)), now, 'still there: dated when first seen');
-  assert.equal(ts(createSnapshot()(input, now + MIN)), now + MIN, 'another builder remembers nothing');
-
-  st.widget = widget(now + 2 * MIN, []);
-  assert.equal(ts(build(input, now + 2 * MIN)), undefined);
-  st.widget = widget(now + 3 * MIN, [{ sev: 'warn', title: 'Blocking is disabled' }]);
-  assert.equal(ts(build(input, now + 3 * MIN)), now + 3 * MIN, 'back after clearing: a new alert');
+test('a tile follows its attention: a full storage warns its tile; with a Proxmox host, so do the CPU and NVMe temperatures', () => {
+  const now = day(7);
+  const pve: TestService = { name: 'PVE', widget: { type: 'proxmox', url: 'https://pve.home.arpa:8006' }, state: { widget: { ...widget(now, []), storage: [{ name: 'local-zfs', used: 91, total: 100, pct: 91, sub: '91 / 100 GiB', source: 'pve' }] } } };
+  const temps = { cpu: 80, nvme: [72], drives: [] };
+  const snap = createSnapshot()(snapshotInput({ services: [pve, probed('Web', now)], temps }), now);
+  assert.deepEqual(alertsOf(snap, 'PVE').map((a) => [a.sev, a.title]), [['warn', 'PVE: CPU at 80 °C'], ['warn', 'PVE: NVMe at 72 °C'], ['warn', 'PVE: local-zfs is 91% full']]);
+  assert.deepEqual([tile(snap, 'PVE').level, tile(snap, 'PVE').line], ['warn', 'CPU at 80 °C · limit 75 °C'], 'the first raised among equals');
+  assert.equal(tile(snap, 'Web').level, 'ok');
+  // the local host has no tile: its alerts belong to no service
+  const local = createSnapshot()(snapshotInput({ services: [probed('Web', now)], temps }), now);
+  assert.deepEqual(local.attention.map((a) => [a.key, a.service]), [['host|cpu-temp', undefined], ['host|nvme-temp-0', undefined]]);
 });
 
 test('checks other than probes: a stopped container is down, a heartbeat that missed its run alerts', () => {
   const now = day(8);
   const hb = { id: 'restic', every: 24 * 60 * MIN, grace: 60 * MIN, token: 't', backup: true };
   const input = snapshotInput({ services: [
-    { name: 'Jellyfin', container: { state: 'exited', health: null, exitCode: 1 } },
+    { name: 'Jellyfin', container: { state: 'exited', health: null, exitCode: 1, done: false } },
     { name: 'Restic', heartbeat: hb }
   ] });
   const [jellyfin, restic] = input.cfg.services;

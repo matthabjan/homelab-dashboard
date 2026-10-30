@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import YAML from 'yaml';
 import { dockerUrlOk } from './integrations/docker.ts';
+import { portainerEnvOk } from './integrations/portainer.ts';
 import type { Bookmark, Config, ConfigProblem, Discovered, Heartbeat, HeartbeatDef, Service, ServiceDef, Settings } from '$lib/types';
 
 export const DEMO = !!process.env.DEMO && process.env.DEMO !== '0';
@@ -278,6 +279,9 @@ export function loadConfig(): Config {
       const svc = toService(gname, name, def, settings);
       if (svc.widget?.type === 'docker' && !dockerUrlOk(svc.widget.url)) {
         problems.push({ file: 'services.yaml', message: `"${name}": a docker widget needs an http(s):// url (a socket proxy, see docs/integrations.md#docker)`, fallback: null });
+      }
+      if (svc.widget?.type === 'portainer' && !portainerEnvOk(svc.widget.env)) {
+        problems.push({ file: 'services.yaml', message: `"${name}": a portainer widget needs \`env\`, the environment id (see docs/integrations.md#portainer)`, fallback: null });
       }
       const hb = heartbeatProblem(svc, def, heartbeatIds);
       if (hb) { problems.push({ file: 'services.yaml', message: hb, fallback: null }); svc.heartbeat = null; }

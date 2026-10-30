@@ -67,6 +67,8 @@ export interface ContainerState {
   state: string;
   health: string | null;
   exitCode: number;
+  /** exited cleanly and not meant to be running (restart policy no or on-failure): a one-shot job that finished */
+  done: boolean;
 }
 
 /**
@@ -228,8 +230,8 @@ export interface Kv {
 
 /** Hand-offs between integrations within one widget round. */
 export interface Shared {
-  guestIds?: Set<string>;
-  guestNames?: Record<string, string>;
+  /** per Proxmox widget (API URL and node): guest id → name, so several PVE hosts each add theirs */
+  guests?: Record<string, Record<string, string>>;
   /** per Docker engine id (from /info), so Portainer and a docker widget on one engine count it once */
   containers?: Record<string, ContainerCounts>;
 }
@@ -256,8 +258,8 @@ export interface Alert {
   sev: Severity;
   title: string;
   detail?: string;
-  /** identifies the alert across polls when the title changes (e.g. includes a count) */
-  key?: string;
+  /** identifies the alert across polls, unique within one result: titles may carry readings (a count, a percentage) */
+  key: string;
 }
 
 /** Written to the events table and shown in the feed. */
@@ -342,7 +344,8 @@ export interface Drive extends Omit<SmartReading, 'failing'> {
   size: number;
   /** which system sees it: the PVE node; unset means the widget's own service (the snapshot fills in its name) */
   where?: string;
-  health: 'ok' | 'failing' | 'unknown';
+  /** warning: a past or minor SMART problem (OMV's BAD_ATTRIBUTE_IN_THE_PAST, BAD_SECTOR) */
+  health: 'ok' | 'warning' | 'failing' | 'unknown';
 }
 
 /** Current rates plus their 24 h series, as the Network panel draws them. */
@@ -548,14 +551,20 @@ export interface Fact {
 
 export interface AttentionItem {
   sev: Severity;
+  /** named after its service ("Pi-hole: Blocking is disabled") */
   title: string;
   detail?: string;
-  key?: string;
+  /** the raised key, scoped by its service or source (`<sid>|<key>`, `config|<key>`) */
+  key: string;
   sid?: string;
   service?: string;
   href?: string | null;
+  /** when it first appeared */
   ts: number;
 }
+
+/** A row of the feed: an attention item, or a recent event. */
+export type FeedItem = AttentionItem | (FeedEvent & { service?: undefined });
 
 export interface FeedEvent {
   ts: number;
@@ -617,14 +626,15 @@ export interface Snapshot {
   facts: Fact[];
   attention: AttentionItem[];
   needCount: number;
-  events: FeedEvent[];
+  /** what the attention section lists: see attention.ts */
+  feed: FeedItem[];
   /** 48 half-hour buckets, oldest first */
   fleet: (Level | 'none')[];
   fleetAvail: number | null;
   /** `name` is the Proxmox node; `facts` are labelled pairs shown beside it (uptime, guests) */
   host: { name: string; href: string | null; facts: { label: string; value: string }[]; gauges: Gauge[] } | null;
   /** `off` rows (unavailable, detached, size unknown) draw `pct` as a grey bar: the last known fill, or empty */
-  storage: { name: string; pct: number | null; level: Level | 'off'; sub: string; href: string | null }[];
+  storage: { name: string; pct: number | null; level: Level | 'off'; sub: string }[];
   /** the vitals card's Drives panel; empty when no widget reports drives */
   drives: {
     name: string;
@@ -637,7 +647,6 @@ export interface Snapshot {
     life: number | null;
     lifeLevel: Level;
     facts: Fact[];
-    href: string | null;
   }[];
   network: (Traffic & {
     /** the Proxmox host NIC, shown under WAN on its own scale */

@@ -1,12 +1,13 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { AttentionItem, FeedEvent, Snapshot, Tile } from '$lib/types';
+  import type { FeedItem, Snapshot, Tile } from '$lib/types';
   import type { PageProps } from './$types';
   import Icon from '$lib/components/Icon.svelte';
   import Vitals from '$lib/components/Vitals.svelte';
   import ThemeToggle from '$lib/components/ThemeToggle.svelte';
   import Palette from '$lib/components/Palette.svelte';
   import Beats from '$lib/components/Beats.svelte';
+  import { ago } from '$lib/ago.ts';
 
   let { data }: PageProps = $props();
   // svelte-ignore state_referenced_locally — only the first snapshot comes from load; the stream replaces it
@@ -30,8 +31,6 @@
   let offline = $state(false);
   // a status page must not keep saying "all good" on old data: the page greys out instead
   const degraded = $derived(!!stale || lost || offline);
-  /** a row of the attention list: an alert, or a recent change (events aren't tied to a service name) */
-  type FeedItem = AttentionItem | (FeedEvent & { service?: undefined });
   // tiles (and 'verdict') whose level changed in the last update, briefly highlighted
   let flash = $state(new Set<string>());
   function changes(prev: Snapshot, next: Snapshot) {
@@ -50,16 +49,8 @@
     clearTimeout(unflash);
     unflash = setTimeout(() => (flash = new Set()), 2400);
   }
-  // problems first; when all is well show recent changes (incl. informational notes)
-  const feed: FeedItem[] = $derived(
-    !snap ? [] : snap.needCount ? snap.attention : dedupe([...snap.attention, ...snap.events].sort((a, b) => b.ts - a.ts))
-  );
-  // an alert and the event it logged say the same; the alert carries its service's name in front ("Proxmox VE: …")
-  function dedupe(list: FeedItem[]) {
-    const seen = new Set<string>();
-    const bare = (x: FeedItem) => (x.service && x.title.startsWith(`${x.service}: `) ? x.title.slice(x.service.length + 2) : x.title);
-    return list.filter((x) => !seen.has(bare(x)) && seen.add(bare(x)));
-  }
+  // problems first; when all is well, recent changes too (built by the server: attention.ts)
+  const feed: FeedItem[] = $derived(snap?.feed ?? []);
   const target = $derived(snap?.linkTarget || '_blank');
   // this dashboard's own pages (the config view) open in place; services as settings.linkTarget says
   const linkTarget = (href: string | null | undefined) => (!href ? undefined : href.startsWith('/') ? undefined : target);
@@ -96,8 +87,8 @@
     };
     connect();
     const tick = setInterval(() => (now = Date.now()), 15_000);
-    const vis = () => { if (document.visibilityState === 'visible') { now = Date.now(); if (live !== 'live') connect(); } };
-    const net = () => { offline = !navigator.onLine; if (!offline && live !== 'live') connect(); };
+    const vis = () => { if (document.visibilityState === 'visible') { now = Date.now(); if (live === 'reconnecting') connect(); } };
+    const net = () => { offline = !navigator.onLine; if (!offline && live === 'reconnecting') connect(); };
     document.addEventListener('visibilitychange', vis);
     addEventListener('online', net);
     addEventListener('offline', net);
@@ -152,15 +143,6 @@
     } catch {}
   }
 
-  function ago(ts: number) {
-    const s = Math.max(0, Math.round((now - ts) / 1000));
-    if (s < 60) return 'now';
-    const m = Math.round(s / 60);
-    if (m < 60) return `${m} m`;
-    const h = Math.floor(m / 60);
-    if (h < 24) return `${h} h${h < 10 && m % 60 ? ' ' + String(m % 60).padStart(2, '0') + ' m' : ''}`;
-    return `${Math.floor(h / 24)} d`;
-  }
   const pctTxt = (v: number | null, d = 2) => (v == null ? '—' : v >= 99.995 ? '100%' : v.toFixed(d) + '%');
   const ICONS: Record<FeedItem['sev'], string> = {
     crit: 'M12 9v4M12 17h.01M10.3 3.9 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z',
@@ -193,7 +175,7 @@
         <span class="live" class:warn={stale || live === 'reconnecting'} role="status">
           <span class="pulse"></span>
           <!-- phones: just the dot while live, one short word when not, so the title keeps its room; the banner below says the rest -->
-          {#if live === 'reconnecting'}<span class="only-desktop">Reconnecting…</span><span class="only-phone">Retrying</span>{:else if stale}<span class="only-desktop">Data {ago(snap.generatedAt)} old</span><span class="only-phone">Stale</span>{:else}<span class="live-word">Live</span>{/if}
+          {#if live === 'reconnecting'}<span class="only-desktop">Reconnecting…</span><span class="only-phone">Retrying</span>{:else if stale}<span class="only-desktop">Data {ago(snap.generatedAt, now)} old</span><span class="only-phone">Stale</span>{:else}<span class="live-word">Live</span>{/if}
           {#if snap.demo}<span class="demo">demo</span>{/if}
         </span>
         <!-- phones show it only when the config has problems; otherwise the footer, the palette and config alerts lead there -->
@@ -212,7 +194,7 @@
     </header>
 
     {#if degraded}
-      {@const age = ago(snap.generatedAt)}
+      {@const age = ago(snap.generatedAt, now)}
       <div class="banner" role="alert">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={ICONS.crit} /></svg>
         <span class="txt">
@@ -243,6 +225,23 @@
         </div>
       </div>
 
+      <!-- one attention item: a card row with icon and age on desktop, a list row with dot and chevron on phones -->
+      {#snippet feedItem(a: FeedItem, kind: 'item' | 'row')}
+        <svelte:element this={a.href ? 'a' : 'div'} class="{kind} lv-{a.sev}" class:lift={!!a.href} class:flash={!!a.sid && flash.has(a.sid)} href={a.href} target={linkTarget(a.href)} rel={a.href ? 'noopener' : undefined}>
+          {#if kind === 'item'}
+            <span class="ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={ICONS[a.sev] ?? ICONS.info} /></svg></span>
+          {:else}
+            <span class="dot lv-{a.sev}"></span>
+          {/if}
+          <span class="txt"><span class="t">{a.title}</span>{#if a.detail}<span class="d muted">{a.detail}</span>{/if}</span>
+          {#if kind === 'item'}
+            <span class="mono muted small when">{ago(a.ts, now)}</span>
+          {:else if a.href}
+            <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
+          {/if}
+        </svelte:element>
+      {/snippet}
+
       <div class="feed" id="attention">
         <div class="sec-head">
           <h2>{snap.needCount ? 'Needs attention' : 'Recent activity'}</h2>
@@ -250,25 +249,13 @@
         </div>
         {#if feed.length}
           <div class="card feed-card only-desktop" id="feed-items">
-            {#each feedOpen ? feed : feed.slice(0, 5) as a}
-              <svelte:element this={a.href ? 'a' : 'div'} class="item lv-{a.sev}" class:lift={!!a.href} href={a.href} target={linkTarget(a.href)} rel={a.href ? 'noopener' : undefined}>
-                <span class="ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={ICONS[a.sev] ?? ICONS.info} /></svg></span>
-                <span class="txt"><span class="t">{a.title}</span>{#if a.detail}<span class="d muted">{a.detail}</span>{/if}</span>
-                <span class="mono muted small when">{ago(a.ts)}</span>
-              </svelte:element>
-            {/each}
+            {#each feedOpen ? feed : feed.slice(0, 5) as a}{@render feedItem(a, 'item')}{/each}
             {#if feed.length > 5}
               <button class="see-all" aria-expanded={feedOpen} aria-controls="feed-items" onclick={() => (feedOpen = !feedOpen)}>{feedOpen ? 'Show less' : `Show all ${feed.length}`}</button>
             {/if}
           </div>
           <div class="rows only-phone" id="feed-rows">
-            {#each feedOpen ? feed : feed.slice(0, 3) as a}
-              <svelte:element this={a.href ? 'a' : 'div'} class="row lv-{a.sev}" class:lift={!!a.href} class:flash={!!a.sid && flash.has(a.sid)} href={a.href} target={linkTarget(a.href)} rel={a.href ? 'noopener' : undefined}>
-                <span class="dot lv-{a.sev}"></span>
-                <span class="txt"><span class="t">{a.title}</span>{#if a.detail}<span class="d muted">{a.detail}</span>{/if}</span>
-                {#if a.href}<svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>{/if}
-              </svelte:element>
-            {/each}
+            {#each feedOpen ? feed : feed.slice(0, 3) as a}{@render feedItem(a, 'row')}{/each}
           </div>
           {#if feed.length > 3}
             <button class="see-all only-phone" aria-expanded={feedOpen} aria-controls="feed-rows" onclick={() => (feedOpen = !feedOpen)}>{feedOpen ? 'Show less' : `See all (${feed.length})`}</button>

@@ -31,6 +31,7 @@ src/
 │       ├── config.ts            YAML loading, secrets, icons
 │       ├── engine.ts            timers, state, SSE events
 │       ├── snapshot.ts          state + history → page JSON (status rules live here)
+│       ├── attention.ts         alerts → attention list, feed, headline, each tile's worst alert
 │       ├── db.ts                SQLite (node:sqlite)
 │       ├── http.ts              transport (undici), probes, certificate checks
 │       ├── integrations/        one file per widget type
@@ -54,7 +55,7 @@ src/
 ## Adding an integration
 
 1. **Fixture first.** Create `src/lib/server/demo/<type>.ts`, which maps `"METHOD /path"` routes to functions of `{ now, scenario, params, headers, body }` (`satisfies Fixtures`). Return realistic API responses, typed with the integration's response interfaces, using generic names only. Cover both scenarios: `issues` should trigger the alerts, and `calm` should be healthy. Register it in `demo/index.ts`.
-2. **Integration.** Create `src/lib/server/integrations/<type>.ts` with an exported interface for each API response it reads, and export `async collect(widget, ctx)` returning `{ stats, line, alerts }`, plus any of `storage`, `network`, `dns`, `backups`, `containers`, `events`. Use only `ctx.getJson` / `ctx.request` for HTTP, passing `insecure: ctx.insecure`, and `ctx.metric`, `ctx.state`, `ctx.kv` for memory. Register it in `integrations/index.ts`.
+2. **Integration.** Create `src/lib/server/integrations/<type>.ts` with an exported interface for each API response it reads, and export `async collect(widget, ctx)` returning `{ stats, line, alerts }` (each alert with a `key` unique within the result, so its age survives a title that carries a reading), plus any of `storage`, `network`, `dns`, `backups`, `containers`, `events`. Use only `ctx.getJson` / `ctx.request` for HTTP, passing `insecure: ctx.insecure`, and `ctx.metric`, `ctx.state`, `ctx.kv` for memory. Register it in `integrations/index.ts`.
 3. **Test.** Add a widget block to `WIDGETS` in `integrations.test.ts`. The test fails until fixtures, integrations and widgets all list the same types.
 4. **Example and docs.** Add the service to `config.example/services.yaml`, and a section to [docs/integrations.md](docs/integrations.md) covering the least-privilege account, the options and the alerts.
 

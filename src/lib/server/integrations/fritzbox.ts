@@ -58,7 +58,7 @@ export async function collect(w: Widget, ctx: Context): Promise<WidgetResult> {
   const up = addon.NewByteSendRate != null ? (Number(addon.NewByteSendRate) * 8) / 1e6 : null;
   if (down != null) { ctx.metric('fritz.down', down); ctx.metric('fritz.up', up); }
 
-  const alerts: Alert[] = connected ? [] : [{ sev: 'crit', title: 'Internet connection down', detail: `FRITZ!Box reports ${status.NewConnectionStatus || 'unknown'}` }];
+  const alerts: Alert[] = connected ? [] : [{ sev: 'crit', key: 'wan-down', title: 'Internet connection down', detail: `FRITZ!Box reports ${status.NewConnectionStatus || 'unknown'}` }];
   return {
     stats: [
       { k: 'internet', v: connected ? 'online' : 'offline', level: connected ? 'ok' : 'crit' },
