@@ -30,7 +30,7 @@ Terms used in the code and in design discussions.
 
 **Heartbeat** — a push check: a scheduled job (backup, cron) calls `/api/heartbeat/<id>` when it ran, or `…/fail`. A service with a `heartbeat:` block is up while the last run is within `every + grace` and no failure came after it; the endpoint stores the last success and failure in `kv`. `backup: true` adds it to the backup figures.
 
-**Check** — how a service's up/down is found: an HTTP or TCP probe (`siteMonitor`), a container's state (label discovery), or a heartbeat.
+**Check** — how a service's up/down is found: an HTTP or TCP probe (`siteMonitor`), a container's state (label discovery), or a heartbeat. A service has at most one. `check.js` turns each reading into the service's check state (a probe is down after two failures in a row, the others at once), a probe history row and the *went down* / *recovered* events, and gives the tile's status from it.
 
 **Config view** — the read-only page `/config` (Config & status): problems, widgets, checks, automatic icons and settings, built by `config-view.js` from an allowlist so no secret can appear in it.
 

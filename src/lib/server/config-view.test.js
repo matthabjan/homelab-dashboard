@@ -13,6 +13,7 @@ process.env.SECRETS_DIR = path.join(dir, 'secrets');
 delete process.env.DEMO;
 const { loadConfig, withDiscovered } = await import('./config.js');
 const { buildConfigView, iconName, originOf } = await import('./config-view.js');
+const { blankCheck } = await import('./check.js');
 
 // every secret is distinctive, so a substring search can't miss one
 const SECRETS = {
@@ -74,7 +75,7 @@ function fakeEngine() {
   const portainer = cfg.services.find((s) => s.name === 'Portainer');
   const states = new Map();
   const state = (id) => {
-    if (!states.has(id)) states.set(id, { probe: { fails: 0, down: false, since: null, reason: null, ms: null, checked: null }, widget: null, wstate: { session: { sid: SECRETS.CV_PIHOLE } }, cert: null });
+    if (!states.has(id)) states.set(id, { check: blankCheck(), widget: null, wstate: { session: { sid: SECRETS.CV_PIHOLE } }, cert: null });
     return states.get(id);
   };
   state(cfg.services.find((s) => s.name === 'PVE')?.id).widget = { ok: true, ts: 5, lastOk: 5, stats: [], line: '', alerts: [] };

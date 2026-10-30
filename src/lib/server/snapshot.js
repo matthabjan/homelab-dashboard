@@ -2,10 +2,11 @@
 import fs from 'node:fs';
 import { resolveIcon, assetUrl } from './config.js';
 import { probeStats, uptimeSince, probeBuckets, series, recentEvents, openScores } from './db.js';
-import { fmtClock, fmtDuration as fmtAge, fmtHours, fmtSize } from './format.js';
+import { fmtDuration as fmtAge, fmtHours, fmtSize } from './format.js';
 import { DEMO } from './demo.js';
 import { hostService, hostSource } from './local.js';
-/** @import { AttentionItem, BackupStatus, ContainerCounts, Drive, Heartbeat, HeartbeatState, Fact, Gauge, Level, NetworkReading, Settings, Snapshot, Tile, Traffic } from '$lib/types' */
+import { kindOf, status as checkStatus } from './check.js';
+/** @import { AttentionItem, BackupStatus, ContainerCounts, Drive, HeartbeatState, Fact, Gauge, Level, NetworkReading, Settings, Snapshot, Tile, Traffic } from '$lib/types' */
 /** @import { Engine } from './engine.js' */
 
 const RANK = { crit: 3, warn: 2, info: 1, ok: 0 };
@@ -47,42 +48,6 @@ function stats(mem, sid, now) {
 
 /** @returns {Level | 'none'} */
 const level = (v, warn, crit) => (v == null ? 'none' : v >= crit ? 'crit' : v >= warn ? 'warn' : 'ok');
-
-/**
- * A tile's status from a check other than a probe. `alert` (critical) is completed with the service name.
- * @typedef {{ lvl: Tile['level'], status: string, line: string | null, lineLevel?: Tile['lineLevel'], alert?: { title: string, detail: string, ts: number } }} CheckStatus
- */
-
-/**
- * Status of a label-discovered container without a siteMonitor. The container widget raises its alerts.
- * @returns {CheckStatus}
- */
-function containerStatus({ state, health, exitCode }) {
-  if (state === 'running' && health === 'unhealthy') return { lvl: 'warn', status: 'Unhealthy', line: 'Container unhealthy' };
-  if (state === 'running') return { lvl: 'ok', status: 'Up', line: null };
-  if (state === 'restarting') return { lvl: 'crit', status: 'Down', line: 'Container restarting' };
-  return { lvl: 'crit', status: 'Down', line: `Container ${state}${exitCode ? ` · exit ${exitCode}` : ''}` };
-}
-
-/**
- * Status of a heartbeat service: when its job last ran, or since when it is overdue or failed.
- * @param {Heartbeat} hb @param {HeartbeatState | null | undefined} st @param {number} now
- * @returns {CheckStatus}
- */
-export function heartbeatStatus(hb, st, now) {
-  const every = `every ${fmtAge(hb.every)}`;
-  if (!st || st.state === 'pending') return { lvl: 'unknown', status: 'Waiting', line: `Waiting for the first run · ${every}`, lineLevel: 'muted' };
-  const last = st.lastOk != null ? `last run ${fmtAge(now - st.lastOk)} ago` : 'never ran';
-  if (st.failed) {
-    const at = /** @type {number} */ (st.lastFail);
-    return { lvl: 'crit', status: 'Down', line: `Reported failure ${fmtClock(at)}`, alert: { title: 'reported a failure', detail: `${fmtClock(at)} · ${last}`, ts: at } };
-  }
-  if (st.state === 'down') {
-    const since = /** @type {number} */ (st.overdueSince);
-    return { lvl: 'crit', status: 'Down', line: `Overdue since ${fmtClock(since)}`, alert: { title: 'missed its run', detail: `${last} · ${every}`, ts: since } };
-  }
-  return { lvl: 'ok', status: 'Up', line: `Last run ${fmtAge(now - /** @type {number} */ (st.lastOk))} ago · ${every}`, lineLevel: null };
-}
 
 /**
  * PBS backups plus heartbeats marked `backup: true` (restic, borg, Kopia …): overdue counts added up, the oldest age
@@ -171,37 +136,26 @@ function build(engine, now, mem) {
   for (const g of groups) {
     for (const s of g.services) {
       const st = engine.state(s.id);
-      const p = st.probe;
+      const c = st.check;
       const w = st.widget;
-      const ps = s.probe || s.container || s.heartbeat ? stats(mem, s.id, now) : null; // container and heartbeat states are recorded like probes
+      const ps = kindOf(s) ? stats(mem, s.id, now) : null; // container and heartbeat states are recorded like probes
       const host = (() => { try { return new URL(s.href || s.probe || '').host; } catch { return ''; } })();
+      const cs = checkStatus(s, st, now);
       /** @type {Tile['level']} */
-      let lvl = s.probe ? (p.checked ? 'ok' : 'unknown') : w ? 'ok' : 'unknown';
-      let status = lvl === 'ok' ? 'Up' : 'Checking';
+      let lvl = cs ? cs.lvl : w ? 'ok' : 'unknown';
+      let status = cs ? cs.status : w ? 'Up' : 'Checking';
       let line = w?.line || s.description || '';
       /** @type {Tile['lineLevel']} */
       let lineLevel = null;
-      const ct = !s.probe && s.container ? containerStatus(s.container) : s.heartbeat ? heartbeatStatus(s.heartbeat, st.heartbeat, now) : null;
+      if (cs?.line) { line = cs.line; lineLevel = cs.lineLevel !== undefined ? cs.lineLevel : lvl === 'unknown' ? 'muted' : lvl; }
       const auto = s.icon ? null : engine.autoIcons.get(s.id);
       const iconDark = s.iconDark ?? auto?.iconDark;
-      if (ct) {
-        ({ lvl, status } = ct);
-        if (ct.line) { line = ct.line; lineLevel = ct.lineLevel !== undefined ? ct.lineLevel : lvl === 'unknown' ? 'muted' : lvl; }
-      }
 
       const push = (a) => attention.push({ ...a, sid: s.id, service: s.name, href: s.href, ts: a.ts ?? w?.ts ?? now });
-      // a stopped container is p.down (the engine records it like a failed probe); unhealthy is only a warning
-      if (ct?.lvl === 'warn') push({ sev: 'warn', title: `${s.name} is unhealthy`, detail: 'container health check failing' });
-      if (ct?.alert) push({ sev: 'crit', ...ct.alert, title: `${s.name} ${ct.alert.title}` });
+      if (cs?.alert) push({ ...cs.alert, title: `${s.name} ${cs.alert.title}` });
 
       const slowMs = s.latencyWarnMs ?? th.latencyWarnMs;
-      if (p.down && !s.heartbeat) {
-        lvl = 'crit';
-        status = 'Down';
-        line = `Down since ${fmtClock(p.since)} · ${p.reason}`;
-        lineLevel = 'crit';
-        push({ sev: 'crit', title: `${s.name} is down`, detail: `${p.reason} · since ${fmtClock(p.since)}`, ts: p.since });
-      } else if (ps?.p95h != null && ps.n1 >= MIN_SLOW_SAMPLES && ps.p95h > slowMs) {
+      if (!c.down && ps?.p95h != null && ps.n1 >= MIN_SLOW_SAMPLES && ps.p95h > slowMs) {
         lvl = 'warn';
         status = 'Slow';
         push({ sev: 'warn', title: `${s.name} is slow`, detail: `p95 ${Math.round(ps.p95h)} ms over the last hour · limit ${slowMs} ms` });
@@ -225,7 +179,7 @@ function build(engine, now, mem) {
           push({ ...a, title: named(s.name, a.title) });
           if (RANK[a.sev] > RANK[lvl === 'unknown' ? 'ok' : lvl] && a.sev !== 'info') {
             lvl = a.sev;
-            if (!p.down) { line = a.detail ? `${a.title} · ${a.detail}` : a.title; lineLevel = a.sev; }
+            if (!c.down) { line = a.detail ? `${a.title} · ${a.detail}` : a.title; lineLevel = a.sev; }
           }
         }
         if (!w.ok) {
@@ -244,7 +198,7 @@ function build(engine, now, mem) {
         icon: resolveIcon(s.icon ?? auto?.icon, s.name),
         iconDark: iconDark ? resolveIcon(iconDark, s.name) : null,
         level: lvl,
-        status: p.down && !s.heartbeat ? 'Down' : status,
+        status,
         line: line || (lvl === 'ok' ? 'Online' : ''),
         lineLevel,
         stats: (w?.stats || []).slice(0, 3),

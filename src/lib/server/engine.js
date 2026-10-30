@@ -3,18 +3,18 @@
 import fs from 'node:fs';
 import { EventEmitter } from 'node:events';
 import { CONFIG_DIR, loadConfig, withDiscovered } from './config.js';
-import { openDb, insertProbe, insertMetric, insertEvent, prune, kvGet, kvSet } from './db.js';
+import { openDb, insertMetric, insertEvent, prune, kvGet, kvSet } from './db.js';
 import { probe, certInfo, reasonText } from './http.js';
-import { fmtClock } from './format.js';
 import { readTemps } from './integrations/host.js';
 import { hostSource, readLocal } from './local.js';
 import { checkIn, createLimiter, heartbeatState, record as heartbeatRecord } from './heartbeat.js';
 import { DEMO, SCENARIO, demoProbe, demoCert, demoTemps, demoLocal, seedHistory } from './demo.js';
 import { FIXTURES, fixtureTransport } from './demo/index.js';
 import { createSnapshot } from './snapshot.js';
+import { blankCheck, kindOf, record } from './check.js';
 import { createIconFinder, iconCandidates } from './icons.js';
 import { INTEGRATIONS, ORDER, createContext } from './integrations/index.js';
-/** @import { Config, Discovered, HostVitals, Service, ServiceState, Shared, Snapshot, Temps, Widget } from '$lib/types' */
+/** @import { Config, ContainerState, Discovered, HostVitals, Service, ServiceState, Shared, Snapshot, Temps, Widget } from '$lib/types' */
 
 const kv = { get: kvGet, set: kvSet };
 
@@ -98,32 +98,14 @@ export class Engine extends EventEmitter {
   /** @returns {ServiceState} */
   state(id) {
     let st = this.rt.get(id);
-    if (!st) this.rt.set(id, (st = { probe: { fails: 0, down: false, since: null, reason: null, ms: null, checked: null }, widget: null, wstate: {}, cert: null }));
+    if (!st) this.rt.set(id, (st = { check: blankCheck(), widget: null, wstate: {}, cert: null }));
     return st;
   }
 
   async runProbes() {
     const now = Date.now();
     await Promise.all(
-      this.cfg.services.filter((s) => s.probe).map(async (s) => {
-        const r = DEMO ? demoProbe(s, now) : await probe(s.probe);
-        insertProbe(s.id, now, r.ok, r.ms);
-        const p = this.state(s.id).probe;
-        p.checked = now;
-        p.ms = r.ms;
-        if (r.ok) {
-          if (p.down) insertEvent(now, 'ok', s.id, `${s.name} recovered`, `was down since ${fmtClock(p.since)}`);
-          Object.assign(p, { fails: 0, down: false, since: null, reason: null });
-        } else {
-          p.fails++;
-          if (p.fails === 1) p.since = now;
-          p.reason = reasonText(r.code);
-          if (p.fails >= 2 && !p.down) {
-            p.down = true;
-            insertEvent(now, 'crit', s.id, `${s.name} went down`, p.reason);
-          }
-        }
-      })
+      this.cfg.services.filter((s) => s.probe).map(async (s) => record(s, this.state(s.id), DEMO ? demoProbe(s, now) : await probe(s.probe), now))
     );
     this.checkHeartbeats(now);
     this.publish();
@@ -175,7 +157,7 @@ export class Engine extends EventEmitter {
 
   /**
    * Label-discovered services without a siteMonitor are checked by their container state, so each state the
-   * Portainer widget just read goes into the probe history too (uptime, strips). A failed widget records nothing.
+   * Portainer widget just read is recorded like a probe (uptime, strips). A failed widget records nothing.
    */
   recordContainers(widgetServices, now) {
     const fresh = new Set(widgetServices.flatMap((s) => {
@@ -183,30 +165,7 @@ export class Engine extends EventEmitter {
       return w?.ok ? (w.discovered ?? []).map((d) => `${d.group}\0${d.name}`) : [];
     }));
     for (const s of this.cfg.services) {
-      if (s.probe || !s.container || !fresh.has(`${s.group}\0${s.name}`)) continue;
-      const { state, health, exitCode } = s.container;
-      insertProbe(s.id, now, state === 'running' && health !== 'unhealthy', null);
-      // The container state is this service's probe: no second failure needed, Docker already knows.
-      this.mark(s, now, state === 'running' ? null : `Container ${state}${exitCode ? ` · exit ${exitCode}` : ''}`);
-    }
-  }
-
-  /**
-   * Set a service's state straight away (no second failure needed): up when `reason` is null, else down.
-   * Writes the *went down* / *recovered* events, as probes do.
-   */
-  mark(s, now, reason) {
-    const p = this.state(s.id).probe;
-    p.checked = now;
-    if (reason == null) {
-      if (p.down) insertEvent(now, 'ok', s.id, `${s.name} recovered`, `was down since ${fmtClock(p.since)}`);
-      Object.assign(p, { fails: 0, down: false, since: null, reason: null });
-    } else {
-      p.reason = reason;
-      if (!p.down) {
-        Object.assign(p, { fails: 1, down: true, since: now });
-        insertEvent(now, 'crit', s.id, `${s.name} went down`, reason);
-      }
+      if (kindOf(s) === 'container' && fresh.has(`${s.group}\0${s.name}`)) record(s, this.state(s.id), /** @type {ContainerState} */ (s.container), now);
     }
   }
 
@@ -217,11 +176,7 @@ export class Engine extends EventEmitter {
   checkHeartbeats(now, history = true) {
     for (const s of this.cfg.services) {
       if (!s.heartbeat) continue;
-      const hb = heartbeatState(s.heartbeat, heartbeatRecord(kv, s.heartbeat.id, now), now);
-      this.state(s.id).heartbeat = hb;
-      if (hb.state === 'pending') continue;
-      if (history) insertProbe(s.id, now, hb.state === 'up', null);
-      this.mark(s, now, hb.state === 'up' ? null : hb.failed ? 'Reported a failure' : 'Missed its run');
+      record(s, this.state(s.id), heartbeatState(s.heartbeat, heartbeatRecord(kv, s.heartbeat.id, now), now), now, { history });
     }
   }
 

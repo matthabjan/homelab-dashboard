@@ -1,15 +1,16 @@
 // Shared test setup. Import it dynamically, after setting DATA_DIR and CONFIG_DIR (config.js reads them on import).
 import { DEFAULT_SETTINGS, slug } from './config.js';
+import { blankCheck } from './check.js';
 /** @import { Config, HostVitals, Service, ServiceState, Settings, Temps } from '$lib/types' */
 /** @import { SnapshotInput } from './snapshot.js' */
 
 /** @typedef {Partial<Service> & { name: string, state?: Partial<ServiceState> }} TestService */
 
-/** @returns {ServiceState} a probe that never ran, no widget result, no certificate */
-const blank = () => ({ probe: { fails: 0, down: false, since: null, reason: null, ms: null, checked: null }, widget: null, wstate: {}, cert: null });
+/** @returns {ServiceState} a check that never ran, no widget result, no certificate */
+const blank = () => ({ check: blankCheck(), widget: null, wstate: {}, cert: null });
 
 /**
- * A snapshot input: the services in one group "G", each with its state (a probe that never ran unless given), or a
+ * A snapshot input: the services in one group "G", each with its state (a check that never ran unless given), or a
  * whole loaded `cfg`. `state(id)` hands out the same object each time, as the engine does, so a test can change it
  * between two builds.
  * @param {{ services?: TestService[], cfg?: Config, settings?: Settings, local?: HostVitals | null, temps?: Temps | null }} [opts]

@@ -380,13 +380,34 @@ export interface Integration {
 
 // ---------- engine state ----------
 
-export interface ProbeState {
+/** A service's up/down from its check (probe, container state or heartbeat), kept by `check.js#record`. */
+export interface CheckState {
+  /** failed readings in a row */
   fails: number;
   down: boolean;
+  /** the first failure of the current run of failures */
   since: number | null;
   reason: string | null;
+  /** the last probe's latency */
   ms: number | null;
   checked: number | null;
+}
+
+/** One HTTP or TCP probe. `code` is the HTTP status or the error code (see `http.js#reasonText`). */
+export interface ProbeResult {
+  ok: boolean;
+  ms: number | null;
+  code: string | number | null;
+}
+
+/** A tile's status from its check; `alert` is completed with the service name ("<name> is down"). */
+export interface CheckStatus {
+  lvl: Level | 'unknown';
+  status: string;
+  line: string | null;
+  /** undefined: the line takes the tile's level */
+  lineLevel?: Tile['lineLevel'];
+  alert?: { sev: 'crit' | 'warn'; title: string; detail: string; ts?: number };
 }
 
 export interface CertInfo {
@@ -400,7 +421,7 @@ export interface CertInfo {
 export type WidgetState = WidgetResult & { ok: boolean; ts: number; error?: string; /** the last successful poll */ lastOk: number | null };
 
 export interface ServiceState {
-  probe: ProbeState;
+  check: CheckState;
   heartbeat?: HeartbeatState | null;
   widget: WidgetState | null;
   wstate: Record<string, any>;

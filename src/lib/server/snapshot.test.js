@@ -14,6 +14,8 @@ const { createSnapshot } = await import('./snapshot.js');
 const { snapshotInput } = await import('./test-helpers.js');
 const { insertProbe } = await import('./db.js');
 const { fmtClock } = await import('./format.js');
+const { record } = await import('./check.js');
+const { heartbeatState } = await import('./heartbeat.js');
 /** @import { TestService } from './test-helpers.js' */
 /** @import { Alert, WidgetState } from '$lib/types' */
 
@@ -30,7 +32,7 @@ const build = (services, now) => createSnapshot()(snapshotInput({ services }), n
  * A probed service whose last probe at `now` succeeded.
  * @param {string} name @param {number} now @param {Omit<TestService, 'name'>} [extra] @returns {TestService}
  */
-const probed = (name, now, extra = {}) => ({ probe: `https://${name.toLowerCase()}.home.arpa`, ...extra, name, state: { probe: { fails: 0, down: false, since: null, reason: null, ms: 12, checked: now }, ...extra.state } });
+const probed = (name, now, extra = {}) => ({ probe: `https://${name.toLowerCase()}.home.arpa`, ...extra, name, state: { check: { fails: 0, down: false, since: null, reason: null, ms: 12, checked: now }, ...extra.state } });
 const tile = (snap, name) => snap.groups.flatMap((g) => g.services).find((t) => t.name === name);
 const alertsOf = (snap, name) => snap.attention.filter((a) => a.service === name);
 /** A widget result at `now` with these alerts. @param {number} now @param {Alert[]} alerts @returns {WidgetState} */
@@ -39,7 +41,7 @@ const widget = (now, alerts) => ({ ok: true, ts: now, lastOk: now, stats: [], li
 test('a service that is down: crit tile, "Down since" line, crit alert dated when it went down', () => {
   const now = day(1);
   const since = now - 5 * MIN;
-  const snap = build([probed('Web', now, { state: { probe: { fails: 2, down: true, since, reason: 'Connection refused', ms: null, checked: now } } })], now);
+  const snap = build([probed('Web', now, { state: { check: { fails: 2, down: true, since, reason: 'Connection refused', ms: null, checked: now } } })], now);
   const t = tile(snap, 'Web');
   assert.deepEqual([t.level, t.status, t.line, t.lineLevel], ['crit', 'Down', `Down since ${fmtClock(since)} · Connection refused`, 'crit']);
   assert.deepEqual(alertsOf(snap, 'Web').map((a) => [a.sev, a.title, a.ts]), [['crit', 'Web is down', since]]);
@@ -64,7 +66,7 @@ test("precedence: a widget's crit alert outranks a cert warning; a down probe ke
   const alert = { sev: 'crit', title: 'Pool degraded', detail: 'raidz1' };
   const snap = build([
     probed('NAS', now, { state: { cert, widget: widget(now, [alert]) } }),
-    probed('Backup', now, { state: { probe: { fails: 2, down: true, since: now - MIN, reason: 'Timed out', ms: null, checked: now }, widget: widget(now, [alert]) } })
+    probed('Backup', now, { state: { check: { fails: 2, down: true, since: now - MIN, reason: 'Timed out', ms: null, checked: now }, widget: widget(now, [alert]) } })
   ], now);
   const nas = tile(snap, 'NAS');
   assert.deepEqual([nas.level, nas.line, nas.lineLevel], ['crit', 'Pool degraded · raidz1', 'crit']);
@@ -93,7 +95,7 @@ test('verdict and facts: all normal, or the top attention item and how many need
   assert.equal(calm.needCount, 0);
 
   const issues = build([
-    probed('Web', now, { state: { probe: { fails: 2, down: true, since: now - MIN, reason: 'HTTP 502', ms: null, checked: now } } }),
+    probed('Web', now, { state: { check: { fails: 2, down: true, since: now - MIN, reason: 'HTTP 502', ms: null, checked: now } } }),
     probed('Mail', now, { state: { cert: { validTo: now + 5 * D + MIN, trusted: true, selfSigned: false } } })
   ], now);
   assert.deepEqual(issues.verdict, { level: 'crit', tag: '2 need attention', title: 'Web is down.', sub: '1 of 2 services up · 1 certificate expiring' });
@@ -117,8 +119,30 @@ test('alert age: an alert keeps the time it first appeared until it clears', () 
   assert.equal(ts(build(input, now + 3 * MIN)), now + 3 * MIN, 'back after clearing: a new alert');
 });
 
+test('checks other than probes: a stopped container is down, a heartbeat that missed its run alerts', () => {
+  const now = day(8);
+  const hb = { id: 'restic', every: 24 * 60 * MIN, grace: 60 * MIN, token: 't', backup: true };
+  const input = snapshotInput({ services: [
+    { name: 'Jellyfin', container: { state: 'exited', health: null, exitCode: 1 } },
+    { name: 'Restic', heartbeat: hb }
+  ] });
+  const [jellyfin, restic] = input.cfg.services;
+  record(jellyfin, input.state(jellyfin.id), /** @type {import('$lib/types').ContainerState} */ (jellyfin.container), now);
+  const lastOk = now - 26 * 60 * MIN;
+  record(restic, input.state(restic.id), heartbeatState(hb, { since: lastOk, lastOk, lastFail: null }, now), now);
+  const snap = createSnapshot()(input, now);
+
+  const j = tile(snap, 'Jellyfin');
+  assert.deepEqual([j.level, j.status, j.line], ['crit', 'Down', `Down since ${fmtClock(now)} · Container exited · exit 1`]);
+  assert.deepEqual(alertsOf(snap, 'Jellyfin').map((a) => [a.sev, a.title]), [['crit', 'Jellyfin is down']]);
+  const due = lastOk + 25 * 60 * MIN;
+  assert.deepEqual([tile(snap, 'Restic').status, tile(snap, 'Restic').line], ['Down', `Overdue since ${fmtClock(due)}`]);
+  assert.deepEqual(alertsOf(snap, 'Restic').map((a) => [a.sev, a.title, a.ts]), [['crit', 'Restic missed its run', due]]);
+  assert.equal(snap.verdict.tag, '2 need attention');
+});
+
 test('fleet strip: probe failures colour their 30-minute bucket, on the fleet and on the tile', () => {
-  const now = day(7);
+  const now = day(99); // the latest day of all: probeBuckets reads every row from the window start on
   // bucket 45 of 48: both probes failed; bucket 47 (the last): fine
   insertProbe('g-flaky', now - 85 * MIN, false, null);
   insertProbe('g-flaky', now - 80 * MIN, false, null);

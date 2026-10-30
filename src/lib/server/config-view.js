@@ -5,7 +5,8 @@
 import { DEFAULT_SETTINGS, DEMO } from './config.js';
 import { INTEGRATIONS } from './integrations/index.js';
 import { fmtDuration } from './format.js';
-/** @import { CheckKind, ConfigView, KeyValue, Level, Service, Settings, Tile } from '$lib/types' */
+import { kindOf } from './check.js';
+/** @import { ConfigView, KeyValue, Level, Service, Settings, Tile } from '$lib/types' */
 /** @import { Engine } from './engine.js' */
 
 const DOCS = 'https://github.com/matthabjan/homelab-dashboard/blob/main/docs/integrations.md';
@@ -55,9 +56,6 @@ export function settingsList(settings, defaults = /** @type {Record<string, any>
     ? settingsList(cur[k], d, `${prefix}${k}.`)
     : [{ k: prefix + k, v: text(cur[k] === undefined ? d : cur[k]) }]));
 }
-
-/** @param {Service} s @returns {CheckKind | null} */
-const kindOf = (s) => (s.heartbeat ? 'heartbeat' : s.probe ? (/^tcp:/i.test(s.probe) ? 'tcp' : 'http') : s.container ? 'container' : null);
 
 /**
  * One row per widget: type, docs, URL origin, the safe options, and how its last poll went.
