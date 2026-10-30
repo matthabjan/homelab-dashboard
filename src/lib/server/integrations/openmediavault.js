@@ -1,5 +1,5 @@
 // OpenMediaVault — JSON-RPC with session login (same credentials as homepage).
-// Reads services, SMART status and mounted file systems in one go.
+// Reads services, pending updates, SMART status and mounted file systems in one go.
 import { trimUrl } from '../http.js';
 import { fmtPair, fmtPct, pct } from '../format.js';
 import { attributesFromText, fromAttributes, fromNvmeText, slowly, toDrive } from './smart.js';
@@ -80,18 +80,23 @@ function omvDrives(w, ctx, disks) {
  * @returns {Promise<WidgetResult>}
  */
 export async function collect(w, ctx) {
-  const [services, smart, fs] = await Promise.all([
+  const [services, info, smart, fs] = await Promise.all([
     call(w, ctx, 'services', 'getStatus', { limit: -1, start: 0 }).then((r) => r?.data ?? r).catch(() => null),
+    call(w, ctx, 'system', 'getInformation', null).catch(() => null),
     callBg(w, ctx, 'smart', 'getListBg').then((r) => r?.data ?? null).catch(() => null),
     call(w, ctx, 'filesystemmgmt', 'enumerateMountedFilesystems', { includeroot: false }).catch(() => null)
   ]);
-  if (!services && !smart && !fs) throw new Error('No data from OMV RPC');
+  if (!services && !info && !smart && !fs) throw new Error('No data from OMV RPC');
 
   /** @type {Alert[]} */
   const alerts = [];
   const enabled = (services || []).filter((s) => s.enabled !== false);
   const svcRunning = enabled.filter((s) => s.running).length;
   for (const s of enabled.filter((s) => !s.running)) alerts.push({ sev: 'warn', title: `NAS service ${s.title || s.name} stopped`, detail: 'Enabled in OMV but not running' });
+
+  // only sent to admins; a non-admin login gets hostname and time only
+  const updates = typeof info?.availablePkgUpdates === 'number' ? info.availablePkgUpdates : null;
+  if (updates) alerts.push({ sev: 'info', key: 'updates', title: `${updates} updates available on ${info.hostname || 'NAS'}`, detail: 'apt packages pending' });
 
   const disks = (smart || []).filter((d) => d.monitor);
   const good = disks.filter((d) => d.overallstatus === 'GOOD').length;
@@ -109,15 +114,17 @@ export async function collect(w, ctx) {
       return { name: `${f.label || (dev ? dev.replace(/^\/dev\//, '') : f.mountpoint)} · NAS`, used, total, pct: pct(used, total), sub: fmtPair(used, total), source: 'omv' };
     });
   for (const s of storage) ctx.metric(`storage.omv.${s.name}`, s.pct);
-  const main = [...storage].sort((a, b) => b.total - a.total)[0];
+  // the root file system is left out above, so this is the fullest data disk
+  const fullest = [...storage].sort((a, b) => (b.pct ?? 0) - (a.pct ?? 0))[0];
+  const full = fullest?.pct ?? 0, th = ctx.settings.thresholds;
 
   return {
     stats: [
-      { k: 'pool', v: fmtPct(main?.pct), level: (main?.pct ?? 0) >= ctx.settings.thresholds.storageAmberPct ? 'warn' : null },
-      { k: 'SMART', v: disks.length ? `${good} / ${disks.length}` : '—', level: good < disks.length ? 'crit' : null },
-      { k: 'services', v: services ? `${svcRunning} / ${enabled.length}` : '—' }
+      { k: 'services', v: services ? `${svcRunning} / ${enabled.length}` : '—', level: svcRunning < enabled.length ? 'warn' : null },
+      { k: 'updates', v: updates == null ? '—' : String(updates) },
+      { k: 'storage', v: fmtPct(fullest?.pct), level: full >= th.storageWarnPct ? 'crit' : full >= th.storageAmberPct ? 'warn' : null }
     ],
-    line: [main && `Pool ${fmtPct(main.pct)}`, disks.length && `SMART ${good} / ${disks.length} ok`].filter(Boolean).join(' · ') || 'Online',
+    line: [fullest && `Fullest disk ${fmtPct(fullest.pct)}`, disks.length && `SMART ${good} / ${disks.length} ok`].filter(Boolean).join(' · ') || 'Online',
     alerts,
     storage,
     drives: await omvDrives(w, ctx, disks)

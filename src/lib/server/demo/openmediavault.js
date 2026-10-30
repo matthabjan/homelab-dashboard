@@ -15,23 +15,25 @@ ID# ATTRIBUTE_NAME          FLAGS    VALUE WORST THRESH FAIL RAW_VALUE
 194 Temperature_Celsius     -O---K   117   104   000    -    35 (Min/Max 18/43)
 197 Current_Pending_Sector  -O--CK   200   200   000    -    0
 `;
-const filesystems = [
+// issues: the small scratch disk is nearly full, so the fullest disk isn't the largest
+const filesystems = (scenario) => [
   { label: 'data', devicefile: '/dev/sdb1', canonicaldevicefile: '/dev/sdb1', parentdevicefile: '/dev/sdb', mountpoint: '/srv/dev-disk-by-label-data', size: '8000000000000', available: '2300000000000' },
-  { label: 'scratch', devicefile: '/dev/sdc', canonicaldevicefile: '/dev/sdc', parentdevicefile: '/dev/sdc', mountpoint: '/srv/dev-disk-by-label-scratch', size: '536870912000', available: '408021893120' }
+  { label: 'scratch', devicefile: '/dev/sdc', canonicaldevicefile: '/dev/sdc', parentdevicefile: '/dev/sdc', mountpoint: '/srv/dev-disk-by-label-scratch', size: '536870912000', available: scenario === 'issues' ? '53687091200' : '408021893120' }
 ];
 
 const methods = {
   'session.login': () => ({ authenticated: true }),
+  'system.getInformation': ({ scenario }) => ({ hostname: 'nas', version: '7.4.0-1 (Sandworm)', availablePkgUpdates: scenario === 'issues' ? 4 : 0, rebootRequired: false, configDirty: false }),
   'services.getStatus': () => ({ data: [{ name: 'smb', title: 'SMB/CIFS', enabled: true, running: true }, { name: 'nfs', title: 'NFS', enabled: true, running: true }, { name: 'ssh', title: 'SSH', enabled: true, running: true }] }),
   'smart.getListBg': () => '/tmp/bgstatus-demo',
   'smart.getExtendedInformation': () => extended,
   'exec.getOutput': () => ({ running: false, pos: 0, output: JSON.stringify({ data: smart }) }),
-  'filesystemmgmt.enumerateMountedFilesystems': () => filesystems
+  'filesystemmgmt.enumerateMountedFilesystems': ({ scenario }) => filesystems(scenario)
 };
 
 export default {
-  'POST /rpc.php': ({ body }) => {
+  'POST /rpc.php': ({ scenario, body }) => {
     const m = methods[`${body?.service}.${body?.method}`];
-    return m ? { response: m(), error: null } : { response: null, error: { code: 0, message: `no fixture for ${body?.service}.${body?.method}` } };
+    return m ? { response: m({ scenario }), error: null } : { response: null, error: { code: 0, message: `no fixture for ${body?.service}.${body?.method}` } };
   }
 };

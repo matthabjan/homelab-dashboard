@@ -209,6 +209,19 @@ test('customapi: a non-JSON answer is an error with the body for the log only', 
   assert.deepEqual([post.method, post.body, post.headers['Content-Type'], post.headers.Authorization], ['POST', '{"q":1}', 'application/json', 'Basic dTpw']);
 });
 
+test('OMV: services, updates and the fullest data disk, not the largest', async () => {
+  const run = (scenario) => INTEGRATIONS.openmediavault.collect({ type: 'openmediavault', ...WIDGETS.openmediavault },
+    createContext({ transport: fixtureTransport(FIXTURES.openmediavault, { scenario }), kv: memoryKv(), settings: DEFAULT_SETTINGS, now: Date.now() }));
+  const stats = (r) => Object.fromEntries(r.stats.map((s) => [s.k, [s.v, s.level ?? null]]));
+  const calm = await run('calm');
+  assert.deepEqual(stats(calm), { services: ['3 / 3', null], updates: ['0', null], storage: ['71%', 'warn'] });
+  assert.deepEqual(calm.alerts, []);
+  const issues = await run('issues');
+  // scratch (500 GB, 90 %) beats data (8 TB, 71 %)
+  assert.deepEqual(stats(issues), { services: ['3 / 3', null], updates: ['4', null], storage: ['90%', 'crit'] });
+  assert.deepEqual(issues.alerts.map((a) => a.title), ['4 updates available on nas']);
+});
+
 for (const scenario of ['issues', 'calm']) {
   test(`all integrations collect from the ${scenario} fixtures`, async (t) => {
     const shared = {};
