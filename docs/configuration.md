@@ -11,9 +11,11 @@ config/
 └── images/           # app icon, logo, favicon
 ```
 
-**Reloading.** Saving any `*.yaml` file in the folder reloads the config within a second. You don't need to restart, and history is kept. Files in `icons/` and `images/` are read when they are requested, but browsers cache them for up to 5 minutes. If a file has a YAML syntax error or the wrong structure (for example a mapping where a list of groups belongs), the dashboard keeps showing its last version that loaded and lists `services.yaml has an error` under *Needs attention*, with the line and reason. The full error, including the lines around it, is in the container log (`[config] services.yaml: …`). A malformed group or entry is skipped and reported the same way, and the rest of the file loads. Several problems in one file show as one alert (`services.yaml has 3 problems`); the **Config & status** page lists each. Once you fix the file, the alert clears on the next save.
+**Reloading.** Saving any `*.yaml` file reloads the config within a second, without a restart and keeping history. Files in `icons/` and `images/` are read on request (browsers cache them for up to 5 minutes).
 
-**Checking what loaded.** The page **Config & status** (`/config`: the sliders button in the header, which shows how many problems your config has, the footer, the command palette and every config alert) shows what the dashboard made of your files, read-only:
+**Mistakes.** A file with a YAML syntax error or the wrong structure keeps its last version that loaded, and *Needs attention* shows `services.yaml has an error` with the line and reason (the full error is in the container log). A malformed group or entry is skipped and reported the same way; the rest of the file loads. Several problems in one file are one alert (`services.yaml has 3 problems`), listed on **Config & status**. Fixing the file clears the alert on save.
+
+**Checking what loaded.** **Config & status** (`/config`, from the sliders button in the header, the footer, the command palette or any config alert) shows what the dashboard made of your files, read-only:
 
 - **Problems:** files with errors, skipped entries, secrets that aren't set (by name), heartbeats without a token, a `docker` widget on a socket path.
 - **Widgets:** each widget's type (linked to its documentation), the scheme, host and port of its `url`, a few harmless options such as `node` or `env`, whether its last poll worked, when it last succeeded, and whether it came from `services.yaml` or from container labels.
@@ -21,7 +23,7 @@ config/
 - **Automatic icons:** the icon picked for each service without `icon`, with a *Copy YAML* button to make it permanent.
 - **Settings:** every effective setting.
 
-It never shows usernames, passwords, keys, tokens, headers, request bodies, URL paths or queries, heartbeat tokens, or label values beyond group and name. What it shows is chosen field by field, so a new kind of secret can't slip through. Like the rest of the dashboard it is for your LAN or VPN, behind your proxy's login.
+It never shows usernames, passwords, keys, tokens, headers, request bodies, URL paths or queries, or label values beyond group and name: what it shows is chosen field by field, so a new kind of secret can't slip through.
 
 ---
 
@@ -111,9 +113,7 @@ The *Most used* row above the groups fills itself from how often you open each s
 | `widgets` | `60` | `15` | Polling of widget APIs, the local host and temperatures. |
 | `cert` | `21600` | `300` | TLS certificate check (every 6 h). |
 
-A value below the minimum is raised to it, and one that isn't a number falls back to the default; either shows as a problem with `settings.yaml`. A round that is still running when its next turn comes is skipped rather than started twice, so a slow widget API never gets overlapping requests.
-
-The page shows a "stale" notice when no update has arrived for 2.5 × the longer of `probe` and `widgets`.
+A value below the minimum is raised to it, and one that isn't a number falls back to the default; either shows as a `settings.yaml` problem. A round still running when its next turn comes is skipped, so a slow API never gets overlapping requests. The page shows a "stale" notice when no update has arrived for 2.5 × the longer of `probe` and `widgets`.
 
 ### `thresholds`
 
@@ -251,10 +251,10 @@ A local file in `config/icons/` with a matching name takes precedence over the C
 
 A service without `icon` (in `services.yaml` or as the `dashboard.icon` label) gets one from the [selfh.st](https://selfh.st/icons/) or [dashboard-icons](https://github.com/homarr-labs/dashboard-icons) collection:
 
-- The server looks up, in this order: the service name (`AdGuard Home` → `adguard-home`); for a [labelled container](#services-from-container-labels), its image (`ghcr.io/immich-app/immich-server` → `immich-server`, then `immich`); the widget type (`proxmoxbackupserver` → `proxmox-backup-server`); and last the name's leading words (`OPNsense Firewall` → `opnsense`). Names match with or without hyphens (`MusicAssistant` finds `music-assistant`). selfh.st is checked before dashboard-icons.
-- The icon itself is used in both themes. Only where it would vanish, a variant takes its place: a nearly black icon (GitHub, LLDAP) gets its light variant in dark mode, a nearly white one its dark variant in light mode. Variants are picked by their colours, since dashboard-icons' variant names aren't reliable. An `iconDark` you set yourself wins.
-- Both collections' indexes are downloaded from jsDelivr once a day and kept in the database. If the server can't reach jsDelivr, services without `icon` show a monogram, and it tries again an hour later.
-- If the match is wrong, set `icon`: a file in `config/icons/` or any of the forms above.
+- **Matching**, in this order: the service name (`AdGuard Home` → `adguard-home`); for a [labelled container](#services-from-container-labels), its image (`ghcr.io/immich-app/immich-server` → `immich-server`, then `immich`); the widget type (`proxmoxbackupserver` → `proxmox-backup-server`); last the name's leading words (`OPNsense Firewall` → `opnsense`). Names match with or without hyphens (`MusicAssistant` finds `music-assistant`). selfh.st is checked first.
+- **Themes.** The icon itself is used in both themes. Where it would barely show against its background in one theme, such as a near-black icon (GitHub, LLDAP) in dark mode, its light or dark variant replaces it there. An `iconDark` you set yourself wins.
+- **Updates.** Both indexes are downloaded from jsDelivr once a day and kept in the database. Without jsDelivr, services without `icon` show a monogram, and it retries an hour later.
+- **A wrong match** is fixed by setting `icon`. **Config & status** lists every automatic icon with a *Copy YAML* button.
 
 Local files can be `png`, `svg`, `webp`, `jpg`, `jpeg`, `gif` or `ico`. Local SVGs are served with a restrictive Content-Security-Policy, so scripts inside them don't run.
 
@@ -284,7 +284,7 @@ Prefer files (option 3) over environment variables: environment variables are vi
 
 ## Services from container labels
 
-The dashboard can create tiles from `dashboard.*` labels on Docker containers (gethomepage's `homepage.*` labels are not read; rename them to `dashboard.*`). It reads the labels through the [Portainer widget](integrations.md#portainer), so at least one `portainer` widget must be configured.
+The dashboard can create tiles from `dashboard.*` labels on Docker containers (gethomepage's `homepage.*` labels are not read; rename them to `dashboard.*`). It reads them through a [`portainer`](integrations.md#portainer) or [`docker`](integrations.md#docker) widget, so one of those must be configured.
 
 ```yaml
 labels:
@@ -298,7 +298,7 @@ labels:
 - `dashboard.group` and `dashboard.name` are required. Every other `dashboard.<key>` maps to the YAML key of the same name, and nested keys use dots (`dashboard.widget.type=adguard`). The values `true` and `false` become booleans.
 - `dashboard.weight` sets the order within the group (lowest first, then by name).
 - A labelled service joins the `services.yaml` group with the same name, or creates a new group at the end. If `services.yaml` already defines a service with the same group and name, that one is used and the label is ignored.
-- A labelled service **without** `siteMonitor` uses the container's state as its health: running, unhealthy, restarting or exited. Each Portainer poll (`intervals.widgets`) also records that state in the service's history, so it gets an uptime figure and a 24-hour strip like a checked service; running counts as up, anything else (including unhealthy) as down. A one-shot job that finished (exit code 0, restart policy `no` or `on-failure`) shows as *Done* and counts as up. Any other container that isn't running raises a critical *is down* alert and logs *went down* / *recovered* in Recent activity, like a failed check; unhealthy raises a warning. It has no latency, so its *Most used* card shows the 7-day uptime in place of p95, and while Portainer is unreachable nothing is recorded.
+- A labelled service **without** `siteMonitor` uses the container's state as its health, recorded on each widget poll like a probe (uptime, 24-hour strip): running is up, anything else (including unhealthy) is down. A finished one-shot job (exit code 0, restart policy `no` or `on-failure`) shows *Done* and counts as up. Any other stopped container raises a critical *is down* alert and logs *went down* / *recovered*; unhealthy raises a warning. There is no latency, so its *Most used* card shows the 7-day uptime instead of p95. While the widget's API is unreachable, nothing is recorded.
 - Without `dashboard.icon`, an icon is [picked automatically](#automatic-icons) from the name and the image.
 - Label values are **used literally**. `${…}` placeholders are not filled in, so a container image can't extract your secrets. Define services whose widgets need credentials in `services.yaml`.
 - Add `dashboard.ignore=true` to a container to hide it from discovery and from the container counts.
