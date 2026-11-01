@@ -29,6 +29,15 @@ function acquire(addr: string): (() => void) | null {
   };
 }
 
+const enc = new TextEncoder();
+/** Each snapshot's SSE frame, serialized once however many clients it goes to (~34 KiB, ~0.3 ms each). */
+const frames = new WeakMap<Snapshot, Uint8Array>();
+function frame(snap: Snapshot): Uint8Array {
+  let f = frames.get(snap);
+  if (!f) frames.set(snap, (f = enc.encode(`data: ${JSON.stringify(snap)}\n\n`)));
+  return f;
+}
+
 // Server-Sent Events: pushes a fresh snapshot after every poll cycle.
 export const GET: RequestHandler = ({ request, getClientAddress }) => {
   const release = acquire(clientAddress(getClientAddress));
@@ -38,9 +47,8 @@ export const GET: RequestHandler = ({ request, getClientAddress }) => {
   let cleanup: (() => void) | undefined;
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
-      const enc = new TextEncoder();
       const send = (snap: Snapshot) => {
-        try { controller.enqueue(enc.encode(`data: ${JSON.stringify(snap)}\n\n`)); } catch { cleanup?.(); }
+        try { controller.enqueue(frame(snap)); } catch { cleanup?.(); }
       };
       const ping = setInterval(() => {
         try { controller.enqueue(enc.encode(`: ping\n\n`)); } catch { cleanup?.(); }
