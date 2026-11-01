@@ -117,7 +117,7 @@ The page shows a "stale" notice when no update has arrived for 2.5 × the longer
 
 | Key | Default | Effect |
 |---|---|---|
-| `latencyWarnMs` | `250` | A service is *Slow* when its p95 latency over the last hour is above this value. It needs at least 10 samples first. You can override it per service. |
+| `latencyWarnMs` | `250` | A service is *Slow* when its p95 latency over the last hour is above this value. It needs at least 10 samples first. A half hour in the 24-hour strip turns amber when one probe in it took more than twice this value. You can override it per service. |
 | `certWarnDays` | `14` | Warn when a certificate expires within this many days. Under 3 days is critical. |
 | `backupMaxAgeHours` | `26` | A guest's last backup older than this is *overdue*. |
 | `offsiteMaxDetachedDays` | `135` | Remind you when a removable PBS datastore hasn't been attached for this long. |
@@ -158,7 +158,7 @@ A list of groups. Each group is a list of services. This is the [gethomepage for
 | `iconDark` | Icon used in dark mode. |
 | `siteMonitor` | URL checked every `intervals.probe` seconds, which gives up/down status, uptime and latency. Any response below 500 counts as up, including the 401 a login page returns. Two failures in a row mark the service down. `https://` URLs also get certificate-expiry checks. `tcp://host:port` only checks that the port accepts a connection, for services without HTTP (SSH, SMB, MQTT, databases); the latency is the time to connect. `probe` is accepted as an alias. |
 | `heartbeat` | A push check for jobs, instead of `siteMonitor`. See [Heartbeats](#heartbeats). |
-| `latencyWarnMs` | The *Slow* limit for this service, overriding `thresholds.latencyWarnMs`. |
+| `latencyWarnMs` | The *Slow* limit for this service, overriding `thresholds.latencyWarnMs`, for its status and for the amber half hours in its 24-hour strip and the fleet strip. |
 | `tlsVerify` | `false` accepts a self-signed certificate on this service's **widget** API. It overrides the global `tlsVerify`. |
 | `widget` | Live data from the service's API. See [Integrations](integrations.md) for each `type`. |
 
@@ -296,7 +296,7 @@ labels:
 - `dashboard.group` and `dashboard.name` are required. Every other `dashboard.<key>` maps to the YAML key of the same name, and nested keys use dots (`dashboard.widget.type=adguard`). The values `true` and `false` become booleans.
 - `dashboard.weight` sets the order within the group (lowest first, then by name).
 - A labelled service joins the `services.yaml` group with the same name, or creates a new group at the end. If `services.yaml` already defines a service with the same group and name, that one is used and the label is ignored.
-- A labelled service **without** `siteMonitor` uses the container's state as its health: running, unhealthy, restarting or exited. Each Portainer poll (`intervals.widgets`) also records that state in the service's history, so it gets an uptime figure and a 24-hour strip like a checked service; running counts as up, anything else (including unhealthy) as down. A one-shot job that finished (exit code 0, restart policy `no` or `on-failure`) shows as *Done* and counts as up. Any other container that isn't running raises a critical *is down* alert and logs *went down* / *recovered* in Recent activity, like a failed check; unhealthy raises a warning. It has no latency, and while Portainer is unreachable nothing is recorded.
+- A labelled service **without** `siteMonitor` uses the container's state as its health: running, unhealthy, restarting or exited. Each Portainer poll (`intervals.widgets`) also records that state in the service's history, so it gets an uptime figure and a 24-hour strip like a checked service; running counts as up, anything else (including unhealthy) as down. A one-shot job that finished (exit code 0, restart policy `no` or `on-failure`) shows as *Done* and counts as up. Any other container that isn't running raises a critical *is down* alert and logs *went down* / *recovered* in Recent activity, like a failed check; unhealthy raises a warning. It has no latency, so its *Most used* card shows the 7-day uptime in place of p95, and while Portainer is unreachable nothing is recorded.
 - Without `dashboard.icon`, an icon is [picked automatically](#automatic-icons) from the name and the image.
 - Label values are **used literally**. `${…}` placeholders are not filled in, so a container image can't extract your secrets. Define services whose widgets need credentials in `services.yaml`.
 - Add `dashboard.ignore=true` to a container to hide it from discovery and from the container counts.

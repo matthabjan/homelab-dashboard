@@ -157,8 +157,21 @@ test('checks other than probes: a stopped container is down, a heartbeat that mi
   assert.equal(snap.verdict.tag, '2 need attention');
 });
 
+test('a tile names its check, so only timed checks (http, tcp) show a p95', () => {
+  const now = day(9);
+  const hb = { id: 'borg', every: 24 * 60 * MIN, grace: 60 * MIN, token: 't', backup: false };
+  const snap = build([
+    probed('Web', now),
+    probed('Ssh', now, { probe: 'tcp://ssh.home.arpa:22' }),
+    { name: 'Wud', container: { state: 'running', health: null, exitCode: 0, done: false } },
+    { name: 'Borg', heartbeat: hb },
+    { name: 'Docs' }
+  ], now);
+  assert.deepEqual(['Web', 'Ssh', 'Wud', 'Borg', 'Docs'].map((n) => tile(snap, n).check), ['http', 'tcp', 'container', 'heartbeat', null]);
+});
+
 test('fleet strip: probe failures colour their 30-minute bucket, on the fleet and on the tile', () => {
-  const now = day(99); // the latest day of all: probeBuckets reads every row from the window start on
+  const now = day(99); // later than the tests above: probeBuckets reads every row from the window start on
   // bucket 45 of 48: both probes failed; bucket 47 (the last): fine
   insertProbe('g-flaky', now - 85 * MIN, false, null);
   insertProbe('g-flaky', now - 80 * MIN, false, null);
@@ -170,4 +183,18 @@ test('fleet strip: probe failures colour their 30-minute bucket, on the fleet an
   assert.deepEqual(snap.fleet, expected);
   assert.deepEqual(tile(snap, 'Flaky').beats, expected);
   assert.equal(Math.round(tile(snap, 'Flaky').uptime24 ?? 0), 33);
+});
+
+test('fleet strip: a slow probe is judged against its own service\'s latencyWarnMs', () => {
+  const now = day(100); // later than every other test: probeBuckets reads every row from the window start on
+  // both 1200 ms: over twice the default limit (250 ms), under twice the router's own (2000 ms)
+  insertProbe('g-router', now - 85 * MIN, true, 1200);
+  insertProbe('g-web', now - 10 * MIN, true, 1200);
+  const snap = build([probed('Router', now, { latencyWarnMs: 2000 }), probed('Web', now)], now);
+  const expected = Array.from({ length: 48 }, () => 'none');
+  expected[45] = 'ok';
+  expected[47] = 'warn';
+  assert.deepEqual(snap.fleet, expected);
+  assert.equal(tile(snap, 'Router').beats?.[45], 'ok');
+  assert.equal(tile(snap, 'Web').beats?.[47], 'warn');
 });

@@ -593,6 +593,8 @@ export interface Tile {
   uptime24: number | null;
   uptime7: number | null;
   p95: number | null;
+  /** how up/down is decided; only http and tcp measure a response time (p95) */
+  check: CheckKind | null;
   cert: { days: number; selfSigned: boolean } | null;
   /** probe health in 48 half-hour buckets, oldest first; null when the service has no probes */
   beats: (Level | 'none')[] | null;

@@ -122,7 +122,8 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
       const st = engine.state(s.id);
       const c = st.check;
       const w = st.widget;
-      const ps = kindOf(s) ? stats(mem, s.id, now) : null; // container and heartbeat states are recorded like probes
+      const kind = kindOf(s);
+      const ps = kind ? stats(mem, s.id, now) : null; // container and heartbeat states are recorded like probes
       const host = (() => { try { return new URL(s.href || s.probe || '').host; } catch { return ''; } })();
       const cs = checkStatus(s, st, now);
       let lvl: Tile['level'] = cs ? cs.lvl : w ? 'ok' : 'unknown';
@@ -178,6 +179,7 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
         uptime24: ps?.up24 ?? null,
         uptime7: ps?.up7 ?? null,
         p95: ps?.p95 ?? null,
+        check: kind,
         cert,
         beats: null
       });
@@ -302,10 +304,13 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
   const B = 30 * 60_000;
   const start = now - 48 * B;
   const buckets: Snapshot['fleet'] = Array.from({ length: 48 }, () => 'none');
+  // a bucket is amber when a probe took over twice the service's own Slow limit (history of removed services: the global one)
+  const slowLimit = new Map(engine.cfg.services.map((s) => [s.id, s.latencyWarnMs ?? th.latencyWarnMs]));
   for (const r of probeBuckets(start, B)) {
     const i = Math.max(0, Math.min(47, Math.floor(Number(r.b))));
     const ratio = r.fails / r.n;
-    const lv: Level = ratio >= 0.5 ? 'crit' : ratio >= 0.1 || (r.maxms ?? 0) > th.latencyWarnMs * 2 ? 'warn' : 'ok';
+    const slowMs = slowLimit.get(String(r.sid)) ?? th.latencyWarnMs;
+    const lv: Level = ratio >= 0.5 ? 'crit' : ratio >= 0.1 || (r.maxms ?? 0) > slowMs * 2 ? 'warn' : 'ok';
     if (buckets[i] === 'none' || RANK[lv] > RANK[buckets[i]]) buckets[i] = lv;
     // the same buckets per service, for the strip on each tile
     const t = tiles.get(String(r.sid));

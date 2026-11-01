@@ -291,7 +291,8 @@
                   {/each}
                 </div>
               {:else}
-                <div class="pin-stats"><div><span class="mono v">{pctTxt(t.uptime24, 1)}</span><span class="muted k">uptime 24 h</span></div><div><span class="mono v">{t.p95 == null ? '—' : Math.round(t.p95) + ' ms'}</span><span class="muted k">p95</span></div></div>
+                <!-- only http and tcp checks are timed; a container or heartbeat check shows the week's uptime instead of a p95 that can't exist -->
+                <div class="pin-stats"><div><span class="mono v">{pctTxt(t.uptime24, 1)}</span><span class="muted k">uptime 24 h</span></div>{#if t.check === 'http' || t.check === 'tcp'}<div><span class="mono v">{t.p95 == null ? '—' : Math.round(t.p95) + ' ms'}</span><span class="muted k">p95</span></div>{:else}<div><span class="mono v">{pctTxt(t.uptime7, 1)}</span><span class="muted k">uptime 7 d</span></div>{/if}</div>
               {/if}
             </a>
           {/each}
