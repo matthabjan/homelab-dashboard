@@ -22,7 +22,7 @@ test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
 const notFound: Transport = async () => new Response('', { status: 404 });
 /** Sources where nothing answers; a test replaces what it needs. */
-const script = (over: Partial<Sources> = {}): Sources => ({ probe: () => ({ ok: true, ms: 10, code: 200 }), cert: () => null, local: () => null, temps: () => null, transport: () => notFound, iconTransport: notFound, seed: () => {}, ...over });
+const script = (over: Partial<Sources> = {}): Sources => ({ probe: () => ({ ok: true, ms: 10, code: 200 }), cert: () => null, local: () => null, temps: () => null, transport: () => notFound, iconTransport: notFound, seed: () => {}, demo: false, ...over });
 /** An engine on these services (services.yaml text) and sources, loaded but not started. */
 function engine(yaml: string, sources: Sources) {
   fs.writeFileSync(path.join(tmp, 'services.yaml'), yaml);

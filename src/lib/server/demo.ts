@@ -121,6 +121,7 @@ export function demoSources(): Sources {
     temps: demoTemps,
     transport: (type) => transports.get(type) ?? fixtureTransport({}, { scenario }),
     iconTransport: request,
-    seed: seedHistory
+    seed: seedHistory,
+    demo: true
   };
 }

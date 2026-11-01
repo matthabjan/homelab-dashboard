@@ -232,13 +232,13 @@ function toService(gname: string, name: string, def: ServiceDef | null | undefin
  * What is wrong with a service's heartbeat block, if anything; the service then shows as unknown.
  *  @param ids heartbeat ids taken so far
  */
-function heartbeatProblem(svc: Service, def: ServiceDef | null | undefined, ids: Set<string>): string | null {
+function heartbeatProblem(svc: Service, def: ServiceDef | null | undefined, ids: Set<string>, demo: boolean): string | null {
   if (def?.heartbeat == null) return null;
   if (!svc.heartbeat) return `"${svc.name}": heartbeat needs \`every\` (such as 24h, 30m)`;
   if (ids.has(svc.heartbeat.id)) return `"${svc.name}": heartbeat id "${svc.heartbeat.id}" is used twice`;
   ids.add(svc.heartbeat.id);
   // the demo has no secrets set
-  return svc.heartbeat.token || DEMO ? null : `"${svc.name}": heartbeat needs a token`;
+  return svc.heartbeat.token || demo ? null : `"${svc.name}": heartbeat needs a token`;
 }
 
 /**
@@ -279,7 +279,8 @@ function checkIntervals(settings: Settings, problems: ConfigProblem[]) {
   }
 }
 
-export function loadConfig(): Config {
+/** `demo`: the engine's Sources.demo, never the DEMO variable (only getEngine reads that, to pick the sources). */
+export function loadConfig({ demo = false }: { demo?: boolean } = {}): Config {
   const problems: ConfigProblem[] = [];
   missing = new Map();
   const settings = deepMerge(DEFAULT_SETTINGS, readYaml('settings.yaml', 'map', {}, problems)) as Settings;
@@ -299,7 +300,7 @@ export function loadConfig(): Config {
       if (svc.widget?.type === 'portainer' && !portainerEnvOk(svc.widget.env)) {
         problems.push({ file: 'services.yaml', message: `"${name}": a portainer widget needs \`env\`, the environment id (see docs/integrations.md#portainer)`, fallback: null });
       }
-      const hb = heartbeatProblem(svc, def, heartbeatIds);
+      const hb = heartbeatProblem(svc, def, heartbeatIds, demo);
       if (hb) { problems.push({ file: 'services.yaml', message: hb, fallback: null }); svc.heartbeat = null; }
       group.services.push(svc);
       services.push(svc);
@@ -315,10 +316,10 @@ export function loadConfig(): Config {
     }
   }
   // by name only, never a value; the demo sets no secrets, its fixtures need none
-  if (!DEMO) {
+  if (!demo) {
     for (const [file, keys] of missing) for (const key of keys) problems.push({ file, message: `secret ${key} is not set`, fallback: null });
   }
-  return { settings, groups, services, bookmarks, problems };
+  return { settings, groups, services, bookmarks, problems, demo };
 }
 
 // ---------- icons ----------

@@ -98,7 +98,7 @@ export class Engine extends EventEmitter {
    */
   load() {
     try {
-      this.base = loadConfig();
+      this.base = loadConfig({ demo: this.sources.demo });
     } catch (e) {
       console.error('[config] reload failed:', e);
       if (this.base) return false;

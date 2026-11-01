@@ -30,7 +30,7 @@ export function snapshotInput({ services = [], cfg, settings = DEFAULT_SETTINGS,
     return svc;
   });
   return {
-    cfg: cfg ?? { settings, groups: [{ name: 'G', services: svcs }], services: svcs, bookmarks: [], problems: [] },
+    cfg: cfg ?? { settings, groups: [{ name: 'G', services: svcs }], services: svcs, bookmarks: [], problems: [], demo: false },
     state: (id: string) => {
       let st = states.get(id);
       if (!st) states.set(id, (st = blank()));

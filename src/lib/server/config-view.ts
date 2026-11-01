@@ -2,7 +2,7 @@
 // picked on purpose (type, URL origin, a few per-type options, status), so a new secret-looking key can't leak.
 // Not shown: usernames, passwords, keys, tokens, headers, request bodies, URL userinfo / paths / queries, heartbeat
 // tokens, and label values beyond group and name.
-import { DEFAULT_SETTINGS, DEMO } from './config.ts';
+import { DEFAULT_SETTINGS } from './config.ts';
 import { INTEGRATIONS } from './integrations/index.ts';
 import { fmtDuration } from './format.ts';
 import { kindOf } from './check.ts';
@@ -132,7 +132,7 @@ export function buildConfigView(engine: ConfigViewInput): ConfigView {
   const { settings, problems } = engine.cfg;
   return {
     title: settings.title,
-    demo: DEMO,
+    demo: engine.cfg.demo,
     generatedAt: Date.now(),
     problems: (problems ?? []).map((p) => ({ file: p.file, message: p.message, level: (p.fallback === 'none' ? 'crit' : 'warn' as Level) })),
     widgets: widgetRows(engine),

@@ -3,7 +3,6 @@ import fs from 'node:fs';
 import { resolveIcon, assetUrl } from './config.ts';
 import { probeStats, uptimeSince, probeBuckets, series, recentEvents, openScores } from './db.ts';
 import { fmtDuration as fmtAge, fmtHours, fmtSize } from './format.ts';
-import { DEMO } from './demo.ts';
 import { hostService, hostSource } from './local.ts';
 import { kindOf, status as checkStatus } from './check.ts';
 import { createAttention, type Raised } from './attention.ts';
@@ -417,7 +416,7 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
 
   return {
     generatedAt: now,
-    demo: DEMO,
+    demo: engine.cfg.demo,
     version: VERSION,
     configProblems: (engine.cfg.problems ?? []).length,
     title: settings.title,

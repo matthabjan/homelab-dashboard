@@ -162,6 +162,8 @@ export interface Config {
   services: Service[];
   bookmarks: Bookmark[];
   problems: ConfigProblem[];
+  /** loaded for the demo (Sources.demo): no secrets are expected, and the page says it's a demo */
+  demo: boolean;
 }
 
 /** Something in a config file that couldn't be used as written; shown in the attention list. */
@@ -205,6 +207,8 @@ export interface Sources {
   iconTransport: Transport;
   /** fill history before the first rounds (the demo's first day); runs on every config load */
   seed(services: Service[]): void;
+  /** the demo's readings: the config needs no secrets, and the page says it's a demo */
+  demo: boolean;
 }
 
 /** What a fixture route receives (demo/index.ts); it returns an object (sent as JSON) or a string (sent as XML). */
