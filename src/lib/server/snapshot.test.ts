@@ -198,3 +198,15 @@ test('fleet strip: a slow probe is judged against its own service\'s latencyWarn
   assert.equal(tile(snap, 'Router').beats?.[45], 'ok');
   assert.equal(tile(snap, 'Web').beats?.[47], 'warn');
 });
+
+test('history is read once a minute: a rebuild within it reuses the strip, the next minute shows new probes', () => {
+  const now = day(101); // later than every other test: probeBuckets reads every row from the window start on
+  insertProbe('g-cached', now - 10 * MIN, true, 20);
+  const builder = createSnapshot();
+  const input = snapshotInput({ services: [probed('Cached', now)] });
+  assert.equal(builder(input, now).fleet[47], 'ok');
+  insertProbe('g-cached', now - 5 * MIN, false, null);
+  insertProbe('g-cached', now - 4 * MIN, false, null);
+  assert.equal(builder(input, now + 30_000).fleet[47], 'ok', 'within the minute');
+  assert.equal(builder(input, now + 61_000).fleet[47], 'crit', 'after it');
+});

@@ -20,28 +20,38 @@ const MIN_SLOW_SAMPLES = 10; // ~5 min of probes before a service can be called 
 export type SnapshotInput = Pick<Engine, 'cfg' | 'state' | 'autoIcons' | 'shared' | 'temps' | 'local'>;
 type ProbeSummary = { up24: number | null; p95: number | null; p95h: number | null; n1: number; up7: number | null };
 /** What a builder carries from one snapshot to the next. */
-type Memory = { stats: { ts: number; data: Map<string, ProbeSummary> }; attention: ReturnType<typeof createAttention> };
+type Memory = { minute: { ts: number; data: Map<string, unknown> }; attention: ReturnType<typeof createAttention> };
 
 /**
  * A snapshot builder. It remembers when each alert first appeared (so attention shows "since" instead of
- * "last polled") and caches probe statistics for a minute, so keep one per engine.
+ * "last polled") and keeps history queries for a minute, so keep one per engine.
  */
 export function createSnapshot(): (input: SnapshotInput, now: number) => Snapshot {
-  const mem: Memory = { stats: { ts: 0, data: new Map() }, attention: createAttention() };
+  const mem: Memory = { minute: { ts: 0, data: new Map() }, attention: createAttention() };
   return (input, now) => build(input, now, mem);
 }
 
+/**
+ * `read()` once a minute per key: the snapshot is rebuilt after every round and heartbeat, and the history queries
+ * behind it (probe statistics, the 24 h strips, the gauges' series) are most of its cost (the strip ~80 ms at 30
+ * services). History moves on by a probe or two in that minute.
+ */
+function perMinute<T>(mem: Memory, now: number, key: string, read: () => T): T {
+  if (now - mem.minute.ts > 60_000) mem.minute = { ts: now, data: new Map() };
+  if (!mem.minute.data.has(key)) mem.minute.data.set(key, read());
+  return mem.minute.data.get(key) as T;
+}
+
 function stats(mem: Memory, sid: string, now: number): ProbeSummary {
-  if (now - mem.stats.ts > 60_000) mem.stats = { ts: now, data: new Map() };
-  let s = mem.stats.data.get(sid);
-  if (!s) {
+  return perMinute(mem, now, `stats ${sid}`, () => {
     const d = probeStats(sid, now - 24 * H);
     const h1 = probeStats(sid, now - H);
-    s = { up24: d.uptime, p95: d.p95, p95h: h1.p95, n1: h1.n, up7: uptimeSince(sid, now - 7 * 24 * H) };
-    mem.stats.data.set(sid, s);
-  }
-  return s;
+    return { up24: d.uptime, p95: d.p95, p95h: h1.p95, n1: h1.n, up7: uptimeSince(sid, now - 7 * 24 * H) };
+  });
 }
+
+/** A metric's 24 h series in `points` buckets. */
+const series24 = (mem: Memory, now: number, key: string, points: number) => perMinute(mem, now, `series ${key} ${points}`, () => series(key, now - 24 * H, now, points));
 
 const level = (v: number | null | undefined, warn: number, crit: number): Level | 'none' => (v == null ? 'none' : v >= crit ? 'crit' : v >= warn ? 'warn' : 'ok');
 
@@ -198,13 +208,12 @@ function serviceTiles(engine: SnapshotInput, now: number, mem: Memory, round: Ro
 }
 
 /** The System panel: the Proxmox node, or the machine the dashboard runs on, plus the kernel's temperatures. */
-function hostPanel(engine: SnapshotInput, now: number, round: Round): Snapshot['host'] {
+function hostPanel(engine: SnapshotInput, now: number, mem: Memory, round: Round): Snapshot['host'] {
   const { settings } = engine.cfg;
   const th = settings.thresholds;
   const hostSvc = hostSource(engine.cfg) === 'proxmox' ? hostService(engine.cfg) : undefined;
   const hw = hostSvc ? engine.state(hostSvc.id).widget?.host : engine.local;
-  const since24 = now - 24 * H;
-  const spark = (key: string) => series(key, since24, now, 48).values;
+  const spark = (key: string) => series24(mem, now, key, 48).values;
   let host = null;
   if (hw || engine.temps) {
     const temps = engine.temps;
@@ -290,9 +299,8 @@ function applyWorst(tiles: Map<string, Tile>, att: ReturnType<Round['close']>) {
 }
 
 /** WAN and LAN traffic with 24 h series, and DNS statistics, from the widgets settings.network picks. */
-function networkPanel(engine: SnapshotInput, widgets: ReturnType<typeof widgetsOf>, now: number): Snapshot['network'] {
+function networkPanel(engine: SnapshotInput, widgets: ReturnType<typeof widgetsOf>, now: number, mem: Memory): Snapshot['network'] {
   const { settings } = engine.cfg;
-  const since24 = now - 24 * H;
   let network: Snapshot['network'] = null;
   const netPick = settings.network?.service;
   const net = netPick
@@ -305,8 +313,8 @@ function networkPanel(engine: SnapshotInput, widgets: ReturnType<typeof widgetsO
    * Rates plus 24 h series for one reading, from the metrics `<key>.down` / `<key>.up`.
    */
   const traffic = (key: string, reading: NetworkReading, href: string | null): Traffic => {
-    const sDown = series(`${key}.down`, since24, now, 72);
-    const sUp = series(`${key}.up`, since24, now, 72);
+    const sDown = series24(mem, now, `${key}.down`, 72);
+    const sUp = series24(mem, now, `${key}.up`, 72);
     return { source: reading.source, href, down: reading.down, up: reading.up, seriesDown: sDown.values, seriesUp: sUp.values, spanH: Math.max(1, Math.round((now - sDown.from) / H)) };
   };
   if (net || dns || lan?.w.lan) {
@@ -321,14 +329,15 @@ function networkPanel(engine: SnapshotInput, widgets: ReturnType<typeof widgetsO
 }
 
 /** The fleet availability strip (48 × 30 min), and the same buckets per service as each tile's `beats`. */
-function fleetStrip(engine: SnapshotInput, tiles: Map<string, Tile>, now: number): Snapshot['fleet'] {
+function fleetStrip(engine: SnapshotInput, tiles: Map<string, Tile>, now: number, mem: Memory): Snapshot['fleet'] {
   const th = engine.cfg.settings.thresholds;
   const B = 30 * 60_000;
   const start = now - 48 * B;
   const buckets: Snapshot['fleet'] = Array.from({ length: 48 }, () => 'none');
   // a bucket is amber when a probe took over twice the service's own Slow limit (history of removed services: the global one)
   const slowLimit = new Map(engine.cfg.services.map((s) => [s.id, s.latencyWarnMs ?? th.latencyWarnMs]));
-  for (const r of probeBuckets(start, B)) {
+  // bucket indexes count from the `start` of the query, which may be up to a minute older than this one
+  for (const r of perMinute(mem, now, 'fleet', () => probeBuckets(start, B))) {
     const i = Math.max(0, Math.min(47, Math.floor(Number(r.b))));
     const ratio = r.fails / r.n;
     const slowMs = slowLimit.get(String(r.sid)) ?? th.latencyWarnMs;
@@ -389,7 +398,7 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
   const round = mem.attention.begin(now);
   configAlerts(engine, round);
   const tiles = serviceTiles(engine, now, mem, round);
-  const host = hostPanel(engine, now, round);
+  const host = hostPanel(engine, now, mem, round);
   const storage = storagePanel(engine, th, round);
   const drives = drivesPanel(engine, th, round);
 
@@ -398,8 +407,8 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
   applyWorst(tiles, att);
   const all = [...tiles.values()];
   const widgets = widgetsOf(engine);
-  const network = networkPanel(engine, widgets, now);
-  const buckets = fleetStrip(engine, tiles, now);
+  const network = networkPanel(engine, widgets, now, mem);
+  const buckets = fleetStrip(engine, tiles, now, mem);
   const ups = all.map((t) => t.uptime24).filter((x) => x != null);
   const fleetAvail = ups.length ? ups.reduce((a, b) => a + b, 0) / ups.length : null;
   const { sub, facts } = verdictFacts(engine, widgets, all, now);
