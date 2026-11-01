@@ -264,10 +264,26 @@ export function withDiscovered(cfg: Config, discovered: Discovered[]): Config {
   return { ...cfg, groups, services };
 }
 
+/** Shortest allowed interval per round, in seconds: below it a round would hammer the services it polls. */
+const MIN_INTERVALS: Settings['intervals'] = { probe: 10, widgets: 15, cert: 300 };
+
+/** Intervals below their minimum, or not a number, are replaced (the minimum, or the default) and recorded. */
+function checkIntervals(settings: Settings, problems: ConfigProblem[]) {
+  for (const key of Object.keys(MIN_INTERVALS) as (keyof Settings['intervals'])[]) {
+    const v: unknown = settings.intervals[key];
+    const min = MIN_INTERVALS[key];
+    if (typeof v === 'number' && Number.isFinite(v) && v >= min) continue;
+    const use = typeof v === 'number' && Number.isFinite(v) ? min : DEFAULT_SETTINGS.intervals[key];
+    problems.push({ file: 'settings.yaml', message: `intervals.${key} must be at least ${min} seconds, using ${use}`, fallback: null });
+    settings.intervals = { ...settings.intervals, [key]: use };
+  }
+}
+
 export function loadConfig(): Config {
   const problems: ConfigProblem[] = [];
   missing = new Map();
   const settings = deepMerge(DEFAULT_SETTINGS, readYaml('settings.yaml', 'map', {}, problems)) as Settings;
+  checkIntervals(settings, problems);
   const groups: Config['groups'] = [];
   const services: Service[] = [];
   const heartbeatIds = new Set<string>();

@@ -129,3 +129,20 @@ test('without a Proxmox widget the System panel shows the local host; temperatur
   const now = Date.now();
   assert.deepEqual([series('host.cpu', 0, now, 1).values, series('host.mem', 0, now, 1).values, series('host.temp', 0, now, 1).values], [[23], [25], [51]]);
 });
+
+test('rounds never overlap: a tick while the round still runs is skipped', async () => {
+  let calls = 0;
+  const pending: (() => void)[] = [];
+  const slow: Transport = () => { calls++; return new Promise((r) => { pending.push(() => r(new Response('{}'))); }); };
+  const e = engine('- Apps:\n    - DNS:\n        widget:\n          type: adguard\n          url: http://dns.home.arpa\n', script({ transport: () => slow }));
+  e.round('widgets');
+  await settle();
+  const first = calls;
+  assert.ok(first > 0);
+  e.round('widgets');
+  await settle();
+  assert.equal(calls, first, 'the second tick did not start another round');
+  for (const done of pending) done();
+  await settle();
+  assert.equal(e.busy.has('widgets'), false);
+});

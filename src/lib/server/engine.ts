@@ -16,6 +16,7 @@ import { INTEGRATIONS, ORDER, createContext } from './integrations/index.ts';
 import type { Config, ContainerState, Discovered, HostVitals, Service, ServiceState, Shared, Snapshot, Sources, Temps, Widget } from '$lib/types';
 
 const kv = { get: kvGet, set: kvSet };
+type Round = 'probe' | 'widgets' | 'cert' | 'icons';
 
 /** `p`, or a rejection after `ms`; the timer is cleared either way, so a finished round leaves none behind. */
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
@@ -49,6 +50,8 @@ export class Engine extends EventEmitter {
   snapshot: Snapshot | null = null;
   started = false;
   probed = false; // the first probe round, 5 s after start
+  /** rounds still running: a tick that comes while its round runs is skipped, so rounds never overlap */
+  busy = new Set<Round>();
 
   /** `sources`: where readings come from (live, demo, or a test's script) */
   constructor(sources: Sources) {
@@ -116,13 +119,21 @@ export class Engine extends EventEmitter {
     this.timers = [];
     const iv = this.cfg.settings.intervals;
     const every = (fn: () => void, s: number) => { fn(); this.timers.push(setInterval(fn, s * 1000)); };
-    const probes = () => this.runProbes().catch((e) => console.error('[probe]', e));
+    const probes = () => this.round('probe');
     // At process start the server isn't listening yet: a check of the dashboard itself would fail once on every start.
     if (this.probed) every(probes, iv.probe);
     else this.timers.push(setTimeout(() => { this.probed = true; every(probes, iv.probe); }, 5000));
-    every(() => this.runWidgets().catch((e) => console.error('[widgets]', e)), iv.widgets);
-    every(() => this.runCerts().catch((e) => console.error('[cert]', e)), iv.cert);
-    every(() => this.findIcons().catch((e) => console.error('[icons]', e)), 3600);
+    every(() => this.round('widgets'), iv.widgets);
+    every(() => this.round('cert'), iv.cert);
+    every(() => this.round('icons'), 3600);
+  }
+
+  /** Start a round unless it is still running: a slow widget round (up to 25 s per step) is skipped, not doubled. */
+  round(name: Round) {
+    if (this.busy.has(name)) return;
+    this.busy.add(name);
+    const run = { probe: () => this.runProbes(), widgets: () => this.runWidgets(), cert: () => this.runCerts(), icons: () => this.findIcons() }[name];
+    run().catch((e) => console.error(`[${name}]`, e)).finally(() => this.busy.delete(name));
   }
 
   state(id: string): ServiceState {
@@ -240,10 +251,10 @@ export class Engine extends EventEmitter {
     for (const id of this.rt.keys()) if (!ids.has(id)) this.rt.delete(id);
     if (added.length) {
       console.log(`[discovery] ${added.map((d) => `${d.group}/${d.name}`).join(', ')}`);
-      this.runProbes().catch((e) => console.error('[probe]', e));
-      this.runCerts().catch((e) => console.error('[cert]', e));
+      this.round('probe');
+      this.round('cert');
     }
-    this.findIcons().catch((e) => console.error('[icons]', e));
+    this.round('icons');
   }
 
   /** Look up icons for services without `icon` (by name, container image, widget type); publishes when they changed. */

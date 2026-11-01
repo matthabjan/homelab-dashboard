@@ -105,11 +105,13 @@ The *Most used* row above the groups fills itself from how often you open each s
 
 ### `intervals` (seconds)
 
-| Key | Default | Description |
-|---|---|---|
-| `probe` | `30` | Reachability check for every `siteMonitor`. |
-| `widgets` | `60` | Polling of widget APIs, the local host and temperatures. |
-| `cert` | `21600` | TLS certificate check (every 6 h). |
+| Key | Default | Minimum | Description |
+|---|---|---|---|
+| `probe` | `30` | `10` | Reachability check for every `siteMonitor`. |
+| `widgets` | `60` | `15` | Polling of widget APIs, the local host and temperatures. |
+| `cert` | `21600` | `300` | TLS certificate check (every 6 h). |
+
+A value below the minimum is raised to it, and one that isn't a number falls back to the default; either shows as a problem with `settings.yaml`. A round that is still running when its next turn comes is skipped rather than started twice, so a slow widget API never gets overlapping requests.
 
 The page shows a "stale" notice when no update has arrived for 2.5 × the longer of `probe` and `widgets`.
 

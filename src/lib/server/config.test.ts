@@ -117,6 +117,15 @@ test('config files with mistakes', async (t) => {
     delete process.env.HB_TEST;
   });
 
+  await t.test('intervals below their minimum, or not a number, are replaced and named', () => {
+    write('services.yaml', SERVICES);
+    write('settings.yaml', 'intervals:\n  probe: 0\n  widgets: fast\n  cert: 3600\n');
+    const cfg = loadConfig();
+    assert.deepEqual(cfg.settings.intervals, { probe: 10, widgets: 60, cert: 3600 });
+    assert.deepEqual(cfg.problems.map((p) => p.message), ['intervals.probe must be at least 10 seconds, using 10', 'intervals.widgets must be at least 15 seconds, using 60']);
+    write('settings.yaml', 'title: Lab\n');
+  });
+
   await t.test('fixing the file clears the problem; a removed file is simply empty', () => {
     write('services.yaml', SERVICES);
     assert.deepEqual(loadConfig().problems, []);
