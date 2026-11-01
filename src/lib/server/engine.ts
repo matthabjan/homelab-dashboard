@@ -106,8 +106,7 @@ export class Engine extends EventEmitter {
     }
     this.cfg = withDiscovered(this.base, this.discovered);
     this.shared = {}; // hand-offs (container counts per engine, guest ids) refill on the next widget round, without removed services
-    const ids = new Set(this.cfg.services.map((s) => s.id));
-    for (const id of this.rt.keys()) if (!ids.has(id)) this.rt.delete(id);
+    this.forgetRemoved();
     this.sources.seed(this.cfg.services);
     this.publish();
     return true;
@@ -134,6 +133,12 @@ export class Engine extends EventEmitter {
     this.busy.add(name);
     const run = { probe: () => this.runProbes(), widgets: () => this.runWidgets(), cert: () => this.runCerts(), icons: () => this.findIcons() }[name];
     run().catch((e) => console.error(`[${name}]`, e)).finally(() => this.busy.delete(name));
+  }
+
+  /** Drop the runtime state of services no longer in cfg (removed from services.yaml, or no longer labelled). */
+  forgetRemoved() {
+    const ids = new Set(this.cfg.services.map((s) => s.id));
+    for (const id of this.rt.keys()) if (!ids.has(id)) this.rt.delete(id);
   }
 
   state(id: string): ServiceState {
@@ -247,8 +252,7 @@ export class Engine extends EventEmitter {
     const added = found.filter((d) => !this.discovered.some((o) => o.group === d.group && o.name === d.name));
     this.discovered = found;
     this.cfg = withDiscovered(this.base, found);
-    const ids = new Set(this.cfg.services.map((s) => s.id));
-    for (const id of this.rt.keys()) if (!ids.has(id)) this.rt.delete(id);
+    this.forgetRemoved();
     if (added.length) {
       console.log(`[discovery] ${added.map((d) => `${d.group}/${d.name}`).join(', ')}`);
       this.round('probe');
