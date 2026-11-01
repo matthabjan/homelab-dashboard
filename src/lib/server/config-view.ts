@@ -58,18 +58,23 @@ export function settingsList(settings: object | null | undefined, defaults: obje
     : [{ k: prefix + k, v: text(cur[k] === undefined ? d : cur[k]) }]));
 }
 
+/** Where a service is defined: services.yaml, or the container labels a widget discovered. */
+function sources(engine: ConfigViewInput) {
+  const { services } = engine.cfg;
+  const finder = new Map([...engine.discoveredBy].flatMap(([sid, list]) => list.map((d) => [`${d.group}\0${d.name}`, sid])));
+  return (s: Service) => {
+    if (!s.container) return 'services.yaml';
+    const by = services.find((x) => x.id === finder.get(`${s.group}\0${s.name}`));
+    return by ? `labels via ${by.name}` : 'container labels';
+  };
+}
+
 /**
  * One row per widget: type, docs, URL origin, the safe options, and how its last poll went.
  */
 function widgetRows(engine: ConfigViewInput): ConfigView['widgets'] {
   const { services } = engine.cfg;
-  // which widget discovered each label service, for its source
-  const finder = new Map([...engine.discoveredBy].flatMap(([sid, list]) => list.map((d) => [`${d.group}\0${d.name}`, sid])));
-  const sourceOf = (s: Service) => {
-    if (!s.container) return 'services.yaml';
-    const by = services.find((x) => x.id === finder.get(`${s.group}\0${s.name}`));
-    return by ? `labels via ${by.name}` : 'container labels';
-  };
+  const sourceOf = sources(engine);
   return services.filter((s) => s.widget?.type).map((s) => {
     const w = (s.widget as NonNullable<Service['widget']>);
     const st = engine.state(s.id).widget;
@@ -128,8 +133,20 @@ function iconRows(engine: ConfigViewInput): ConfigView['icons'] {
   });
 }
 
+/** Every service once, with its tile's icon, level and (while it shows a problem) its line. */
+function serviceRows(engine: ConfigViewInput): ConfigView['services'] {
+  const tiles: Map<string, Tile> = new Map((engine.snapshot?.groups ?? []).flatMap((g) => g.services.map((t) => [t.id, t])));
+  const sourceOf = sources(engine);
+  return engine.cfg.groups.flatMap((g) => g.services.map((s) => {
+    const t = tiles.get(s.id);
+    const level = t?.level ?? 'unknown';
+    return { id: s.id, name: s.name, group: g.name, source: sourceOf(s), icon: t?.icon ?? null, iconDark: t?.iconDark ?? null, level, reason: t && (level === 'warn' || level === 'crit') ? t.line : null };
+  }));
+}
+
 export function buildConfigView(engine: ConfigViewInput): ConfigView {
   const { settings, problems } = engine.cfg;
+  const defaults = new Map(settingsList(DEFAULT_SETTINGS).map((d) => [d.k, d.v]));
   return {
     title: settings.title,
     demo: engine.cfg.demo,
@@ -138,6 +155,7 @@ export function buildConfigView(engine: ConfigViewInput): ConfigView {
     widgets: widgetRows(engine),
     checks: checkRows(engine),
     icons: iconRows(engine),
-    settings: settingsList(settings)
+    services: serviceRows(engine),
+    settings: settingsList(settings).map((s) => ({ ...s, changed: s.v !== defaults.get(s.k) }))
   };
 }

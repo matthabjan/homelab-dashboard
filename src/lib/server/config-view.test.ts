@@ -134,6 +134,17 @@ test('checks, icons and settings', () => {
   assert.ok(view.settings.some((s) => s.k === 'title' && s.v === 'Lab'));
 });
 
+test('services: every service once, in dashboard order, with its source; settings say what changed', () => {
+  const view = buildConfigView(fakeEngine());
+  const engine = fakeEngine();
+  assert.deepEqual(view.services.map((r) => r.id), engine.cfg.groups.flatMap((g) => g.services.map((s) => s.id)));
+  const svc = (name: string) => view.services.find((r) => r.name === name);
+  assert.deepEqual([svc('Labelled')?.source, svc('PVE')?.source], ['labels via Portainer', 'services.yaml']);
+  assert.deepEqual([svc('PVE')?.level, svc('PVE')?.reason, svc('PVE')?.icon], ['unknown', null, null], 'no snapshot yet');
+  const setting = (k: string) => view.settings.find((x) => x.k === k);
+  assert.deepEqual([setting('title')?.changed, setting('intervals.probe')?.changed], [true, false]);
+});
+
 test('origin and icon helpers', () => {
   assert.equal(originOf('https://u:p@h.example.com:8443/a?b=c'), 'https://h.example.com:8443');
   assert.equal(originOf('unix:///var/run/docker.sock'), 'unix:');

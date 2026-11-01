@@ -17,11 +17,10 @@ config/
 
 **Checking what loaded.** **Config & status** (`/config`, from the sliders button in the header, the footer, the command palette or any config alert) shows what the dashboard made of your files, read-only:
 
-- **Problems:** files with errors, skipped entries, secrets that aren't set (by name), heartbeats without a token, a `docker` widget on a socket path.
-- **Widgets:** each widget's type (linked to its documentation), the scheme, host and port of its `url`, a few harmless options such as `node` or `env`, whether its last poll worked, when it last succeeded, and whether it came from `services.yaml` or from container labels.
-- **Checks:** each service's check (HTTP, TCP, container state or heartbeat), its target, interval and current state.
-- **Automatic icons:** the icon picked for each service without `icon`, as the `icon:` / `iconDark:` lines you would write to keep it.
-- **Settings:** every effective setting.
+- **Summary:** problems, checks up, widgets OK and changed settings at a glance, each linking to its section.
+- **Problems:** files with errors, skipped entries, secrets that aren't set (by name), heartbeats without a token, a `docker` widget on a socket path. Only shown when there are any.
+- **Services:** every service once, grouped as on the dashboard, with what its tile reports when there is a problem; its check (HTTP, TCP, container state or heartbeat: target, interval, state); its widget (type, linked to its documentation; the scheme, host and port of its `url`; a few harmless options such as `node` or `env`; the last poll and when it last succeeded); where it came from (`services.yaml` or container labels); and, marked *auto*, the icon picked for it automatically. *Needs attention* shows only the services with a problem.
+- **Settings:** the values `settings.yaml` changes, and every effective setting under *All settings*.
 
 It never shows usernames, passwords, keys, tokens, headers, request bodies, URL paths or queries, or label values beyond group and name: what it shows is chosen field by field, so a new kind of secret can't slip through.
 
