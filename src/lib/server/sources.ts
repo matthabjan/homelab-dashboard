@@ -12,5 +12,6 @@ export const liveSources: Sources = {
   temps: () => readTemps(),
   transport: () => request,
   iconTransport: request,
-  seed: () => {}
+  seed: () => {},
+  demo: false
 };

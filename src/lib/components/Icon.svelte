@@ -37,8 +37,8 @@
   height={size}
   loading="lazy"
   decoding="async"
-  style:width="{size}px"
-  style:height="{size}px"
+  style:width="var(--icon, {size}px)"
+  style:height="var(--icon, {size}px)"
   {@attach fallback(() => (failed = true))}
 />
 {#if dark && !failedDark}
@@ -50,8 +50,8 @@
     height={size}
     loading="lazy"
     decoding="async"
-    style:width="{size}px"
-    style:height="{size}px"
+    style:width="var(--icon, {size}px)"
+    style:height="var(--icon, {size}px)"
     {@attach fallback(() => (failedDark = true))}
   />
 {/if}

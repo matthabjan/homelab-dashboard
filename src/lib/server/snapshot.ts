@@ -3,7 +3,6 @@ import fs from 'node:fs';
 import { resolveIcon, assetUrl } from './config.ts';
 import { probeStats, uptimeSince, probeBuckets, series, recentEvents, openScores } from './db.ts';
 import { fmtDuration as fmtAge, fmtHours, fmtSize } from './format.ts';
-import { DEMO } from './demo.ts';
 import { hostService, hostSource } from './local.ts';
 import { kindOf, status as checkStatus } from './check.ts';
 import { createAttention, type Raised } from './attention.ts';
@@ -20,28 +19,38 @@ const MIN_SLOW_SAMPLES = 10; // ~5 min of probes before a service can be called 
 export type SnapshotInput = Pick<Engine, 'cfg' | 'state' | 'autoIcons' | 'shared' | 'temps' | 'local'>;
 type ProbeSummary = { up24: number | null; p95: number | null; p95h: number | null; n1: number; up7: number | null };
 /** What a builder carries from one snapshot to the next. */
-type Memory = { stats: { ts: number; data: Map<string, ProbeSummary> }; attention: ReturnType<typeof createAttention> };
+type Memory = { minute: { ts: number; data: Map<string, unknown> }; attention: ReturnType<typeof createAttention> };
 
 /**
  * A snapshot builder. It remembers when each alert first appeared (so attention shows "since" instead of
- * "last polled") and caches probe statistics for a minute, so keep one per engine.
+ * "last polled") and keeps history queries for a minute, so keep one per engine.
  */
 export function createSnapshot(): (input: SnapshotInput, now: number) => Snapshot {
-  const mem: Memory = { stats: { ts: 0, data: new Map() }, attention: createAttention() };
+  const mem: Memory = { minute: { ts: 0, data: new Map() }, attention: createAttention() };
   return (input, now) => build(input, now, mem);
 }
 
+/**
+ * `read()` once a minute per key: the snapshot is rebuilt after every round and heartbeat, and the history queries
+ * behind it (probe statistics, the 24 h strips, the gauges' series) are most of its cost (the strip ~80 ms at 30
+ * services). History moves on by a probe or two in that minute.
+ */
+function perMinute<T>(mem: Memory, now: number, key: string, read: () => T): T {
+  if (now - mem.minute.ts > 60_000) mem.minute = { ts: now, data: new Map() };
+  if (!mem.minute.data.has(key)) mem.minute.data.set(key, read());
+  return mem.minute.data.get(key) as T;
+}
+
 function stats(mem: Memory, sid: string, now: number): ProbeSummary {
-  if (now - mem.stats.ts > 60_000) mem.stats = { ts: now, data: new Map() };
-  let s = mem.stats.data.get(sid);
-  if (!s) {
+  return perMinute(mem, now, `stats ${sid}`, () => {
     const d = probeStats(sid, now - 24 * H);
     const h1 = probeStats(sid, now - H);
-    s = { up24: d.uptime, p95: d.p95, p95h: h1.p95, n1: h1.n, up7: uptimeSince(sid, now - 7 * 24 * H) };
-    mem.stats.data.set(sid, s);
-  }
-  return s;
+    return { up24: d.uptime, p95: d.p95, p95h: h1.p95, n1: h1.n, up7: uptimeSince(sid, now - 7 * 24 * H) };
+  });
 }
+
+/** A metric's 24 h series in `points` buckets. */
+const series24 = (mem: Memory, now: number, key: string, points: number) => perMinute(mem, now, `series ${key} ${points}`, () => series(key, now - 24 * H, now, points));
 
 const level = (v: number | null | undefined, warn: number, crit: number): Level | 'none' => (v == null ? 'none' : v >= crit ? 'crit' : v >= warn ? 'warn' : 'ok');
 
@@ -93,16 +102,19 @@ function driveStatus(d: Drive, where: string, th: Settings['thresholds']) {
   };
 }
 
-function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
-  const { settings, groups, bookmarks } = engine.cfg;
-  const th = settings.thresholds;
-  // everything is raised first: a tile is as bad as the worst alert raised for its service, wherever it came from
-  const round = mem.attention.begin(now);
-  const tiles: Map<string, Tile> = new Map();
+type Round = ReturnType<Memory['attention']['begin']>;
+type Th = Settings['thresholds'];
+/** Every service that has polled its widget at least once, with that result. */
+const widgetsOf = (engine: SnapshotInput) => engine.cfg.services.flatMap((s) => {
+  const w = engine.state(s.id).widget;
+  return w ? [{ s, w }] : [];
+});
+
+/** A config file with an error: one alert per file, however many problems it has (/config lists each of them). */
+function configAlerts(engine: SnapshotInput, round: Round) {
 
   // a config file with an error: keeping its last version is a warning, losing its content is critical
   const shown: Record<string, string> = { last: 'showing the last working version', none: 'nothing loaded from it', null: 'the rest of the file is loaded' };
-  // one alert per file, however many problems it has: /config lists each of them
   const byFile = new Map<string, ConfigProblem[]>();
   for (const p of engine.cfg.problems ?? []) byFile.set(p.file, [...(byFile.get(p.file) ?? []), p]);
   for (const [file, list] of byFile) {
@@ -116,7 +128,13 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
       href: '/config#problems'
     });
   }
+}
 
+/** A tile per service, from its check, certificate and widget; raises what is wrong with each. */
+function serviceTiles(engine: SnapshotInput, now: number, mem: Memory, round: Round): Map<string, Tile> {
+  const { groups, settings } = engine.cfg;
+  const th = settings.thresholds;
+  const tiles: Map<string, Tile> = new Map();
   for (const g of groups) {
     for (const s of g.services) {
       const st = engine.state(s.id);
@@ -185,12 +203,16 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
       });
     }
   }
+  return tiles;
+}
 
-  // ---- host vitals: the Proxmox node, or the machine the dashboard runs on ----
+/** The System panel: the Proxmox node, or the machine the dashboard runs on, plus the kernel's temperatures. */
+function hostPanel(engine: SnapshotInput, now: number, mem: Memory, round: Round): Snapshot['host'] {
+  const { settings } = engine.cfg;
+  const th = settings.thresholds;
   const hostSvc = hostSource(engine.cfg) === 'proxmox' ? hostService(engine.cfg) : undefined;
   const hw = hostSvc ? engine.state(hostSvc.id).widget?.host : engine.local;
-  const since24 = now - 24 * H;
-  const spark = (key: string) => series(key, since24, now, 48).values;
+  const spark = (key: string) => series24(mem, now, key, 48).values;
   let host = null;
   if (hw || engine.temps) {
     const temps = engine.temps;
@@ -223,8 +245,11 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
       gauges
     };
   }
+  return host;
+}
 
-  // ---- storage ----
+/** Storage rows from every widget that reports them; a row over `storageWarnPct` is raised for its service. */
+function storagePanel(engine: SnapshotInput, th: Th, round: Round): Snapshot['storage'] {
   const storage: Snapshot['storage'] = [];
   for (const s of engine.cfg.services) {
     const w = engine.state(s.id).widget;
@@ -238,8 +263,11 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
       if (x.pct >= th.storageWarnPct) round.raise({ sev: 'warn', service: s, key: `storage-${x.name}`, title: `${x.name} is ${Math.round(x.pct)}% full`, detail: x.sub });
     }
   }
+  return storage;
+}
 
-  // ---- drives ----
+/** The Drives panel: one row per disk (a disk passed through whole is listed once), its problems raised. */
+function drivesPanel(engine: SnapshotInput, th: Th, round: Round): Snapshot['drives'] {
   const drives: Snapshot['drives'] = [];
   const seenSerials = new Set();
   for (const s of engine.cfg.services) {
@@ -253,10 +281,11 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
       drives.push(row);
     }
   }
+  return drives;
+}
 
-  // ---- attention closed: each tile takes its worst alert when that is worse than its check says ----
-  const events = recentEvents(now - 24 * H, 5).map((e) => ({ ...e, href: (e.sid && engine.cfg.services.find((s) => s.id === e.sid)?.href) ?? null }));
-  const att = round.close(events);
+/** After attention closed: each tile takes its worst alert when that is worse than its check says. */
+function applyWorst(tiles: Map<string, Tile>, att: ReturnType<Round['close']>) {
   for (const t of tiles.values()) {
     const top = t.level === 'unknown' ? null : att.worst(t.id);
     if (top && RANK[top.sev] > RANK[t.level as Level]) {
@@ -266,16 +295,12 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
     }
     t.line ||= t.level === 'ok' ? 'Online' : '';
   }
-  const all = [...tiles.values()];
-  const probed = all.filter((t) => t.level !== 'unknown');
-  const up = probed.filter((t) => t.status !== 'Down').length;
+}
 
-  // ---- network ----
+/** WAN and LAN traffic with 24 h series, and DNS statistics, from the widgets settings.network picks. */
+function networkPanel(engine: SnapshotInput, widgets: ReturnType<typeof widgetsOf>, now: number, mem: Memory): Snapshot['network'] {
+  const { settings } = engine.cfg;
   let network: Snapshot['network'] = null;
-  const widgets = engine.cfg.services.flatMap((s) => {
-    const w = engine.state(s.id).widget;
-    return w ? [{ s, w }] : [];
-  });
   const netPick = settings.network?.service;
   const net = netPick
     ? widgets.find((x) => x.s.name === netPick && x.w.network)
@@ -287,8 +312,8 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
    * Rates plus 24 h series for one reading, from the metrics `<key>.down` / `<key>.up`.
    */
   const traffic = (key: string, reading: NetworkReading, href: string | null): Traffic => {
-    const sDown = series(`${key}.down`, since24, now, 72);
-    const sUp = series(`${key}.up`, since24, now, 72);
+    const sDown = series24(mem, now, `${key}.down`, 72);
+    const sUp = series24(mem, now, `${key}.up`, 72);
     return { source: reading.source, href, down: reading.down, up: reading.up, seriesDown: sDown.values, seriesUp: sUp.values, spanH: Math.max(1, Math.round((now - sDown.from) / H)) };
   };
   if (net || dns || lan?.w.lan) {
@@ -299,14 +324,19 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
       dns: dns?.w.dns ? { ...dns.w.dns, href: dns.s.href, name: dns.s.name } : null
     };
   }
+  return network;
+}
 
-  // ---- fleet availability strip (48 × 30 min) ----
+/** The fleet availability strip (48 × 30 min), and the same buckets per service as each tile's `beats`. */
+function fleetStrip(engine: SnapshotInput, tiles: Map<string, Tile>, now: number, mem: Memory): Snapshot['fleet'] {
+  const th = engine.cfg.settings.thresholds;
   const B = 30 * 60_000;
   const start = now - 48 * B;
   const buckets: Snapshot['fleet'] = Array.from({ length: 48 }, () => 'none');
   // a bucket is amber when a probe took over twice the service's own Slow limit (history of removed services: the global one)
   const slowLimit = new Map(engine.cfg.services.map((s) => [s.id, s.latencyWarnMs ?? th.latencyWarnMs]));
-  for (const r of probeBuckets(start, B)) {
+  // bucket indexes count from the `start` of the query, which may be up to a minute older than this one
+  for (const r of perMinute(mem, now, 'fleet', () => probeBuckets(start, B))) {
     const i = Math.max(0, Math.min(47, Math.floor(Number(r.b))));
     const ratio = r.fails / r.n;
     const slowMs = slowLimit.get(String(r.sid)) ?? th.latencyWarnMs;
@@ -319,16 +349,19 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
       t.beats[i] = lv;
     }
   }
-  const ups = all.map((t) => t.uptime24).filter((x) => x != null);
-  const fleetAvail = ups.length ? ups.reduce((a, b) => a + b, 0) / ups.length : null;
+  return buckets;
+}
 
-  // ---- verdict: the headline is attention's, the line under it this module's ----
+/** The line under the headline and the facts beside it: services, containers, backups, certificates. */
+function verdictFacts(engine: SnapshotInput, widgets: ReturnType<typeof widgetsOf>, all: Tile[], now: number) {
+  const th = engine.cfg.settings.thresholds;
+  const probed = all.filter((t) => t.level !== 'unknown');
+  const up = probed.filter((t) => t.status !== 'Down').length;
   const backups = mergeBackups(widgets.find((x) => x.w.backups)?.w.backups, engine.cfg.services.flatMap((s) => (s.heartbeat?.backup ? [engine.state(s.id).heartbeat ?? null] : [])), now);
   const certWarn = all.filter((t) => t.cert && t.cert.days < th.certWarnDays).length;
   const subParts = [`${up} of ${probed.length} services up`];
   if (backups?.known) subParts.push(backups.overdue ? `${backups.overdue} backup${backups.overdue > 1 ? 's' : ''} overdue` : 'backups current');
   subParts.push(certWarn ? `${certWarn} certificate${certWarn > 1 ? 's' : ''} expiring` : 'no certs expiring soon');
-  const verdict: Snapshot['verdict'] = { ...att.headline, sub: subParts.join(' · ') };
 
   // summed over Docker engines; a host seen by both Portainer and a docker widget is one entry
   const containers = Object.values(engine.shared.containers ?? {}).reduce(
@@ -342,8 +375,11 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
     backups?.oldestAge != null && { k: 'oldest backup', v: fmtAge(backups.oldestAge), level: backups.overdue ? 'warn' : null },
     nextCert && { k: 'next cert', v: `${nextCert.days} d`, level: nextCert.days < th.certWarnDays ? 'warn' : null }
   ] as (Fact | false | undefined)[]).filter((f): f is Fact => !!f);
+  return { sub: subParts.join(' · '), facts };
+}
 
-
+/** The Most used row: services with a link, by their decaying open score, ties in services.yaml order. */
+function mostUsedRow(all: Tile[], settings: Settings, now: number): Tile[] {
   const scores = openScores(now, settings.mostUsed.halfLifeDays);
   const mostUsed = all
     .filter((t) => t.href && scores[t.id] > 0)
@@ -351,10 +387,36 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
     .sort((a, b) => scores[b.t.id] - scores[a.t.id] || a.i - b.i)
     .slice(0, Math.max(0, settings.mostUsed.count))
     .map((x) => x.t);
+  return mostUsed;
+}
+
+function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
+  const { settings, groups, bookmarks } = engine.cfg;
+  const th = settings.thresholds;
+  // everything is raised first: a tile is as bad as the worst alert raised for its service, wherever it came from
+  const round = mem.attention.begin(now);
+  configAlerts(engine, round);
+  const tiles = serviceTiles(engine, now, mem, round);
+  const host = hostPanel(engine, now, mem, round);
+  const storage = storagePanel(engine, th, round);
+  const drives = drivesPanel(engine, th, round);
+
+  const events = recentEvents(now - 24 * H, 5).map((e) => ({ ...e, href: (e.sid && engine.cfg.services.find((s) => s.id === e.sid)?.href) ?? null }));
+  const att = round.close(events);
+  applyWorst(tiles, att);
+  const all = [...tiles.values()];
+  const widgets = widgetsOf(engine);
+  const network = networkPanel(engine, widgets, now, mem);
+  const buckets = fleetStrip(engine, tiles, now, mem);
+  const ups = all.map((t) => t.uptime24).filter((x) => x != null);
+  const fleetAvail = ups.length ? ups.reduce((a, b) => a + b, 0) / ups.length : null;
+  const { sub, facts } = verdictFacts(engine, widgets, all, now);
+  const verdict: Snapshot['verdict'] = { ...att.headline, sub };
+  const mostUsed = mostUsedRow(all, settings, now);
 
   return {
     generatedAt: now,
-    demo: DEMO,
+    demo: engine.cfg.demo,
     version: VERSION,
     configProblems: (engine.cfg.problems ?? []).length,
     title: settings.title,

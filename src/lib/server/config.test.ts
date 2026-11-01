@@ -117,6 +117,26 @@ test('config files with mistakes', async (t) => {
     delete process.env.HB_TEST;
   });
 
+  await t.test('intervals below their minimum, or not a number, are replaced and named', () => {
+    write('services.yaml', SERVICES);
+    write('settings.yaml', 'intervals:\n  probe: 0\n  widgets: fast\n  cert: 3600\n');
+    const cfg = loadConfig();
+    assert.deepEqual(cfg.settings.intervals, { probe: 10, widgets: 60, cert: 3600 });
+    assert.deepEqual(cfg.problems.map((p) => p.message), ['intervals.probe must be at least 10 seconds, using 10', 'intervals.widgets must be at least 15 seconds, using 60']);
+    write('settings.yaml', 'title: Lab\n');
+  });
+
+  await t.test('a missing secret and a heartbeat without token are problems, except for the demo', () => {
+    delete process.env.NOT_SET_ANYWHERE;
+    write('services.yaml', '- Infra:\n    - NAS:\n        widget:\n          type: openmediavault\n          url: http://nas.home.arpa\n          password: ${NOT_SET_ANYWHERE}\n    - Backup:\n        heartbeat:\n          every: 24h\n');
+    const live = loadConfig();
+    assert.deepEqual(live.problems.map((p) => p.message).sort(), ['"Backup": heartbeat needs a token', 'secret NOT_SET_ANYWHERE is not set']);
+    assert.equal(live.demo, false);
+    const demo = loadConfig({ demo: true });
+    assert.deepEqual(demo.problems, []);
+    assert.equal(demo.demo, true);
+  });
+
   await t.test('fixing the file clears the problem; a removed file is simply empty', () => {
     write('services.yaml', SERVICES);
     assert.deepEqual(loadConfig().problems, []);

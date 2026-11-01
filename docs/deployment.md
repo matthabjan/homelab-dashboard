@@ -1,6 +1,6 @@
 # Deployment
 
-The dashboard is a single container. It listens on port 3000, reads `/config`, and writes its history to `/data`. **It has no login of its own**, so always run it behind a reverse proxy that handles TLS and authentication. It is meant for your LAN or a VPN (WireGuard, Tailscale, …): don't forward a port to it from the internet.
+The dashboard is a single container: it listens on port 3000, reads `/config` and writes its history to `/data`. **It has no login of its own**, so run it behind a reverse proxy that handles TLS and access control, on your LAN or a VPN (WireGuard, Tailscale, …). Don't forward a port to it from the internet.
 
 - [Portainer stack behind Traefik](#portainer-stack-behind-traefik) (recommended)
 - [Other reverse proxies](#other-reverse-proxies)
@@ -30,7 +30,7 @@ In Portainer, open **Stacks → Add stack → Web editor** and paste:
 ```yaml
 services:
   dashboard:
-    image: matthabjan/homelab-dashboard:0.1.12  # pin a release; see Updating
+    image: matthabjan/homelab-dashboard:0.1.13  # pin a release; see Updating
     container_name: dashboard
     restart: unless-stopped
     environment:
@@ -248,10 +248,10 @@ If config changes don't take effect, the bind mount may not pass file-change eve
 ## Updating
 
 1. Read the [release notes](https://github.com/matthabjan/homelab-dashboard/releases) for the versions you are skipping.
-2. Change the image tag, for example `:0.0.2` → `:0.0.3`.
+2. Change the image tag, for example `:0.1.12` → `:0.1.13`.
 3. In Portainer, redeploy the stack with **Re-pull image** switched on. With plain Compose: `docker compose pull && docker compose up -d`.
 
-The database schema is created and extended automatically. Config files from older versions keep working, because new settings have defaults.
+The database schema is created and extended automatically, and config files from older versions keep working, because new settings have defaults. On `docker stop` the container stops polling, closes open streams and exits within a second.
 
 ## Backup and restore
 

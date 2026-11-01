@@ -7,10 +7,10 @@ A widget adds live data to a service: tile stats, panels in the vitals card and 
 - **Use a dedicated read-only account** wherever the product supports one. Don't reuse an admin login.
 - **Use `https://` URLs.** Over `http://`, credentials cross the network in plain text.
 - **Pass credentials as secrets** (`${NAME}`). See [Configuration → Secrets](configuration.md#secrets-and-variables).
-- Every alert about a service starts with the service's name in the attention list ("Pi-hole: Blocking is disabled", "Nextcloud: Certificate expires in 5 d"), unless it already names it. On the service's own tile it doesn't.
-- A tile is as bad as the worst alert raised for its service, wherever that alert comes from: a widget, a certificate, a full storage or a drive it reports. With a Proxmox host, the CPU and NVMe temperatures count against the Proxmox tile.
-- A widget's service card and its Most used card show the same two facts (on the service card as one line), and a problem the widget sees, such as overdue backups or a stopped container, comes first in both.
-- Each widget has 25 s per poll. If a call fails, the tile shows *Stats unavailable* with a short reason, keeps its last stats, and the full error goes to the container log.
+- In the attention list, an alert starts with its service's name ("Pi-hole: Blocking is disabled") unless it already names it; on the service's own tile it doesn't.
+- A tile is as bad as the worst alert raised for its service: from its widget, a certificate, a full storage or a drive it reports. With a Proxmox host, CPU and NVMe temperatures count against the Proxmox tile.
+- The service card and the Most used card show the same facts (the service card as one line); a problem the widget sees, such as overdue backups or a stopped container, comes first in both.
+- Each widget has 25 s per poll. If it fails, the tile shows *Stats unavailable* with a short reason and keeps its last stats; the full error goes to the container log.
 
 | Type | Product | Auth | Read-only possible |
 |---|---|---|---|
@@ -345,8 +345,6 @@ Virtual disks (QEMU, virtio) are skipped, since the host reports the real drive.
 | warning | Life left is at or below `thresholds.driveLifeWarnPct`. |
 | warning | The drive reports media errors, or reallocated, pending or uncorrectable sectors. |
 | warning | The drive is at or above `thresholds.driveTempWarnC`. |
-
-A drive's alert also turns the tile of the service that reports it amber or red, like the service's own alerts.
 
 ---
 

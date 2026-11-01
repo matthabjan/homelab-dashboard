@@ -14,7 +14,7 @@ Terms used in the code and in design discussions.
 
 **Transport** — a function `(url, opts) → Response`; the seam between integrations and the network. Production: undici (`http.ts`). Demo and tests: a fixture transport.
 
-**Sources** — where the engine's readings come from: probes, certificates, the local host, temperatures, the transport each widget type gets, and the first day of history. `liveSources` (`sources.ts`) in production, `demoSources()` (`demo.ts`) in the demo; tests script their own. The engine reaches the outside only through them and the db.
+**Sources** — where the engine's readings come from: probes, certificates, the local host, temperatures, the transport each widget type gets, the first day of history, and whether it is the demo. `liveSources` (`sources.ts`) in production, `demoSources()` (`demo.ts`) in the demo; tests script their own. The engine reaches the outside only through them and the db.
 
 **Fixture** — the recorded-style API responses for one widget type (`src/lib/server/demo/<type>.ts`): a table of `"METHOD /path"` routes to functions of `{ now, scenario, params, headers, body }`.
 

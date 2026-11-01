@@ -22,7 +22,7 @@ test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
 const notFound: Transport = async () => new Response('', { status: 404 });
 /** Sources where nothing answers; a test replaces what it needs. */
-const script = (over: Partial<Sources> = {}): Sources => ({ probe: () => ({ ok: true, ms: 10, code: 200 }), cert: () => null, local: () => null, temps: () => null, transport: () => notFound, iconTransport: notFound, seed: () => {}, ...over });
+const script = (over: Partial<Sources> = {}): Sources => ({ probe: () => ({ ok: true, ms: 10, code: 200 }), cert: () => null, local: () => null, temps: () => null, transport: () => notFound, iconTransport: notFound, seed: () => {}, demo: false, ...over });
 /** An engine on these services (services.yaml text) and sources, loaded but not started. */
 function engine(yaml: string, sources: Sources) {
   fs.writeFileSync(path.join(tmp, 'services.yaml'), yaml);
@@ -128,4 +128,21 @@ test('without a Proxmox widget the System panel shows the local host; temperatur
   assert.deepEqual(snap(e).host?.gauges.map((g) => [g.key, g.val]), [['cpu', 23], ['mem', '4.0'], ['disk', 40], ['temp', 51]]);
   const now = Date.now();
   assert.deepEqual([series('host.cpu', 0, now, 1).values, series('host.mem', 0, now, 1).values, series('host.temp', 0, now, 1).values], [[23], [25], [51]]);
+});
+
+test('rounds never overlap: a tick while the round still runs is skipped', async () => {
+  let calls = 0;
+  const pending: (() => void)[] = [];
+  const slow: Transport = () => { calls++; return new Promise((r) => { pending.push(() => r(new Response('{}'))); }); };
+  const e = engine('- Apps:\n    - DNS:\n        widget:\n          type: adguard\n          url: http://dns.home.arpa\n', script({ transport: () => slow }));
+  e.round('widgets');
+  await settle();
+  const first = calls;
+  assert.ok(first > 0);
+  e.round('widgets');
+  await settle();
+  assert.equal(calls, first, 'the second tick did not start another round');
+  for (const done of pending) done();
+  await settle();
+  assert.equal(e.busy.has('widgets'), false);
 });

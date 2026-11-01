@@ -301,7 +301,9 @@
     {/if}
 
     <div id="services">
-      <section class="block services only-desktop" aria-labelledby="h-services">
+      <!-- one list for both layouts: a grid of tiles on desktop; on phones the same tiles are rows of an inset list
+           per group (problems are already at the top, under Needs attention) -->
+      <section class="block services" aria-labelledby="h-services">
         <div class="sec-head"><h2 id="h-services">Services</h2>{#if upNote}<span class="note">{upNote}</span>{/if}</div>
       {#each snap.groups as g (g.name)}
         <section class="group" aria-label={g.name}>
@@ -309,11 +311,13 @@
           <div class="tiles">
             {#each g.services as t (t.id)}
               {@const up = uptimeTxt(t)}
-              <a class="tile lift lv-{t.level}" class:flash={flash.has(t.id)} class:alert={t.level === 'crit' || t.level === 'warn'} href={t.href} target={target} rel="noopener" onclick={() => opened(t.id)} aria-label="{t.name}, {t.status}{t.lineLevel ? ', ' + t.line : ''}{up ? ', ' + up : ''}">
+              {@const word = statusWord(t)}
+              <a class="tile lift lv-{t.level}" class:flash={flash.has(t.id)} class:alert={t.level === 'crit' || t.level === 'warn'} href={t.href} target={target} rel="noopener" onclick={() => opened(t.id)} aria-label="{t.name}, {t.status}, {t.line}{up ? ', ' + up : ''}">
                 <span class="ic"><Icon src={t.icon} dark={t.iconDark} name={t.name} size={24} /></span>
                 <span class="txt">
                   <span class="n">{t.name}</span>
-                  <span class="l" class:hl={t.lineLevel === 'crit' || t.lineLevel === 'warn'} title={t.line}>{t.line}</span>
+                  <!-- hl: the line itself is a problem (desktop); problem: the service is (phones, which add the status word) -->
+                  <span class="l" class:hl={t.lineLevel === 'crit' || t.lineLevel === 'warn'} class:problem={isProblem(t.level)} title={t.line}>{#if word}<span class="word"><b>{word}</b>{' · '}</span>{/if}{t.line}</span>
                 </span>
                 <span class="dot lv-{t.level}" title={t.status}></span>
                 <!-- the strip with its exact uptime as text; the tile's label already says both -->
@@ -325,33 +329,6 @@
           </div>
         </section>
       {/each}
-      </section>
-      <!-- phones: the same groups as desktop, each an inset list; problems are already at the top, under Needs attention -->
-      <section class="block services only-phone" aria-labelledby="h-all">
-        <div class="sec-head"><h2 id="h-all">Services</h2>{#if upNote}<span class="note">{upNote}</span>{/if}</div>
-        {#each snap.groups as g (g.name)}
-          <section class="group" aria-label={g.name}>
-            <div class="grp-head"><h3>{g.name}</h3><span class="mono muted small">{g.summary}</span></div>
-            <div class="card list">
-              {#each g.services as t (t.id)}
-                {@const up = uptimeTxt(t)}
-                {@const word = statusWord(t)}
-                <a class="srow lv-{t.level}" class:flash={flash.has(t.id)} href={t.href} target={target} rel="noopener" onclick={() => opened(t.id)} aria-label="{t.name}, {t.status}, {t.line}{up ? ', ' + up : ''}">
-                  <span class="ic"><Icon src={t.icon} dark={t.iconDark} name={t.name} size={22} /></span>
-                  <span class="txt">
-                    <span class="n">{t.name}</span>
-                    <span class="l" class:hl={isProblem(t.level)}>{#if word}<b>{word}</b>{' · '}{/if}{t.line}</span>
-                    <!-- the strip with its exact uptime as text, as on tiles; the row's label already says both -->
-                    {#if t.beats}
-                      <span class="beats" aria-hidden="true"><Beats beats={t.beats} end={snap.generatedAt} label="" /><span class="mono">{pctTxt(t.uptime24)}</span></span>
-                    {/if}
-                  </span>
-                  <span class="dot lv-{t.level}" title={t.status}></span>
-                </a>
-              {/each}
-            </div>
-          </section>
-        {/each}
       </section>
     </div>
 
@@ -494,20 +471,23 @@
   .pin-stats .v.hl { color: var(--lv); }
   .pin-stats .k { font-size: 11px; white-space: nowrap; }
 
-  /* tiles */
-  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
-  .tile { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px 12px; padding: 12px 14px; border-radius: 14px; background: var(--surface); box-shadow: var(--shadow); min-height: 66px; }
-  .tile.alert { background: var(--lv-soft); box-shadow: inset 0 0 0 1px var(--lv); }
-  .tile.alert .ic { background: var(--surface); }
-  .tile .n { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* service tiles: a grid on desktop (here), rows of an inset list on phones (under max-width: 760px) */
   /* the status line may take two lines: it often joins several facts ("Pool 71% · SMART 1 / 1 ok") */
-  .tile .l, .srow .l { font-size: 12px; line-height: 1.35; color: var(--muted); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
-  .tile .l.hl { color: var(--lv); }
-  /* a service's 24 h strip and its exact uptime (tiles, and the phone list) */
+  .tile .l { font-size: 12px; line-height: 1.35; color: var(--muted); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+  /* a service's 24 h strip and its exact uptime */
   .beats { display: flex; align-items: center; gap: 8px; --beats-h: 10px; }
   .beats > :global(.strip) { flex: 1; }
   .beats .mono { flex: none; min-width: 6.5ch; text-align: right; font-size: 11px; color: var(--muted); }
-  .tile .beats { grid-column: 1 / -1; }
+  @media not all and (max-width: 760px) {
+    .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+    .tile { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px 12px; padding: 12px 14px; border-radius: 14px; background: var(--surface); box-shadow: var(--shadow); min-height: 66px; }
+    .tile.alert { background: var(--lv-soft); box-shadow: inset 0 0 0 1px var(--lv); }
+    .tile.alert .ic { background: var(--surface); }
+    .tile .n { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .tile .l.hl { color: var(--lv); }
+    .tile .word { display: none; }
+    .tile .beats { grid-column: 1 / -1; }
+  }
 
   /* links */
   .links { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -578,26 +558,27 @@
     .ic.big { width: 44px; height: 44px; border-radius: 13px; }
     .hostname, .pin-stats { display: none; }
     .pline { font-size: 13px; line-height: 1.35; color: var(--muted); }
-    .srow .l b { font-weight: 600; }
+    .tile .l b { font-weight: 600; }
     /* problem text sits on the tinted card: lean toward --text so it keeps 4.5:1 */
     .pline.hl { color: color-mix(in srgb, var(--lv) 80%, var(--text)); }
 
-    /* all services: one inset grouped list */
-    .list { border-radius: 18px; overflow: hidden; display: flex; flex-direction: column; }
-    .srow { position: relative; display: flex; align-items: center; gap: 12px; min-height: 60px; padding: 10px 16px 10px 12px; }
-    .srow + .srow::before { content: ''; position: absolute; top: 0; left: 62px; right: 0; border-top: 1px solid var(--line); }
-    .srow:first-child { border-radius: 18px 18px 0 0; }
-    .srow:last-child { border-radius: 0 0 18px 18px; }
-    .srow:only-child { border-radius: 18px; }
-    .srow:active { background: var(--surface-2); }
+    /* all services: one inset grouped list; a row is icon, text and dot, the strip under the text */
+    .tiles { border-radius: 18px; overflow: hidden; display: flex; flex-direction: column; background: var(--surface); box-shadow: var(--shadow); }
+    .tile { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; column-gap: 12px; min-height: 60px; padding: 10px 16px 10px 12px; transition: none; }
+    .tile:has(.beats) :is(.ic, .dot) { grid-row: span 2; }
+    .tile + .tile::before { content: ''; position: absolute; top: 0; left: 62px; right: 0; border-top: 1px solid var(--line); }
+    .tile:first-child { border-radius: 18px 18px 0 0; }
+    .tile:last-child { border-radius: 0 0 18px 18px; }
+    .tile:only-child { border-radius: 18px; }
+    .tile:active { background: var(--surface-2); transform: none; }
     /* the list clips (overflow: hidden), so a changed row is ringed inside its own edges, over the divider */
-    .srow.flash { animation-name: flash-in; }
-    .srow:focus-visible { outline-offset: -2px; border-radius: 0; }
-    .srow .ic { width: 38px; height: 38px; border-radius: 11px; }
-    .srow .n { font-size: 15px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .srow .l { display: block; -webkit-line-clamp: none; line-clamp: none; }
-    .srow .l.hl { color: var(--lv); }
-    .srow .beats { margin-top: 5px; --beats-h: 8px; }
+    .tile.flash { animation-name: flash-in; }
+    .tile:focus-visible { outline-offset: -2px; border-radius: 0; }
+    .tile .ic { width: 38px; height: 38px; border-radius: 11px; --icon: 22px; }
+    .tile .n { font-size: 15px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .tile .l { display: block; -webkit-line-clamp: none; line-clamp: none; }
+    .tile .l.problem { color: var(--lv); }
+    .tile .beats { grid-column: 2; margin-top: 7px; --beats-h: 8px; }
     .tabbar {
       position: fixed; left: 12px; right: 12px; bottom: max(14px, env(safe-area-inset-bottom)); z-index: 40;
       display: flex; justify-content: space-around; padding: 6px; border-radius: 24px;
