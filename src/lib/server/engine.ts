@@ -79,13 +79,14 @@ export class Engine extends EventEmitter {
     this.teardown.push(() => clearInterval(pruning));
   }
 
-  /** Stop every timer and the config watcher; the state stays as it is. */
+  /** Stop every timer and the config watcher, and tell open streams to end ('stop'); the state stays as it is. */
   stop() {
     for (const t of this.timers) clearInterval(t);
     this.timers = [];
     for (const undo of this.teardown) undo();
     this.teardown = [];
     this.started = false;
+    this.emit('stop');
   }
 
   reload() {

@@ -55,15 +55,19 @@ export const GET: RequestHandler = ({ request, getClientAddress }) => {
       }, 20_000);
       engine.on('update', send);
       if (engine.snapshot) send(engine.snapshot);
+      const end = () => {
+        cleanup?.();
+        try { controller.close(); } catch {}
+      };
       cleanup = () => {
         clearInterval(ping);
         engine.off('update', send);
+        engine.off('stop', end);
         release();
       };
-      request.signal.addEventListener('abort', () => {
-        cleanup?.();
-        try { controller.close(); } catch {}
-      });
+      request.signal.addEventListener('abort', end);
+      // shutting down: end the stream, so the server can close without waiting SHUTDOWN_TIMEOUT for it
+      engine.on('stop', end);
     },
     cancel() { cleanup?.(); }
   });
