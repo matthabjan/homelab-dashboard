@@ -9,7 +9,6 @@
   let { data }: PageProps = $props();
   const view = $derived(data.view);
   let now = $state(Date.now());
-  let copied = $state('');
 
   // live: reload the page data when the stream reports an update, at most every 5 s
   onMount(() => {
@@ -28,15 +27,6 @@
     if (ts == null) return 'never';
     const a = ago(ts, now);
     return a === 'now' ? 'just now' : `${a} ago`;
-  }
-
-  async function copy(i: ConfigView['icons'][number]) {
-    try {
-      await navigator.clipboard.writeText(i.yaml);
-      copied = `Copied the icon for ${i.name}`;
-    } catch {
-      copied = `Copy failed: select the text for ${i.name} instead`;
-    }
   }
 
   // settings by section: `intervals.probe` → intervals / probe; top-level keys are "general"
@@ -139,17 +129,15 @@
   {#if view.icons.length}
     <section class="card sec" aria-labelledby="h-icons">
       <h2 id="h-icons">Automatic icons <span class="count mono">{view.icons.length}</span></h2>
-      <p class="muted intro">Picked by name or image. To keep one, copy it into the service in <code>services.yaml</code>.</p>
+      <p class="muted intro">Picked by name, image or widget type. To use another, set <code>icon</code> on the service in <code>services.yaml</code>.</p>
       <ul class="icons">
         {#each view.icons as i (i.id)}
           <li>
             <span class="iname"><span class="n">{i.name}</span><span class="muted sub">{i.group}</span></span>
             <code class="yaml">{i.yaml}</code>
-            <button class="copy" onclick={() => copy(i)} aria-label="Copy YAML for {i.name}">Copy YAML</button>
           </li>
         {/each}
       </ul>
-      <p class="sr" aria-live="polite">{copied}</p>
     </section>
   {/if}
 
@@ -211,10 +199,8 @@
   .kv td { font-size: 12px; overflow-wrap: anywhere; }
 
   .icons { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
-  .icons li { display: grid; grid-template-columns: minmax(140px, 1fr) minmax(0, 2fr) auto; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+  .icons li { display: grid; grid-template-columns: minmax(140px, 1fr) minmax(0, 2fr); align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
   .yaml { white-space: pre; padding: 6px 10px; border-radius: 8px; background: var(--surface-2); overflow-x: auto; }
-  .copy { min-height: 36px; padding: 0 14px; border: 0; border-radius: 10px; background: var(--surface-2); font-size: 13px; font-weight: 500; cursor: pointer; }
-  .copy:hover { background: var(--surface-3); }
 
   /* phones: one column; each table row becomes a small card of labelled lines */
   @media (max-width: 760px) {
@@ -229,8 +215,6 @@
     table:not(.kv) td::before { content: attr(data-label); color: var(--muted); font-size: 12px; font-family: 'Geist', system-ui, sans-serif; }
     table:not(.kv) td > * { grid-column: 2; }
     table:not(.kv) td > :first-child { grid-row: 1; }
-    .icons li { grid-template-columns: minmax(0, 1fr) auto; }
-    .yaml { grid-column: 1 / -1; grid-row: 2; }
-    .copy { min-height: 44px; }
+    .icons li { grid-template-columns: minmax(0, 1fr); gap: 8px; }
   }
 </style>

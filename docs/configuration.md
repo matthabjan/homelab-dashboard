@@ -20,7 +20,7 @@ config/
 - **Problems:** files with errors, skipped entries, secrets that aren't set (by name), heartbeats without a token, a `docker` widget on a socket path.
 - **Widgets:** each widget's type (linked to its documentation), the scheme, host and port of its `url`, a few harmless options such as `node` or `env`, whether its last poll worked, when it last succeeded, and whether it came from `services.yaml` or from container labels.
 - **Checks:** each service's check (HTTP, TCP, container state or heartbeat), its target, interval and current state.
-- **Automatic icons:** the icon picked for each service without `icon`, with a *Copy YAML* button to make it permanent.
+- **Automatic icons:** the icon picked for each service without `icon`, as the `icon:` / `iconDark:` lines you would write to keep it.
 - **Settings:** every effective setting.
 
 It never shows usernames, passwords, keys, tokens, headers, request bodies, URL paths or queries, or label values beyond group and name: what it shows is chosen field by field, so a new kind of secret can't slip through.
@@ -254,7 +254,7 @@ A service without `icon` (in `services.yaml` or as the `dashboard.icon` label) g
 - **Matching**, in this order: the service name (`AdGuard Home` → `adguard-home`); for a [labelled container](#services-from-container-labels), its image (`ghcr.io/immich-app/immich-server` → `immich-server`, then `immich`); the widget type (`proxmoxbackupserver` → `proxmox-backup-server`); last the name's leading words (`OPNsense Firewall` → `opnsense`). Names match with or without hyphens (`MusicAssistant` finds `music-assistant`). selfh.st is checked first.
 - **Themes.** The icon itself is used in both themes. Where it would barely show against its background in one theme, such as a near-black icon (GitHub, LLDAP) in dark mode, its light or dark variant replaces it there. An `iconDark` you set yourself wins.
 - **Updates.** Both indexes are downloaded from jsDelivr once a day and kept in the database. Without jsDelivr, services without `icon` show a monogram, and it retries an hour later.
-- **A wrong match** is fixed by setting `icon`. **Config & status** lists every automatic icon with a *Copy YAML* button.
+- **A wrong match** is fixed by setting `icon`. **Config & status** lists every automatic icon.
 
 Local files can be `png`, `svg`, `webp`, `jpg`, `jpeg`, `gif` or `ico`. Local SVGs are served with a restrictive Content-Security-Policy, so scripts inside them don't run.
 
