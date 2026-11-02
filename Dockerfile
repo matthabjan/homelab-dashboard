@@ -12,16 +12,20 @@ RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
 COPY . .
 RUN npm run build
 
-# ---- production dependencies, installed for the target platform ----
-# so that a native module would get its binary for that platform, not the build machine's
-FROM ${NODE_IMAGE} AS deps
+# ---- production dependencies and runtime files ----
+# Also on the build machine's platform: the runtime dependencies are plain JS (yaml, undici), and the runtime
+# stage below has no RUN step, so no target platform is emulated and CI needs no QEMU. A dependency with a
+# native binary would need this stage on the target platform again (FROM ${NODE_IMAGE}, without --platform).
+FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev --no-audit --no-fund
+# zone data is the same on every platform; /data is created here so it can be copied with its owner
+RUN apk add --no-cache tzdata && mkdir /data
 
 # ---- runtime ----
 FROM ${NODE_IMAGE}
-RUN apk add --no-cache tzdata
+COPY --from=deps /usr/share/zoneinfo /usr/share/zoneinfo
 ENV NODE_ENV=production \
     PORT=3000 \
     CONFIG_DIR=/config \
@@ -36,7 +40,7 @@ COPY package.json ./
 # the full demo config is what DEMO=1 shows (DEMO_CONFIG_DIR)
 COPY config.starter /config
 COPY config.example /app/config.example
-RUN mkdir -p /data && chown -R node:node /data
+COPY --from=deps --chown=node:node /data /data
 USER node
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s CMD wget -qO- http://127.0.0.1:3000/api/health >/dev/null || exit 1
