@@ -37,7 +37,7 @@
     ...services.map((s): Item => ({ kind: 'service', id: s.id, name: s.name, sub: s.host || s.group, href: s.href, icon: s.icon, iconDark: s.iconDark, level: s.level, hay: `${s.name} ${s.host} ${s.group} ${s.description}`.toLowerCase() })),
     ...bookmarks.map((b): Item => ({ kind: 'link', id: `bm-${b.group}-${b.name}`, name: b.name, sub: b.group, href: b.href, icon: b.icon, iconDark: b.iconDark, level: null, hay: `${b.name} ${b.group} ${b.href}`.toLowerCase() })),
     // this dashboard's own pages
-    { kind: 'page', id: 'page-config', name: 'Config & status', sub: 'problems, widgets, checks', href: '/config', icon: null, iconDark: null, level: null, hay: 'config status settings problems widgets checks secrets icons' }
+    { kind: 'page', id: 'page-config', name: 'Setup', sub: 'config problems, services, widgets, settings', href: '/config', icon: null, iconDark: null, level: null, hay: 'setup config configuration settings problems widgets checks secrets icons' }
   ]);
 
   function score(hay: string, name: string, query: string) {

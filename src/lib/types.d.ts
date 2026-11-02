@@ -271,6 +271,8 @@ export interface WidgetEvent {
   sev: Severity | 'ok';
   title: string;
   detail?: string;
+  /** when it happened, if not at this poll (ms) */
+  ts?: number;
 }
 
 export interface Stat {
@@ -291,6 +293,8 @@ export interface UsageRow {
   /** null when the total is 0 (size unknown) */
   pct: number | null;
   offline?: false;
+  /** the metric its fill is recorded under, for the 24 h trend */
+  metric?: string;
 }
 
 export interface OfflineRow {
@@ -300,6 +304,7 @@ export interface OfflineRow {
   offline: true;
   /** how full it was when last seen, drawn as a grey bar */
   pct?: number | null;
+  metric?: string;
 }
 
 /** The machine shown as "host": the Proxmox node, or the one the dashboard runs on (local.ts, no guests). */
@@ -311,7 +316,8 @@ export interface HostVitals {
   mem: number;
   maxmem: number;
   memPct: number;
-  disk: { name: string; pct: number | null; sub: string };
+  /** `metric`: where its fill is recorded; unset for the local host, whose disk the engine records as host.disk */
+  disk: { name: string; pct: number | null; sub: string; metric?: string };
   uptime: string | null;
   guestsRunning: number | null;
   guestsTotal: number | null;
@@ -361,6 +367,8 @@ export interface Traffic {
   seriesDown: (number | null)[] | null;
   seriesUp: (number | null)[] | null;
   spanH: number | null;
+  /** where the series start (ms); they end at the snapshot's time */
+  from: number | null;
 }
 
 export interface DnsStats {
@@ -371,12 +379,34 @@ export interface DnsStats {
   series: number[] | null;
   /** what the counts cover, e.g. "24 h" (AdGuard's statistics interval) */
   period: string | null;
+  /** % blocked per point of `series`, and how long a point is (ms); null when the server doesn't report them */
+  blockedSeries?: number[] | null;
+  stepMs?: number | null;
 }
 
 export interface BackupStatus {
   overdue: number;
   oldestAge: number | null;
   known: boolean;
+  /** PBS: guests judged, the newest backup (ms), the datastores read */
+  guests?: number;
+  last?: number | null;
+  stores?: string[];
+}
+
+/** What a sheet shows: one level of the sheet stack (the page keeps it in history state). */
+export type SheetRef = { kind: 'service'; id: string } | { kind: 'infra'; tab: 'system' | 'storage' | 'drives' | 'network' } | { kind: 'backups' } | { kind: 'activity' };
+
+/** One PBS server's guest backups, as a row among the jobs in the Backups sheet. */
+export interface GuestBackups {
+  /** the PBS service */
+  id: string;
+  name: string;
+  stores: string[];
+  guests: number;
+  /** newest backup (ms) */
+  last: number | null;
+  overdue: number;
 }
 
 export interface ContainerCounts {
@@ -535,11 +565,21 @@ export interface ConfigView {
     kind: CheckKind;
     target: string;
     interval: string;
-    state: string;
-    level: Level | 'unknown';
   }[];
   icons: { id: string; name: string; group: string; yaml: string; icon: string; iconDark: string | null }[];
-  settings: KeyValue[];
+  /** every service once, in dashboard order: the page joins widgets, checks and icons on it */
+  services: {
+    id: string;
+    name: string;
+    group: string;
+    /** services.yaml, or the container labels a widget discovered */
+    source: string;
+    /** the icon the dashboard shows (automatic or configured) */
+    icon: string | null;
+    iconDark: string | null;
+  }[];
+  /** every setting with its effective value; `changed` when it differs from the default */
+  settings: (KeyValue & { changed: boolean })[];
 }
 
 // ---------- snapshot: the JSON the browser renders ----------
@@ -604,6 +644,30 @@ export interface Tile {
   beats: (Level | 'none')[] | null;
 }
 
+/** A heartbeat service as the dashboard sees it: when it last ran and when the next run is due. */
+export interface Job {
+  id: string;
+  name: string;
+  group: string;
+  href: string | null;
+  description: string;
+  every: number;
+  grace: number;
+  lastOk: number | null;
+  lastFail: number | null;
+  /** when the next run is expected; overdue after `due + grace` */
+  due: number;
+  state: 'up' | 'down' | 'pending';
+  failed: boolean;
+  backup: boolean;
+}
+
+/** A metric's recent history: equal buckets from `from` to the snapshot's time, null where nothing was recorded. */
+export interface Trend {
+  values: (number | null)[];
+  from: number;
+}
+
 export interface Gauge {
   key: string;
   label: string;
@@ -612,8 +676,12 @@ export interface Gauge {
   pct: number | null;
   level: Level | 'none';
   sub: string | null;
+  /** 24 h history in equal buckets from `from` to the snapshot's time; null without two samples yet */
   series: (number | null)[] | null;
+  from?: number;
   max?: number | null;
+  /** where it turns amber, drawn as a line on the chart */
+  warn?: number | null;
 }
 
 export interface Snapshot {
@@ -628,7 +696,18 @@ export interface Snapshot {
   deepLink: Settings['deepLink'];
   logo: string | null;
   staleAfter: number;
-  verdict: { level: Level; tag: string; title: string; sub: string };
+  /** the hero: the state in one sentence; while something needs attention, its top item and how to get to it */
+  verdict: { level: Level; tag: string; title: string; sub: string; action: { label: string; href: string } | null };
+  /** when the newest event happened, for "last change 2 h ago" */
+  lastChange: number | null;
+  /** recent events (went down, recovered, backups completed …), newest first, whatever needs attention */
+  events: FeedItem[];
+  /** heartbeat services: jobs that report when they ran, with their schedule */
+  jobs: Job[];
+  /** guest backups per PBS server, shown with the jobs */
+  guestBackups: GuestBackups[];
+  /** PBS backups and backup heartbeats together; null when there are none */
+  backups: BackupStatus | null;
   facts: Fact[];
   attention: AttentionItem[];
   needCount: number;
@@ -640,8 +719,8 @@ export interface Snapshot {
   /** `name` is the Proxmox node; `facts` are labelled pairs shown beside it (uptime, guests) */
   host: { name: string; href: string | null; facts: { label: string; value: string }[]; gauges: Gauge[] } | null;
   /** `off` rows (unavailable, detached, size unknown) draw `pct` as a grey bar: the last known fill, or empty */
-  storage: { name: string; pct: number | null; level: Level | 'off'; sub: string }[];
-  /** the vitals card's Drives panel; empty when no widget reports drives */
+  storage: { name: string; pct: number | null; level: Level | 'off'; sub: string; trend: Trend | null }[];
+  /** the infrastructure sheet's Drives panel; empty when no widget reports drives */
   drives: {
     name: string;
     meta: string;

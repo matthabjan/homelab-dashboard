@@ -20,15 +20,19 @@ Terms used in the code and in design discussions.
 
 **Scenario** — which story the fixtures tell: `issues` (default; things to look at) or `calm` (all fine). Set with `DEMO_SCENARIO`.
 
-**Snapshot** — the one JSON document the page renders: tiles, attention, verdict, vitals card panels, fleet strip. Built from engine state and history by the snapshot module (`createSnapshot` in `snapshot.ts`) and pushed over SSE on every change.
+**Snapshot** — the one JSON document the page renders: tiles, attention, verdict, infrastructure panels, jobs, recent events, fleet strip. Built from engine state and history by the snapshot module (`createSnapshot` in `snapshot.ts`) and pushed over SSE on every change.
 
-**Attention** — the list of alerts that need looking at, most severe first. Checks, widgets, the vitals panels and the config raise them, each with a key that is unique within its service (or source, such as `host` or `config`); the attention module (`attention.ts`) names each after its service, keeps the time it first appeared by that key, and gives each tile its worst alert: a tile is as bad as what is raised for it.
+**Attention** — the list of alerts that need looking at, most severe first. Checks, widgets, the infrastructure panels and the config raise them, each with a key that is unique within its service (or source, such as `host` or `config`); the attention module (`attention.ts`) names each after its service, keeps the time it first appeared by that key, and gives each tile its worst alert: a tile is as bad as what is raised for it.
 
 **Feed** — what the attention section lists: the attention list while anything needs attention, else every alert and the last day's events, newest first, without an event that repeats what an alert or a newer event says. Built on the server.
 
 **Verdict** — the headline of the status card: "All systems normal", or the top attention item and how many need attention.
 
-**Vitals card** — the card under the status overview with four panels behind tabs: System (the host's gauges), Storage, Drives and Network. A tab is marked with the worst level in its panel; only panels with data get a tab.
+**Infrastructure** — the summary cards under the status overview (System, Storage, Drives, Network), one figure each, followed by Backups; a card opens the Infrastructure sheet with the full panels behind tabs: System (the host's gauges), Storage, Drives and Network, one tab per card. A tab is marked with the worst level in its panel; only panels with data get a tab.
+
+**Sheet** — a panel over the page with the details of one thing (a service with its own activity, infrastructure, backups, activity): a side panel on desktop, a bottom sheet on phones that a pull down from its top closes (the close button stays as the tap alternative). Sheets stack: one opened from inside another (Backups → a job) is a level deeper, with a back button; each level is a history entry, so back (browser, Android, Esc) goes up one level, and closing closes all. The page itself stays short.
+
+**Job** — a heartbeat service: something that reports when it ran (a backup, a sync, a verify) rather than being opened. Jobs are counted apart from services, listed in the Backups sheet and the Status view, never in the launcher.
 
 **Local host** — the machine the dashboard runs on, shown in the System panel when there is no Proxmox widget (`host.source`). Its vitals come from `/proc` and `statfs` (`local.ts`); in Docker that is the host, under lxcfs the container.
 
@@ -36,10 +40,10 @@ Terms used in the code and in design discussions.
 
 **Check** — how a service's up/down is found: an HTTP or TCP probe (`siteMonitor`), a container's state (label discovery), or a heartbeat. A service has at most one. `check.ts` turns each reading into the service's check state (a probe is down after two failures in a row, the others at once), a probe history row and the *went down* / *recovered* events, and gives the tile's status from it.
 
-**Config view** — the read-only page `/config` (Config & status): problems, widgets, checks, automatic icons and settings, built by `config-view.ts` from an allowlist so no secret can appear in it.
+**Config view** — the read-only page `/config` (Setup): whether the configuration is right (problems, each service's check, widget connection and icon, settings), not how services are doing; built by `config-view.ts` from an allowlist so no secret can appear in it.
 
 **Storage row** — one line in the Storage panel: usage (`used`, `total`, `pct`, `sub`) or `offline` (an unavailable PVE storage, a detached removable datastore).
 
-**Drive** — a physical disk in the vitals card's Drives panel, with what SMART says about it (health, life left, temperature, power-on time, data written). Reported by PVE (host disks), OMV and PBS (disks passed into their VMs); virtual disks are skipped. Not the same as a storage row: a storage is a filesystem or pool, a drive is hardware.
+**Drive** — a physical disk in the infrastructure Drives panel, with what SMART says about it (health, life left, temperature, power-on time, data written). Reported by PVE (host disks), OMV and PBS (disks passed into their VMs); virtual disks are skipped. Not the same as a storage row: a storage is a filesystem or pool, a drive is hardware.
 
 **Removable datastore** — a PBS datastore on a disk that is plugged in now and then (offsite copy). Detached is normal; it only alerts after `offsiteMaxDetachedDays`.

@@ -1,8 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { Level, Snapshot, Traffic } from '$lib/types';
+  import type { Level, Snapshot, Traffic, Trend } from '$lib/types';
   import Gauge from './Gauge.svelte';
   import Sparkline from './Sparkline.svelte';
+  import Reading from './Reading.svelte';
 
   interface Props {
     host: Snapshot['host'];
@@ -10,8 +11,12 @@
     drives: Snapshot['drives'];
     network: Snapshot['network'];
     target: string;
+    /** when the snapshot was made: the right edge of every history */
+    now: number;
+    /** the panel to open with (a sheet opened from its card); without it, the one this browser last chose */
+    initial?: 'system' | 'storage' | 'drives' | 'network';
   }
-  let { host, storage, drives, network, target }: Props = $props();
+  let { host, storage, drives, network, target, now, initial }: Props = $props();
 
   /** a tab of the card: its panel id, its name and the dot it shows */
   interface Panel {
@@ -24,9 +29,6 @@
   /** the worst problem among the levels, for the dot on a tab: a hidden panel must not hide one */
   const worst = (levels: string[]): Level | null => (levels.includes('crit') ? 'crit' : levels.includes('warn') ? 'warn' : null);
   const count = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
-  /** whether the reading has a chart (two points or more); a guard, so the chart can read its series */
-  const charted = (t: Traffic | null | undefined): t is Traffic & { seriesDown: (number | null)[] } =>
-    (t?.seriesDown ?? []).filter((v) => v != null).length > 1;
 
   const panels = $derived.by(() => {
     const list: Panel[] = [];
@@ -42,23 +44,25 @@
       list.push({ id: 'drives', name: 'Drives', level: worst(drives.flatMap((d) => [d.level, d.lifeLevel])), meta: count(drives.length, 'drive') + (smart ? ` · ${smart}` : '') });
     }
     if (network) {
-      const span = charted(network) ? network.spanH : charted(network.lan) ? network.lan?.spanH : null;
-      list.push({ id: 'network', name: 'Network', level: null, meta: span ? `Last ${span} h` : '' });
+      // each tile's axis says how far back it goes
+      list.push({ id: 'network', name: 'Network', level: null });
     }
     return list;
   });
 
   // which panel is open. Remembered per browser as a convenience, so storage errors are ignored
-  let picked = $state<string>('system');
+  // svelte-ignore state_referenced_locally — the panel it opens with; the tabs change it from there
+  let picked = $state<string>(initial ?? 'system');
   onMount(() => {
-    try { picked = localStorage.getItem('vitalsView') ?? picked; } catch {}
+    if (initial) return;
+    try { picked = localStorage.getItem('infraView') ?? picked; } catch {}
   });
   // the remembered panel may have no data (any more): fall back to the first one
   const view = $derived(panels.some((p) => p.id === picked) ? picked : panels[0]?.id);
   const active = $derived(panels.find((p) => p.id === view));
   function show(id: string) {
     picked = id;
-    try { localStorage.setItem('vitalsView', id); } catch {}
+    try { localStorage.setItem('infraView', id); } catch {}
   }
   // arrow keys move between the tabs and wrap around, Home and End jump to the ends (roving tabindex)
   function tabKey(e: KeyboardEvent) {
@@ -73,32 +77,33 @@
   }
   const tabbed = $derived(panels.length > 1);
 
+  /** How a trend moved: first and last reading, and the change, e.g. "24 h: 61% → 62% (+1.2)". */
+  function moved(t: Trend | null, unit: string): { text: string; delta: number } | null {
+    const vs = t?.values.filter((v): v is number => v != null) ?? [];
+    if (!t || vs.length < 2) return null;
+    const a = vs[0], b = vs[vs.length - 1], h = Math.max(1, Math.round((now - t.from) / 3_600_000));
+    const d = b - a;
+    return { delta: d, text: `${h} h: ${a.toFixed(1)}${unit} → ${b.toFixed(1)}${unit} (${d >= 0 ? '+' : '−'}${Math.abs(d).toFixed(1)})` };
+  }
   const fmtRate = (v: number | null) => (v == null ? '—' : v >= 100 ? Math.round(v) : v.toFixed(1));
   const fmtNum = (n: number | null) => (n == null ? '—' : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(n >= 1e4 ? 0 : 1) + 'k' : String(n));
 </script>
 
-{#snippet traffic(t: Traffic, what: string, downWord: string, upWord: string)}
-  <!-- one traffic reading: where it comes from, the current rates, then the recent chart -->
-  <div class="cell">
-    <div class="net-row">
-      <span class="net-src"><span class="net-what">{what}</span><span class="muted">{t.source}</span></span>
-      <span class="net-vals mono"><span style:color="var(--acc)">{fmtRate(t.down)}</span> <span class="muted">{downWord}</span> <span style:color="var(--acc-2)">{fmtRate(t.up)}</span> <span class="muted">{upWord} Mbit/s</span></span>
-    </div>
-    <!-- a fresh metric has fewer than two points: no chart, so no blank space either -->
-    {#if charted(t)}
-      {@const down = t.seriesDown.filter((v): v is number => v != null)}
-      <div class="netchart">
-        <div class="layer"><Sparkline values={t.seriesDown} color="var(--acc)" area height={40} min={0} label="{what} {downWord}, last {t.spanH ?? 24} hours" /></div>
-        <div class="layer"><Sparkline values={t.seriesUp} color="var(--acc-2)" height={40} min={0} max={Math.max(1, ...down) * 1.1} /></div>
-      </div>
-    {/if}
-  </div>
+{#snippet traffic(t: Traffic, what: string)}
+  <!-- one traffic reading as a tile: download filled, upload as a second line, both in Mbit/s -->
+  <Reading
+    label={what} source={t.source} href={t.href} {target} {now}
+    current={{ a: `↓${fmtRate(t.down)}`, b: `↑${fmtRate(t.up)}`, unit: 'Mbit/s' }}
+    values={t.seriesDown} values2={t.seriesUp} from={t.from}
+    at={(v, v2) => ({ a: `↓${fmtRate(v)}`, b: `↑${fmtRate(v2)}`, unit: 'Mbit/s' })}
+    format={(v) => `${fmtRate(v)} Mbit/s down`}
+  />
 {/snippet}
 
-<div class="card vitals-card">
+<div class="card infra-card">
   <div class="head">
     {#if tabbed}
-      <div class="tabs" role="tablist" aria-label="Vitals" style:--n={panels.length}>
+      <div class="tabs" role="tablist" aria-label="Infrastructure" style:--n={panels.length}>
         {#each panels as p (p.id)}
           <button role="tab" id="vt-{p.id}" aria-selected={view === p.id} aria-controls="vp-{p.id}" tabindex={view === p.id ? 0 : -1} onclick={() => show(p.id)} onkeydown={tabKey}>
             {p.name}{#if p.level}<span class="dot lv-{p.level}" aria-hidden="true"></span><span class="vh">, {p.level === 'crit' ? 'critical' : 'warning'}</span>{/if}
@@ -106,7 +111,7 @@
         {/each}
       </div>
     {:else if active}
-      <!-- one panel: no tabs, just its name (the section header above says "Vitals") -->
+      <!-- one panel: no tabs, just its name (the sheet title says "Infrastructure") -->
       <span class="solo">{active.name}</span>
     {/if}
     <!-- what the open panel shows; System labels each value -->
@@ -126,14 +131,20 @@
       <div class="panel {p.id}" class:off={view !== p.id} id="vp-{p.id}" role={tabbed ? 'tabpanel' : undefined} aria-labelledby={tabbed ? `vt-${p.id}` : undefined}>
         {#if p.id === 'system' && host}
           <div class="gauges">
-            {#each host.gauges as g (g.key)}<Gauge {g} />{/each}
+            {#each host.gauges as g (g.key)}<Gauge {g} {now} />{/each}
           </div>
         {:else if p.id === 'storage'}
           <div class="rows">
             {#each storage as s}
-              <!-- an off row (unavailable, detached) is grey: its reason in the sub column, the bar at the last known fill -->
-              <div class="bar lv-{s.level}" title="{s.name} · {s.sub}">
-                <div class="bar-head"><span class="name">{s.name}</span><span class="mono muted sub">{s.sub}</span><span class="mono pct">{s.pct != null ? `${Math.round(s.pct)}%` : '—'}</span></div>
+              {@const m = moved(s.trend, '%')}
+              <!-- an off row (unavailable, detached) is grey: its reason in the sub column, the bar at the last known fill;
+                   the trend beside the figure shows how it filled over the day (a flat line is the usual answer) -->
+              <div class="bar lv-{s.level}" title="{s.name} · {s.sub}{m ? ` · ${m.text}` : ''}">
+                <div class="bar-head">
+                  <span class="name">{s.name}</span><span class="mono muted sub">{s.sub}</span>
+                  {#if s.trend && m}<span class="trend" role="img" aria-label="{s.name}, {m.text}"><Sparkline values={s.trend.values} min={null} minSpan={4} color="var(--fill)" area height={16} /></span>{/if}
+                  <span class="mono pct">{s.pct != null ? `${Math.round(s.pct)}%` : '—'}</span>
+                </div>
                 <div class="track"><div class="fill" style:width="{Math.min(100, s.pct ?? 0)}%"></div></div>
               </div>
             {/each}
@@ -159,13 +170,19 @@
           </div>
         {:else if p.id === 'network' && network}
           <div class="net">
-            {#if network.source}{@render traffic(network, 'WAN', 'down', 'up')}{/if}
-            {#if network.lan}{@render traffic(network.lan, 'LAN', 'in', 'out')}{/if}
+            {#if network.source}{@render traffic(network, 'WAN')}{/if}
+            {#if network.lan}{@render traffic(network.lan, 'LAN')}{/if}
             {#if network.dns}
-              <a class="cell net-row dns" href={network.dns.href} target={target} rel="noopener">
-                <span class="net-src"><span class="net-what">DNS</span><span class="muted">{network.dns.name}{network.dns.period ? ` · ${network.dns.period}` : ''}</span></span>
-                <span class="net-vals mono">{fmtNum(network.dns.queries)} <span class="muted">queries</span> {network.dns.blockedPct.toFixed(1)}% <span class="muted">blocked</span></span>
-              </a>
+              {@const d = network.dns}
+              <!-- DNS: the share blocked, over the server's statistics interval when it reports one per hour (AdGuard) -->
+              <Reading
+                label="DNS" source={d.name} href={d.href} {target} {now}
+                current={{ a: `${d.blockedPct.toFixed(1)}%`, unit: 'blocked' }}
+                detail="{fmtNum(d.queries)} queries{d.period ? ` · ${d.period}` : ''}"
+                values={d.blockedSeries} from={d.blockedSeries && d.stepMs ? now - d.blockedSeries.length * d.stepMs : null}
+                at={(v) => ({ a: `${v.toFixed(1)}%`, unit: 'blocked' })}
+                format={(v) => `${v.toFixed(1)}% blocked`} min={null} minSpan={10}
+              />
             {/if}
           </div>
         {/if}
@@ -176,7 +193,7 @@
 
 <style>
   /* panels lay out by the card's width, not the viewport's, so they look the same wherever the card is */
-  .vitals-card { container: vitals / inline-size; padding: 22px; display: flex; flex-direction: column; gap: 16px; }
+  .infra-card { container: infra / inline-size; padding: 22px; display: flex; flex-direction: column; gap: 16px; }
   .solo { font-size: 14px; font-weight: 600; }
   .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
@@ -210,7 +227,7 @@
   .panel.off { visibility: hidden; }
 
   /* system: one slot per gauge kind, so a missing one leaves the others their usual size */
-  .gauges { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+  .gauges { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr)); gap: 12px; }
 
   /* storage and drives: rows flow into as many columns as fit */
   .rows { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 12px 32px; align-content: start; }
@@ -222,6 +239,9 @@
   .bar-head .name { flex: 0 1 auto; max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .bar-head .sub { flex: 1 1 auto; min-width: 0; text-align: right; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .pct { flex: none; font-size: 14px; font-weight: 500; }
+  /* a small trend beside the figure: shape only, the numbers are in its tooltip and label */
+  .trend { flex: none; width: 56px; align-self: center; }
+  .bar.lv-off .trend { opacity: 0.5; }
   .bar.lv-warn .pct, .bar.lv-crit .pct { color: var(--lv); }
   .bar.lv-off { --fill: color-mix(in srgb, var(--muted) 50%, transparent); }
   .bar.lv-off .name, .bar.lv-off .pct { color: var(--muted); }
@@ -241,41 +261,18 @@
   .track { height: 6px; border-radius: 4px; background: var(--track); overflow: hidden; }
   .fill { height: 100%; border-radius: 4px; background: var(--fill); transition: width 0.6s cubic-bezier(0.2, 0.8, 0.2, 1); }
 
-  /* network: WAN, LAN and DNS stacked with a rule between them; side by side once the card is wide */
-  .net { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px 24px; }
-  .net > .cell + .cell { padding-top: 14px; border-top: 1px solid var(--track); }
-  .cell { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-  /* always two lines (where it comes from, then the values): one line only fits the shorter sources, so blocks would differ */
-  .net-row { display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
-  .net-src { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
-  .net-src .muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .net-what { font-weight: 600; }
-  .net-vals { white-space: nowrap; }
-  .net-vals > :not(.muted) { font-size: 15px; font-weight: 500; }
-  .netchart { position: relative; height: 40px; }
-  .layer { position: absolute; inset: 0; }
-  .dns { color: inherit; text-decoration: none; gap: 2px; }
+  /* network: WAN, LAN and DNS as tiles like System's, stacked in the sheet, side by side when the card is wide */
+  .net { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: 12px; }
 
-  @container vitals (min-width: 520px) {
-    /* WAN and LAN side by side, DNS across below them */
-    .net:has(> .cell:nth-child(2)) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .net > .cell:nth-child(2) { padding-top: 0; border-top: 0; padding-left: 24px; border-left: 1px solid var(--track); }
-    .net > .cell:nth-child(3) { grid-column: 1 / -1; }
-  }
-  @container vitals (min-width: 880px) {
-    .net:has(> .cell:nth-child(3)) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-    .net > .cell:nth-child(3) { grid-column: auto; padding-top: 0; border-top: 0; padding-left: 24px; border-left: 1px solid var(--track); }
-  }
-  @container vitals (max-width: 519.98px) {
+  @container infra (max-width: 519.98px) {
     /* phones: four equal segments across the card */
     .tabs { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); flex: 1 1 100%; }
     .tabs button { padding: 8px 2px; gap: 4px; }
-    .gauges { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   }
   /* the smallest phones: a label and its dot must still fit a quarter of the card */
-  @container vitals (max-width: 299.98px) { .tabs button { font-size: 13px; padding-inline: 0; gap: 3px; } }
+  @container infra (max-width: 299.98px) { .tabs button { font-size: 13px; padding-inline: 0; gap: 3px; } }
   @media (max-width: 760px) {
-    .vitals-card { padding: 16px; border-radius: 22px; gap: 14px; }
+    .infra-card { padding: 16px; border-radius: 22px; gap: 14px; }
     /* phones: each panel only as tall as it needs */
     .panel.off { display: none; }
   }

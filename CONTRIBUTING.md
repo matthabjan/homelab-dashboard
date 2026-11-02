@@ -55,7 +55,7 @@ src/
 ## Adding an integration
 
 1. **Fixture first.** Create `src/lib/server/demo/<type>.ts`, which maps `"METHOD /path"` routes to functions of `{ now, scenario, params, headers, body }` (`satisfies Fixtures`). Return realistic API responses, typed with the integration's response interfaces, using generic names only. Cover both scenarios: `issues` should trigger the alerts, and `calm` should be healthy. Register it in `demo/index.ts`.
-2. **Integration.** Create `src/lib/server/integrations/<type>.ts` with an exported interface for each API response it reads, and export `async collect(widget, ctx)` returning `{ stats, line, alerts }` (each alert with a `key` unique within the result, so its age survives a title that carries a reading), plus any of `storage`, `network`, `dns`, `backups`, `containers`, `events`. Build `stats` and `line` together with `card()` (`format.ts`) from facts, each a stat and the same as text, so the service card and the Most used card agree. Use only `ctx.getJson` / `ctx.request` for HTTP, passing `insecure: ctx.insecure`, and `ctx.metric`, `ctx.state`, `ctx.kv` for memory. Register it in `integrations/index.ts`.
+2. **Integration.** Create `src/lib/server/integrations/<type>.ts` with an exported interface for each API response it reads, and export `async collect(widget, ctx)` returning `{ stats, line, alerts }` (each alert with a `key` unique within the result, so its age survives a title that carries a reading), plus any of `storage`, `network`, `dns`, `backups`, `containers`, `events`. Build `stats` and `line` together with `card()` (`format.ts`) from facts, each a stat and the same as text, so the service's status line and its sheet agree. Use only `ctx.getJson` / `ctx.request` for HTTP, passing `insecure: ctx.insecure`, and `ctx.metric`, `ctx.state`, `ctx.kv` for memory. Register it in `integrations/index.ts`.
 3. **Test.** Add a widget block to `WIDGETS` in `integrations.test.ts`. The test fails until fixtures, integrations and widgets all list the same types.
 4. **Example and docs.** Add the service to `config.example/services.yaml`, and a section to [docs/integrations.md](docs/integrations.md) covering the least-privilege account, the options and the alerts.
 
@@ -67,7 +67,7 @@ Guidelines: match gethomepage's widget fields where an equivalent exists. Never 
 - `npm run check` and `npm test` must pass. CI runs them, then builds the image and smoke-tests it in demo mode.
 - Update the docs when behaviour or configuration changes.
 - Screenshots help for UI changes. Take them in demo mode, never from a real setup.
-- The README screenshots are in `docs/screenshots/`. When the UI changes visibly, retake them in demo mode: desktop at 1440×1080, phones at 390×844 with 2× pixel density (`issues` scenario in dark mode, `calm` in light mode).
+- The README screenshots are in `docs/screenshots/`. When the UI changes visibly, retake them in demo mode: desktop at 1440×1080, phones at 390×844 with 2× pixel density, side by side in `phones.png` (`issues` scenario in dark mode, `calm` in light mode with the Backups sheet open).
 
 ## Releases (maintainers)
 

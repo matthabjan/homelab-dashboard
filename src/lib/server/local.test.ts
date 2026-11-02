@@ -82,7 +82,7 @@ test('the System panel shows local vitals without a Guests fact', async () => {
   assert.equal(snap.host?.name, 'this host');
   assert.equal(snap.host?.href, null);
   assert.deepEqual(snap.host?.facts, [{ label: 'Uptime', value: '26 h' }]);
-  assert.deepEqual(snap.host?.gauges.map((g) => [g.key, g.val]), [['cpu', 10], ['mem', '11.7'], ['disk', Math.round((local?.disk.pct as number))]]);
+  assert.deepEqual(snap.host?.gauges.map((g) => [g.key, g.val]), [['cpu', 10], ['mem', Math.round(local?.memPct as number)], ['disk', Math.round((local?.disk.pct as number))]]);
 });
 
 test('a nearly full local disk raises the storage warning', async () => {
@@ -102,7 +102,7 @@ test('a widget alert names its service in the attention list and headline, not o
     { name: 'Pi-hole', state: { widget: widget('Pi-hole is not filtering') } }
   ] }));
   assert.deepEqual(snap.attention.map((a) => a.title).sort(), ['Media server: Health is Degraded', 'Pi-hole is not filtering']);
-  assert.match(snap.verdict.title, /^(Media server: Health is Degraded|Pi-hole is not filtering)\.$/);
+  assert.match(snap.verdict.title, /^(Media server: Health is Degraded|Pi-hole is not filtering)$/);
   const tile = snap.groups[0].services.find((t) => t.name === 'Media server');
   assert.equal(tile?.line, 'Health is Degraded · critical when below 1');
 });

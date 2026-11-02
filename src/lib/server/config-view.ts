@@ -58,18 +58,23 @@ export function settingsList(settings: object | null | undefined, defaults: obje
     : [{ k: prefix + k, v: text(cur[k] === undefined ? d : cur[k]) }]));
 }
 
+/** Where a service is defined: services.yaml, or the container labels a widget discovered. */
+function sources(engine: ConfigViewInput) {
+  const { services } = engine.cfg;
+  const finder = new Map([...engine.discoveredBy].flatMap(([sid, list]) => list.map((d) => [`${d.group}\0${d.name}`, sid])));
+  return (s: Service) => {
+    if (!s.container) return 'services.yaml';
+    const by = services.find((x) => x.id === finder.get(`${s.group}\0${s.name}`));
+    return by ? `labels via ${by.name}` : 'container labels';
+  };
+}
+
 /**
  * One row per widget: type, docs, URL origin, the safe options, and how its last poll went.
  */
 function widgetRows(engine: ConfigViewInput): ConfigView['widgets'] {
   const { services } = engine.cfg;
-  // which widget discovered each label service, for its source
-  const finder = new Map([...engine.discoveredBy].flatMap(([sid, list]) => list.map((d) => [`${d.group}\0${d.name}`, sid])));
-  const sourceOf = (s: Service) => {
-    if (!s.container) return 'services.yaml';
-    const by = services.find((x) => x.id === finder.get(`${s.group}\0${s.name}`));
-    return by ? `labels via ${by.name}` : 'container labels';
-  };
+  const sourceOf = sources(engine);
   return services.filter((s) => s.widget?.type).map((s) => {
     const w = (s.widget as NonNullable<Service['widget']>);
     const st = engine.state(s.id).widget;
@@ -94,15 +99,13 @@ function widgetRows(engine: ConfigViewInput): ConfigView['widgets'] {
 }
 
 /**
- * One row per service with a check: its kind, target (origin only), interval and current state from the snapshot.
+ * One row per service with a check: its kind, target (origin only) and interval. How it is doing is the dashboard's.
  */
 function checkRows(engine: ConfigViewInput): ConfigView['checks'] {
   const iv = engine.cfg.settings.intervals;
-  const tiles: Map<string, Tile> = new Map((engine.snapshot?.groups ?? []).flatMap((g) => g.services.map((t) => [t.id, t])));
   return engine.cfg.services.flatMap((s) => {
     const kind = kindOf(s);
     if (!kind) return [];
-    const t = tiles.get(s.id);
     const hb = s.heartbeat;
     return [{
       id: s.id,
@@ -110,9 +113,7 @@ function checkRows(engine: ConfigViewInput): ConfigView['checks'] {
       group: s.group,
       kind,
       target: hb ? `/api/heartbeat/${hb.id}` : kind === 'container' ? 'container state' : originOf(s.probe) ?? '—',
-      interval: hb ? `every ${fmtDuration(hb.every)} + ${fmtDuration(hb.grace)} grace` : `every ${fmtDuration((kind === 'container' ? iv.widgets : iv.probe) * 1000)}`,
-      state: t?.status ?? 'Checking',
-      level: t?.level ?? 'unknown'
+      interval: hb ? `every ${fmtDuration(hb.every)} + ${fmtDuration(hb.grace)} grace` : `every ${fmtDuration((kind === 'container' ? iv.widgets : iv.probe) * 1000)}`
     }];
   });
 }
@@ -128,8 +129,19 @@ function iconRows(engine: ConfigViewInput): ConfigView['icons'] {
   });
 }
 
+/** Every service once, with where it came from and the icon its tile shows. */
+function serviceRows(engine: ConfigViewInput): ConfigView['services'] {
+  const tiles: Map<string, Tile> = new Map((engine.snapshot?.groups ?? []).flatMap((g) => g.services.map((t) => [t.id, t])));
+  const sourceOf = sources(engine);
+  return engine.cfg.groups.flatMap((g) => g.services.map((s) => {
+    const t = tiles.get(s.id);
+    return { id: s.id, name: s.name, group: g.name, source: sourceOf(s), icon: t?.icon ?? null, iconDark: t?.iconDark ?? null };
+  }));
+}
+
 export function buildConfigView(engine: ConfigViewInput): ConfigView {
   const { settings, problems } = engine.cfg;
+  const defaults = new Map(settingsList(DEFAULT_SETTINGS).map((d) => [d.k, d.v]));
   return {
     title: settings.title,
     demo: engine.cfg.demo,
@@ -138,6 +150,7 @@ export function buildConfigView(engine: ConfigViewInput): ConfigView {
     widgets: widgetRows(engine),
     checks: checkRows(engine),
     icons: iconRows(engine),
-    settings: settingsList(settings)
+    services: serviceRows(engine),
+    settings: settingsList(settings).map((s) => ({ ...s, changed: s.v !== defaults.get(s.k) }))
   };
 }

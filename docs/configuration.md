@@ -13,15 +13,14 @@ config/
 
 **Reloading.** Saving any `*.yaml` file reloads the config within a second, without a restart and keeping history. Files in `icons/` and `images/` are read on request (browsers cache them for up to 5 minutes).
 
-**Mistakes.** A file with a YAML syntax error or the wrong structure keeps its last version that loaded, and *Needs attention* shows `services.yaml has an error` with the line and reason (the full error is in the container log). A malformed group or entry is skipped and reported the same way; the rest of the file loads. Several problems in one file are one alert (`services.yaml has 3 problems`), listed on **Config & status**. Fixing the file clears the alert on save.
+**Mistakes.** A file with a YAML syntax error or the wrong structure keeps its last version that loaded, and *Needs attention* shows `services.yaml has an error` with the line and reason (the full error is in the container log). A malformed group or entry is skipped and reported the same way; the rest of the file loads. Several problems in one file are one alert (`services.yaml has 3 problems`), listed on **Setup**. Fixing the file clears the alert on save.
 
-**Checking what loaded.** **Config & status** (`/config`, from the sliders button in the header, the footer, the command palette or any config alert) shows what the dashboard made of your files, read-only:
+**Checking what loaded.** **Setup** (`/config`, from the sliders button in the header, the footer, the command palette or any config alert) shows whether your configuration is right, read-only. How the services are doing stays on the dashboard.
 
-- **Problems:** files with errors, skipped entries, secrets that aren't set (by name), heartbeats without a token, a `docker` widget on a socket path.
-- **Widgets:** each widget's type (linked to its documentation), the scheme, host and port of its `url`, a few harmless options such as `node` or `env`, whether its last poll worked, when it last succeeded, and whether it came from `services.yaml` or from container labels.
-- **Checks:** each service's check (HTTP, TCP, container state or heartbeat), its target, interval and current state.
-- **Automatic icons:** the icon picked for each service without `icon`, with a *Copy YAML* button to make it permanent.
-- **Settings:** every effective setting.
+- **Summary:** problems in the files, how many services loaded (from `services.yaml` and from labels), how many widgets connect, how many settings you changed; each links to its section.
+- **Problems:** files with errors, skipped entries, secrets that aren't set (by name), heartbeats without a token, a `docker` widget on a socket path. Only shown when there are any.
+- **Services:** every service once, grouped as on the dashboard: where it came from, its icon (marked *auto* when picked automatically), its check (kind, interval, target) and its widget (whether it connects and when it last did, the type linked to its documentation, the scheme, host and port of its `url`, a few harmless options such as `node` or `env`, and the error when it fails). *Needs a fix* shows only services whose widget fails or has an unknown type.
+- **Settings:** the values `settings.yaml` changes, and every effective setting under *All settings*.
 
 It never shows usernames, passwords, keys, tokens, headers, request bodies, URL paths or queries, or label values beyond group and name: what it shows is chosen field by field, so a new kind of secret can't slip through.
 
@@ -98,7 +97,7 @@ CPU usage is measured between two polls, so the CPU gauge shows `—` for the fi
 
 ### `mostUsed`
 
-The *Most used* row above the groups fills itself from how often you open each service from the dashboard or the command palette. Each open loses half its weight every `halfLifeDays`, so services you stopped using drop out over time.
+The *Most used* row, next to the overall state, fills itself from how often you open each service from the dashboard or the command palette. Each open loses half its weight every `halfLifeDays`, so services you stopped using drop out over time.
 
 | Key | Default | Description |
 |---|---|---|
@@ -191,7 +190,7 @@ For jobs that run on a schedule (backups, cron jobs, scripts), the job reports t
 | `every` | Expected time between runs: a number with `s`, `m`, `h`, `d` or `w`, or a number of seconds. |
 | `grace` | How long after `every` a run may arrive before it counts as missed. Default: 10% of `every`, at least 5 minutes. |
 | `token` | Required. The job sends it with each call. Generate one with `openssl rand -hex 24`. |
-| `backup` | `true` adds the job to the backup figures next to Proxmox Backup Server's: *oldest backup* and *backups overdue*. That covers restic, borg, Kopia or anything else that can call a URL. |
+| `backup` | `true` adds the job to the backup figures next to Proxmox Backup Server's (*oldest backup* and *backups overdue*), and its events to the Backups sheet's *Recent* list. That covers restic, borg, Kopia or anything else that can call a URL. |
 | `id` | The id in the URL. Default: the service id, made from the group and name. Each id may be used once. |
 
 The job calls `/api/heartbeat/<id>` (GET or POST) when it succeeded, and `/api/heartbeat/<id>/fail` when it failed. The token goes in `Authorization: Bearer <token>` or `?token=<token>`. The answer is `ok` (200). An unknown id and a wrong token both get 404, and more than one call per second for the same id gets 429.
@@ -254,7 +253,7 @@ A service without `icon` (in `services.yaml` or as the `dashboard.icon` label) g
 - **Matching**, in this order: the service name (`AdGuard Home` → `adguard-home`); for a [labelled container](#services-from-container-labels), its image (`ghcr.io/immich-app/immich-server` → `immich-server`, then `immich`); the widget type (`proxmoxbackupserver` → `proxmox-backup-server`); last the name's leading words (`OPNsense Firewall` → `opnsense`). Names match with or without hyphens (`MusicAssistant` finds `music-assistant`). selfh.st is checked first.
 - **Themes.** The icon itself is used in both themes. Where it would barely show against its background in one theme, such as a near-black icon (GitHub, LLDAP) in dark mode, its light or dark variant replaces it there. An `iconDark` you set yourself wins.
 - **Updates.** Both indexes are downloaded from jsDelivr once a day and kept in the database. Without jsDelivr, services without `icon` show a monogram, and it retries an hour later.
-- **A wrong match** is fixed by setting `icon`. **Config & status** lists every automatic icon with a *Copy YAML* button.
+- **A wrong match** is fixed by setting `icon`. **Setup** lists every automatic icon.
 
 Local files can be `png`, `svg`, `webp`, `jpg`, `jpeg`, `gif` or `ico`. Local SVGs are served with a restrictive Content-Security-Policy, so scripts inside them don't run.
 
@@ -298,7 +297,7 @@ labels:
 - `dashboard.group` and `dashboard.name` are required. Every other `dashboard.<key>` maps to the YAML key of the same name, and nested keys use dots (`dashboard.widget.type=adguard`). The values `true` and `false` become booleans.
 - `dashboard.weight` sets the order within the group (lowest first, then by name).
 - A labelled service joins the `services.yaml` group with the same name, or creates a new group at the end. If `services.yaml` already defines a service with the same group and name, that one is used and the label is ignored.
-- A labelled service **without** `siteMonitor` uses the container's state as its health, recorded on each widget poll like a probe (uptime, 24-hour strip): running is up, anything else (including unhealthy) is down. A finished one-shot job (exit code 0, restart policy `no` or `on-failure`) shows *Done* and counts as up. Any other stopped container raises a critical *is down* alert and logs *went down* / *recovered*; unhealthy raises a warning. There is no latency, so its *Most used* card shows the 7-day uptime instead of p95. While the widget's API is unreachable, nothing is recorded.
+- A labelled service **without** `siteMonitor` uses the container's state as its health, recorded on each widget poll like a probe (uptime, 24-hour strip): running is up, anything else (including unhealthy) is down. A finished one-shot job (exit code 0, restart policy `no` or `on-failure`) shows *Done* and counts as up. Any other stopped container raises a critical *is down* alert and logs *went down* / *recovered*; unhealthy raises a warning. There is no latency, so its sheet shows the 7-day uptime instead of p95. While the widget's API is unreachable, nothing is recorded.
 - Without `dashboard.icon`, an icon is [picked automatically](#automatic-icons) from the name and the image.
 - Label values are **used literally**. `${…}` placeholders are not filled in, so a container image can't extract your secrets. Define services whose widgets need credentials in `services.yaml`.
 - Add `dashboard.ignore=true` to a container to hide it from discovery and from the container counts.

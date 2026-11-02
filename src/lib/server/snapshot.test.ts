@@ -12,7 +12,7 @@ process.env.CONFIG_DIR = tmp;
 delete process.env.DEMO;
 const { createSnapshot } = await import('./snapshot.ts');
 const { snapshotInput } = await import('./test-helpers.ts');
-const { insertProbe } = await import('./db.ts');
+const { insertProbe, insertMetric } = await import('./db.ts');
 const { fmtClock } = await import('./format.ts');
 const { record } = await import('./check.ts');
 const { heartbeatState } = await import('./heartbeat.ts');
@@ -93,6 +93,24 @@ test('drives: a failing drive turns the reporting tile red, a past SMART problem
   assert.deepEqual([tile(snap, 'Old').level, tile(snap, 'Old').status, tile(snap, 'Old').line], ['crit', 'Down', `Down since ${fmtClock(now - MIN)} · Timed out`]);
 });
 
+test('trends: a storage row shows 24 h from its metric, once there are two samples', () => {
+  const now = day(14);
+  for (let i = 1; i <= 6; i++) {
+    insertMetric('storage.pve.tank', now - i * 60 * MIN, 50 + i);
+  }
+  insertMetric('storage.pve.fresh', now - MIN, 10);
+  const nas: TestService = probed('NAS', now, { state: { widget: { ...widget(now, []), storage: [
+    { name: 'tank', used: 50, total: 100, pct: 50, sub: '50 / 100 GiB', source: 'pve', metric: 'storage.pve.tank' },
+    { name: 'fresh', used: 10, total: 100, pct: 10, sub: '10 / 100 GiB', source: 'pve', metric: 'storage.pve.fresh' },
+    { name: 'none', used: 10, total: 100, pct: 10, sub: '10 / 100 GiB', source: 'pve' }
+  ] } } });
+  const snap = build([nas], now);
+  const tank = snap.storage.find((s) => s.name === 'tank')?.trend;
+  assert.ok(tank && tank.from === now - 6 * 60 * MIN);
+  assert.deepEqual([tank.values[0], tank.values.at(-1)], [55.5, 51.5], 'oldest first, about two samples per bucket');
+  assert.deepEqual(snap.storage.filter((s) => s.name !== 'tank').map((s) => s.trend), [null, null], 'one sample, or no metric: nothing to draw');
+});
+
 test('certificates: a warning under certWarnDays, critical under 3 days, then expired', () => {
   const now = day(4);
   const cert = (days: number) => ({ state: { cert: { validTo: now + days * D + MIN, trusted: true, selfSigned: false } } });
@@ -108,17 +126,21 @@ test('certificates: a warning under certWarnDays, critical under 3 days, then ex
   assert.equal(tile(snap, 'Fine').cert?.days, 60);
 });
 
-test('verdict and facts: all normal, or the top attention item and how many need attention', () => {
+test('verdict and facts: how many services are up, or the top attention item with the way to its service', () => {
   const now = day(5);
   const calm = build([probed('Web', now)], now);
-  assert.deepEqual(calm.verdict, { level: 'ok', tag: 'All systems normal', title: 'Everything is running.', sub: '1 of 1 services up · no certs expiring soon' });
+  assert.deepEqual(calm.verdict, { level: 'ok', tag: 'All systems normal', title: 'Web is up', sub: '', action: null });
   assert.equal(calm.needCount, 0);
+  assert.equal(build([probed('Web', now), probed('Mail', now)], now).verdict.title, 'All 2 services up');
 
   const issues = build([
     probed('Web', now, { state: { check: { fails: 2, down: true, since: now - MIN, reason: 'HTTP 502', ms: null, checked: now } } }),
     probed('Mail', now, { state: { cert: { validTo: now + 5 * D + MIN, trusted: true, selfSigned: false } } })
   ], now);
-  assert.deepEqual(issues.verdict, { level: 'crit', tag: '2 need attention', title: 'Web is down.', sub: '1 of 2 services up · 1 certificate expiring' });
+  assert.deepEqual([issues.verdict.level, issues.verdict.tag, issues.verdict.title, issues.verdict.action], ['crit', '2 need attention', 'Web is down', null], 'no href, so no Open action');
+  assert.match(issues.verdict.sub, /^HTTP 502 · since \d\d:\d\d · 1 of 2 services up$/);
+  const linked = build([probed('Web', now, { href: 'https://web.home.arpa', state: { check: { fails: 2, down: true, since: now - MIN, reason: 'HTTP 502', ms: null, checked: now } } })], now);
+  assert.deepEqual(linked.verdict.action, { label: 'Open Web', href: 'https://web.home.arpa' });
   assert.deepEqual(issues.facts.map((f) => [f.k, f.v, f.level]), [['services up', '1 / 2', 'crit'], ['next cert', '5 d', 'warn']]);
 });
 
@@ -155,6 +177,20 @@ test('checks other than probes: a stopped container is down, a heartbeat that mi
   assert.deepEqual([tile(snap, 'Restic').status, tile(snap, 'Restic').line], ['Down', `Overdue since ${fmtClock(due)}`]);
   assert.deepEqual(alertsOf(snap, 'Restic').map((a) => [a.sev, a.title, a.ts]), [['crit', 'Restic missed its run', due]]);
   assert.equal(snap.verdict.tag, '2 need attention');
+  // the job with its schedule: next run expected `every` after the last one
+  const [job] = snap.jobs;
+  assert.deepEqual([job.name, job.state, job.lastOk, job.due, job.every, job.backup], ['Restic', 'down', lastOk, lastOk + 24 * 60 * MIN, hb.every, true]);
+  assert.deepEqual(snap.backups, { overdue: 1, oldestAge: 26 * 60 * MIN, known: true });
+});
+
+test('healthy: services and jobs are counted apart', () => {
+  const now = day(11);
+  const hb = { id: 'sync', every: 7 * 24 * 60 * MIN, grace: 24 * 60 * MIN, token: 't', backup: true };
+  const input = snapshotInput({ services: [probed('Web', now), probed('Mail', now), { name: 'Sync', heartbeat: hb }] });
+  const sync = input.cfg.services[2];
+  record(sync, input.state(sync.id), heartbeatState(hb, { since: now - D, lastOk: now - D, lastFail: null }, now), now);
+  const snap = createSnapshot()(input, now);
+  assert.deepEqual([snap.verdict.title, snap.verdict.sub], ['All 2 services up', '1 backup job on schedule']);
 });
 
 test('a tile names its check, so only timed checks (http, tcp) show a p95', () => {

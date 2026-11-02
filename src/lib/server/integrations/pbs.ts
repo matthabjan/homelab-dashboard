@@ -64,7 +64,7 @@ interface Attached {
 type Mounted = PbsDatastoreUsage & { total: number; used: number };
 const mounted = (s: PbsDatastoreUsage): s is Mounted => (s.total ?? 0) > 0;
 
-const usageRow = (name: string, s: Mounted): UsageRow => ({ name, used: s.used, total: s.total, pct: pct(s.used, s.total), sub: fmtPair(s.used, s.total), source: 'pbs' });
+const usageRow = (name: string, s: Mounted): UsageRow => ({ name, used: s.used, total: s.total, pct: pct(s.used, s.total), sub: fmtPair(s.used, s.total), source: 'pbs', metric: `storage.pbs.${s.store}` });
 const removable = (s: PbsDatastoreUsage) => s['mount-status'] != null && s['mount-status'] !== 'nonremovable';
 
 /**
@@ -82,7 +82,7 @@ function removableStatus(s: PbsDatastoreUsage, now: number, maxDays: number, kv:
   const age = now - (seen.last ?? seen.first);
   return {
     // short enough to share the line with the name; the bar keeps how full the disk was when last attached
-    row: { name: `${s.store} · removable`, offline: true, sub: seen.last ? `detached ${fmtDuration(age)}` : 'never attached', pct: seen.pct ?? null, source: 'pbs' },
+    row: { name: `${s.store} · removable`, offline: true, sub: seen.last ? `detached ${fmtDuration(age)}` : 'never attached', pct: seen.pct ?? null, source: 'pbs', metric: `storage.pbs.${s.store}` },
     alert: age > maxDays * 86_400_000 ? { sev: 'info', key: `detached-${s.store}`, title: `${s.store} detached for ${fmtDuration(age)}`, detail: 'Plug in the offsite disk to refresh its copy' } : null
   };
 }
@@ -99,6 +99,30 @@ async function pbsDrives(ctx: Context, base: string, opts: object): Promise<Driv
     try { reading = fromAttributes((await ctx.getJson<PbsResponse<PbsDiskSmart>>(`${url}/smart?disk=${encodeURIComponent(d.name)}`, opts)).data?.attributes ?? []); } catch { /* status and wearout from the list still show */ }
     return toDrive({ model: d.model ?? d.name, serial: d.serial, kind: kindOf(d['disk-type'], d.rpm), size: d.size, status: d.status, wearout: d.wearout, smart: reading });
   }));
+}
+
+/** Backups that landed since the last reported event: guest key → label, the stores they went to, the newest (PBS seconds). */
+interface BackupBatch {
+  guests: Record<string, string>;
+  stores: string[];
+  last: number;
+}
+
+/** A job run's backups land minutes apart; this long without a new one ends the run. */
+const BATCH_QUIET_MS = 15 * 60_000;
+
+/** The guest's Proxmox name, else the group's comment, else "VM 101" / "CT 105" (a host backup's id is its hostname). */
+function guestLabel(g: PbsBackupGroup, guests: Record<string, string> | null): string {
+  const id = String(g['backup-id']);
+  const name = (guests && Object.hasOwn(guests, id) ? guests[id] : '') || g.comment || '';
+  return name || (g['backup-type'] === 'host' ? id : `${g['backup-type'].toUpperCase()} ${id}`);
+}
+
+/** "web, db, dns and 3 more · main"; a single store, or several joined. */
+function batchDetail(b: BackupBatch): string {
+  const names = Object.values(b.guests).sort((x, y) => x.localeCompare(y));
+  const shown = names.length > 4 ? `${names.slice(0, 3).join(', ')} and ${names.length - 3} more` : names.join(', ');
+  return `${shown} · ${b.stores.sort().join(', ')}`;
 }
 
 export async function collect(w: Widget, ctx: Context): Promise<WidgetResult> {
@@ -156,17 +180,26 @@ export async function collect(w: Widget, ctx: Context): Promise<WidgetResult> {
     }
   }
 
-  // Event when new backups landed since the last poll; the baseline is durable so backups made during a restart count.
-  // No groups (missing permission, API error) leaves it alone, so the next good poll doesn't report every backup as new.
+  // New backups since the last poll are collected (durably, so backups made during a restart count) and reported as one
+  // event once none has landed for BATCH_QUIET_MS: a job run is one event, naming its guests, at its last backup's time.
+  // No groups (missing permission, API error) leaves the baseline alone, so the next good poll doesn't report every backup as new.
   const latest = Math.max(0, ...groups.map((g) => g['last-backup']));
   if (latest) {
     const key = `pbs.latest.${base}`;
     const stored = ctx.kv.get<number>(key);
     const prevLatest = stored ?? latest;
-    if (latest > prevLatest) {
-      const fresh = groups.filter((g) => g['last-backup'] > prevLatest);
-      events.push({ sev: 'ok', title: 'Backups completed', detail: `${fresh.length} ${fresh.length === 1 ? 'guest' : 'guests'} · ${stores.map((s) => s.store).join(', ')}` });
+    const batchKey = `pbs.batch.${base}`;
+    const batch = ctx.kv.get<BackupBatch>(batchKey) ?? { guests: {}, stores: [], last: 0 };
+    const fresh = groups.filter((g) => g['last-backup'] > prevLatest);
+    for (const g of fresh) {
+      batch.guests[`${g['backup-type']}/${g['backup-id']}`] = guestLabel(g, guests);
+      if (!batch.stores.includes(g.store)) batch.stores.push(g.store);
+      batch.last = Math.max(batch.last, g['last-backup']);
     }
+    if (batch.last && now - batch.last * 1000 >= BATCH_QUIET_MS) {
+      events.push({ sev: 'ok', title: 'Backups completed', detail: batchDetail(batch), ts: batch.last * 1000 });
+      ctx.kv.set(batchKey, null);
+    } else if (fresh.length) ctx.kv.set(batchKey, batch);
     if (latest !== stored) ctx.kv.set(key, latest);
   }
 
@@ -190,6 +223,6 @@ export async function collect(w: Widget, ctx: Context): Promise<WidgetResult> {
     events,
     storage,
     drives: (await slowly(ctx, 'drives', () => pbsDrives(ctx, base, opts))) ?? [],
-    backups: { overdue, oldestAge: oldest?.age ?? null, known: relevant.length > 0 }
+    backups: { overdue, oldestAge: oldest?.age ?? null, known: relevant.length > 0, guests: relevant.length, last: latest ? latest * 1000 : null, stores: stores.map((s) => s.store) }
   };
 }

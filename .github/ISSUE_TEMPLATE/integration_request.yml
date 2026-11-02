@@ -13,7 +13,7 @@ body:
     id: show
     attributes:
       label: What should the dashboard show or alert on?
-      description: Tile stats, a panel in the vitals card, alerts (e.g. "pool degraded")
+      description: Tile stats, an infrastructure panel, alerts (e.g. "pool degraded")
     validations:
       required: true
   - type: textarea

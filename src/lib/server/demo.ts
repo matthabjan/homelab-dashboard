@@ -77,9 +77,9 @@ export function seedHistory(services: Service[]) {
         insertProbe(s.id, ts, !(down || blip), down || blip ? null : isSlow(s) ? 150 + r() * 300 : baseMs(s) + r() * 14);
       }
     }
-    // heartbeats: the job last ran 6 h ago, or (issues) 27 h ago with a 24 h schedule, so it is overdue
+    // heartbeats: a daily job last ran 6 h ago, or (issues) 27 h ago, so it is overdue; a longer one 40% of its interval ago
     for (const s of services.filter((x): x is Service & { heartbeat: Heartbeat } => !!x.heartbeat)) {
-      const lastOk = now - (calm() ? 6 : 27) * 3600_000;
+      const lastOk = now - (s.heartbeat.every > 86_400_000 ? s.heartbeat.every * 0.4 : (calm() ? 6 : 27) * 3600_000);
       const due = lastOk + s.heartbeat.every + s.heartbeat.grace;
       kvSet(kvKey(s.heartbeat.id), { since: now - 7 * 86_400_000, lastOk, lastFail: null });
       for (let ts = now - 86_400_000; ts < now; ts += 120_000) insertProbe(s.id, ts, ts <= due, null);
@@ -94,16 +94,21 @@ export function seedHistory(services: Service[]) {
       insertMetric('net.up', ts, Math.max(1, 8 + day * 5 + r() * 8));
       insertMetric('lan.down', ts, Math.max(1, 6 + r() * 20 + (i % 288 > 20 && i % 288 < 30 ? 300 : 0))); // nightly backup burst
       insertMetric('lan.up', ts, Math.max(1, 15 + day * 10 + r() * 30));
+      // storage fills slowly through the day (the nightly backup adds a step)
+      const grow = i / 288;
+      for (const [key, pct, step] of STORAGE_TRENDS) insertMetric(key, ts, pct(calm()) - step * (1 - grow) - (i % 288 < 25 ? step / 2 : 0));
     }
     // a few opens so the "Most used" row has something to show
     const used: Record<string, number> = { portainer: 9, 'proxmox ve': 7, 'adguard home': 5, opnsense: 4 };
     for (const s of services) for (let i = 0; i < (used[s.name.toLowerCase()] ?? 0); i++) recordOpen(s.id, now, DEFAULT_SETTINGS.mostUsed.halfLifeDays);
+    // last night's guest backups, from the PBS service, as the integration reports them
+    const pbs = services.find((s) => s.widget?.type === 'proxmoxbackupserver')?.id ?? null;
     if (calm()) {
-      insertEvent(now - 13 * 3600_000, 'ok', null, 'Backups completed', '6 guests · main');
+      insertEvent(now - 13 * 3600_000, 'ok', pbs, 'Backups completed', 'adguard, docker-apps, homeassistant and 3 more · main');
       insertEvent(now - 5 * 3600_000, 'info', null, '12 updates available on pve', 'apt packages pending');
     } else {
       insertEvent(now - 68 * 60_000, 'crit', 'entertainment-musicassistant', 'MusicAssistant went down', 'Connection refused');
-      insertEvent(now - 13 * 3600_000, 'ok', null, 'Backups completed', '5 guests · main');
+      insertEvent(now - 13 * 3600_000, 'ok', pbs, 'Backups completed', 'adguard, docker-apps, homeassistant and 2 more · main');
     }
   });
 }
@@ -111,6 +116,18 @@ export function seedHistory(services: Service[]) {
 /**
  * The demo's sources, for SCENARIO: fixtures instead of the homelab, made-up probes, certificates and host readings.
  */
+/** Seeded 24 h of fill for the fixtures' storages (metric key, today's %, growth over the day), same keys as the integrations. */
+const STORAGE_TRENDS: [string, (calm: boolean) => number, number][] = [
+  ['storage.pve.local', () => 22.3, 0.2],
+  ['storage.pve.local-zfs', () => 57.8, 0.6],
+  ['storage.pve.main', () => 62, 1.1],
+  ['storage.pve.nas-backup', () => 27.5, 0.8],
+  ['storage.pbs.main', () => 62, 1.1],
+  ['storage.pbs.offsite', () => 32.5, 0],
+  ['storage.omv.data · NAS', () => 71.3, 0.3],
+  ['storage.omv.scratch · NAS', (calm) => (calm ? 24 : 90), 3]
+];
+
 export function demoSources(): Sources {
   const scenario = SCENARIO;
   const transports = new Map(Object.entries(FIXTURES).map(([type, table]) => [type, fixtureTransport(table, { scenario })]));

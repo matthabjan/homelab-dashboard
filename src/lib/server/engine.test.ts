@@ -125,7 +125,7 @@ test('without a Proxmox widget the System panel shows the local host; temperatur
   const local: HostVitals = { node: 'box', cpu: 23, cpus: 8, mem: 4 * GiB, maxmem: 16 * GiB, memPct: 25, disk: { name: '/', pct: 40, sub: '40 / 100 GiB' }, uptime: '3 d', guestsRunning: null, guestsTotal: null, updates: null };
   const e = engine('- Apps:\n    - Wiki:\n        href: https://wiki.home.arpa\n', script({ local: () => local, temps: () => ({ cpu: 51, nvme: [], drives: [] }) }));
   await e.runWidgets();
-  assert.deepEqual(snap(e).host?.gauges.map((g) => [g.key, g.val]), [['cpu', 23], ['mem', '4.0'], ['disk', 40], ['temp', 51]]);
+  assert.deepEqual(snap(e).host?.gauges.map((g) => [g.key, g.val]), [['cpu', 23], ['mem', 25], ['disk', 40], ['temp', 51]]);
   const now = Date.now();
   assert.deepEqual([series('host.cpu', 0, now, 1).values, series('host.mem', 0, now, 1).values, series('host.temp', 0, now, 1).values], [[23], [25], [51]]);
 });

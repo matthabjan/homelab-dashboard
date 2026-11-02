@@ -1,6 +1,6 @@
 # Integrations
 
-A widget adds live data to a service: tile stats, panels in the vitals card and alerts. Configure it under the service's `widget:` key in `services.yaml`. The fields match [gethomepage](https://gethomepage.dev/widgets/), so existing widget blocks work as they are.
+A widget adds live data to a service: its status line and stats, the infrastructure cards and their panels, and alerts. Configure it under the service's `widget:` key in `services.yaml`. The fields match [gethomepage](https://gethomepage.dev/widgets/), so existing widget blocks work as they are.
 
 **General rules**
 
@@ -66,7 +66,7 @@ PBS storages attached to PVE are left out here; the PBS widget reports them.
 
 ## Proxmox Backup Server
 
-Provides the PBS rows in **Storage**, **backup age** for each guest, a *Backups completed* event when new backups arrive, and disks passed into the PBS VM (such as a removable offsite disk while it's plugged in) in [**Drives**](#drives). The tile shows how long ago the **last backup** finished and how full the first **datastore** is; while backups are overdue, how many comes first.
+Provides the PBS rows in **Storage**, **backup age** for each guest (a *Guest backups* row among the jobs in the **Backups** sheet: guests, last run, overdue), a *Backups completed* event per job run (once no new backup has landed for 15 minutes, naming the guests by their Proxmox name), and disks passed into the PBS VM (such as a removable offsite disk while it's plugged in) in [**Drives**](#drives). The tile shows how long ago the **last backup** finished and how full the first **datastore** is; while backups are overdue, how many comes first.
 
 ```yaml
 widget:
@@ -326,7 +326,7 @@ If the response isn't JSON (a login page, for example), the tile shows *Stats un
 
 ## Drives
 
-The vitals card has a **Drives** panel next to **Storage**: Storage shows how full each storage is, Drives how healthy the physical disks are. The tab appears as soon as a widget reports drives, and each browser remembers the open tab.
+The **Drives** card and the Infrastructure sheet's **Drives** tab sit next to **Storage**: Storage shows how full each storage is, Drives how healthy the physical disks are. Both appear as soon as a widget reports drives, and a drive to check turns the Drives card amber.
 
 | Source | Drives |
 |---|---|
