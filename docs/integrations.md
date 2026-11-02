@@ -1,6 +1,6 @@
 # Integrations
 
-A widget adds live data to a service: tile stats, panels in the vitals card and alerts. Configure it under the service's `widget:` key in `services.yaml`. The fields match [gethomepage](https://gethomepage.dev/widgets/), so existing widget blocks work as they are.
+A widget adds live data to a service: its status line and stats, the vitals and their panels, and alerts. Configure it under the service's `widget:` key in `services.yaml`. The fields match [gethomepage](https://gethomepage.dev/widgets/), so existing widget blocks work as they are.
 
 **General rules**
 
@@ -326,7 +326,7 @@ If the response isn't JSON (a login page, for example), the tile shows *Stats un
 
 ## Drives
 
-The vitals card has a **Drives** panel next to **Storage**: Storage shows how full each storage is, Drives how healthy the physical disks are. The tab appears as soon as a widget reports drives, and each browser remembers the open tab.
+The vitals sheet (opened from the **Storage** card) has a **Drives** panel next to **Storage**: Storage shows how full each storage is, Drives how healthy the physical disks are. The tab appears as soon as a widget reports drives, and a drive to check turns the Storage card amber.
 
 | Source | Drives |
 |---|---|

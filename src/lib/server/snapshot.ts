@@ -6,7 +6,7 @@ import { fmtDuration as fmtAge, fmtHours, fmtSize } from './format.ts';
 import { hostService, hostSource } from './local.ts';
 import { kindOf, status as checkStatus } from './check.ts';
 import { createAttention, type Raised } from './attention.ts';
-import type { BackupStatus, ConfigProblem, ContainerCounts, Drive, HeartbeatState, Fact, Gauge, Level, NetworkReading, Settings, Severity, Snapshot, Tile, Traffic } from '$lib/types';
+import type { BackupStatus, ConfigProblem, ContainerCounts, Drive, HeartbeatState, Fact, Gauge, Job, Level, NetworkReading, Settings, Severity, Snapshot, Tile, Traffic } from '$lib/types';
 import type { Engine } from './engine.ts';
 
 const RANK: Record<Severity | Level, number> = { crit: 3, warn: 2, info: 1, ok: 0 };
@@ -353,15 +353,54 @@ function fleetStrip(engine: SnapshotInput, tiles: Map<string, Tile>, now: number
 }
 
 /** The line under the headline and the facts beside it: services, containers, backups, certificates. */
-function verdictFacts(engine: SnapshotInput, widgets: ReturnType<typeof widgetsOf>, all: Tile[], now: number) {
+/** Heartbeat services with their schedule: when each last ran and when the next run is due. */
+function jobList(engine: SnapshotInput): Job[] {
+  return engine.cfg.services.flatMap((s) => {
+    const hb = s.heartbeat;
+    if (!hb) return [];
+    const st = engine.state(s.id).heartbeat;
+    const last = st?.lastOk ?? null;
+    return [{
+      id: s.id, name: s.name, group: s.group, href: s.href ?? null, description: s.description ?? '',
+      every: hb.every, grace: hb.grace, lastOk: last, lastFail: st?.lastFail ?? null,
+      due: (last ?? st?.since ?? Date.now()) + hb.every,
+      state: st?.state ?? 'pending', failed: st?.failed ?? false, backup: hb.backup
+    }];
+  });
+}
+
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+/**
+ * The hero's sentence and the facts. Healthy: how many services are up, jobs counted apart ("All 11 services up",
+ * "5 backup jobs on schedule"). Otherwise: the top attention item, its detail, and the way to the service.
+ */
+function verdictFacts(engine: SnapshotInput, widgets: ReturnType<typeof widgetsOf>, all: Tile[], jobs: Job[], att: ReturnType<Round['close']>, now: number) {
   const th = engine.cfg.settings.thresholds;
   const probed = all.filter((t) => t.level !== 'unknown');
   const up = probed.filter((t) => t.status !== 'Down').length;
+  const services = probed.filter((t) => t.check !== 'heartbeat');
+  const servicesUp = services.filter((t) => t.status !== 'Down').length;
   const backups = mergeBackups(widgets.find((x) => x.w.backups)?.w.backups, engine.cfg.services.flatMap((s) => (s.heartbeat?.backup ? [engine.state(s.id).heartbeat ?? null] : [])), now);
   const certWarn = all.filter((t) => t.cert && t.cert.days < th.certWarnDays).length;
-  const subParts = [`${up} of ${probed.length} services up`];
-  if (backups?.known) subParts.push(backups.overdue ? `${backups.overdue} backup${backups.overdue > 1 ? 's' : ''} overdue` : 'backups current');
-  subParts.push(certWarn ? `${certWarn} certificate${certWarn > 1 ? 's' : ''} expiring` : 'no certs expiring soon');
+  const onSchedule = jobs.filter((j) => j.state !== 'down').length;
+  const jobWord = jobs.every((j) => j.backup) ? 'backup job' : 'job';
+
+  const subParts: string[] = [];
+  let title = att.headline.title.replace(/\.$/, '');
+  let action: Snapshot['verdict']['action'] = null;
+  if (att.needCount) {
+    const top = att.items[0];
+    if (top.detail) subParts.push(top.detail);
+    subParts.push(`${servicesUp} of ${services.length} services up`);
+    if (top.href) action = { label: `Open ${top.service ?? 'it'}`, href: top.href };
+  } else {
+    if (services.length === 1 && servicesUp === 1) title = `${services[0].name} is up`;
+    else if (services.length) title = servicesUp === services.length ? `All ${services.length} services up` : `${servicesUp} of ${services.length} services up`;
+    if (jobs.length) subParts.push(onSchedule === jobs.length ? `${plural(jobs.length, jobWord)} on schedule` : `${onSchedule} of ${plural(jobs.length, jobWord)} on schedule`);
+    if (backups?.known && !jobs.length) subParts.push(backups.overdue ? `${plural(backups.overdue, 'backup')} overdue` : 'backups current');
+    if (certWarn) subParts.push(`${plural(certWarn, 'certificate')} expiring`);
+  }
 
   // summed over Docker engines; a host seen by both Portainer and a docker widget is one entry
   const containers = Object.values(engine.shared.containers ?? {}).reduce(
@@ -375,7 +414,8 @@ function verdictFacts(engine: SnapshotInput, widgets: ReturnType<typeof widgetsO
     backups?.oldestAge != null && { k: 'oldest backup', v: fmtAge(backups.oldestAge), level: backups.overdue ? 'warn' : null },
     nextCert && { k: 'next cert', v: `${nextCert.days} d`, level: nextCert.days < th.certWarnDays ? 'warn' : null }
   ] as (Fact | false | undefined)[]).filter((f): f is Fact => !!f);
-  return { sub: subParts.join(' · '), facts };
+  const verdict: Snapshot['verdict'] = { ...att.headline, title, sub: subParts.join(' · '), action };
+  return { verdict, facts, backups: backups ?? null };
 }
 
 /** The Most used row: services with a link, by their decaying open score, ties in services.yaml order. */
@@ -401,7 +441,7 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
   const storage = storagePanel(engine, th, round);
   const drives = drivesPanel(engine, th, round);
 
-  const events = recentEvents(now - 24 * H, 5).map((e) => ({ ...e, href: (e.sid && engine.cfg.services.find((s) => s.id === e.sid)?.href) ?? null }));
+  const events = recentEvents(now - 24 * H, 20).map((e) => ({ ...e, href: (e.sid && engine.cfg.services.find((s) => s.id === e.sid)?.href) ?? null }));
   const att = round.close(events);
   applyWorst(tiles, att);
   const all = [...tiles.values()];
@@ -410,8 +450,8 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
   const buckets = fleetStrip(engine, tiles, now, mem);
   const ups = all.map((t) => t.uptime24).filter((x) => x != null);
   const fleetAvail = ups.length ? ups.reduce((a, b) => a + b, 0) / ups.length : null;
-  const { sub, facts } = verdictFacts(engine, widgets, all, now);
-  const verdict: Snapshot['verdict'] = { ...att.headline, sub };
+  const jobs = jobList(engine);
+  const { verdict, facts, backups } = verdictFacts(engine, widgets, all, jobs, att, now);
   const mostUsed = mostUsedRow(all, settings, now);
 
   return {
@@ -425,6 +465,10 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
     logo: assetUrl(settings.pwa.logo),
     staleAfter: Math.max(settings.intervals.widgets, settings.intervals.probe) * 2.5 * 1000,
     verdict,
+    lastChange: events[0]?.ts ?? null,
+    events,
+    jobs,
+    backups,
     facts,
     attention: att.items,
     needCount: att.needCount,
