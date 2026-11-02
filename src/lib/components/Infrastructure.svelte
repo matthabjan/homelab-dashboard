@@ -55,14 +55,14 @@
   let picked = $state<string>(initial ?? 'system');
   onMount(() => {
     if (initial) return;
-    try { picked = localStorage.getItem('vitalsView') ?? picked; } catch {}
+    try { picked = localStorage.getItem('infraView') ?? picked; } catch {}
   });
   // the remembered panel may have no data (any more): fall back to the first one
   const view = $derived(panels.some((p) => p.id === picked) ? picked : panels[0]?.id);
   const active = $derived(panels.find((p) => p.id === view));
   function show(id: string) {
     picked = id;
-    try { localStorage.setItem('vitalsView', id); } catch {}
+    try { localStorage.setItem('infraView', id); } catch {}
   }
   // arrow keys move between the tabs and wrap around, Home and End jump to the ends (roving tabindex)
   function tabKey(e: KeyboardEvent) {
@@ -99,10 +99,10 @@
   </div>
 {/snippet}
 
-<div class="card vitals-card">
+<div class="card infra-card">
   <div class="head">
     {#if tabbed}
-      <div class="tabs" role="tablist" aria-label="Vitals" style:--n={panels.length}>
+      <div class="tabs" role="tablist" aria-label="Infrastructure" style:--n={panels.length}>
         {#each panels as p (p.id)}
           <button role="tab" id="vt-{p.id}" aria-selected={view === p.id} aria-controls="vp-{p.id}" tabindex={view === p.id ? 0 : -1} onclick={() => show(p.id)} onkeydown={tabKey}>
             {p.name}{#if p.level}<span class="dot lv-{p.level}" aria-hidden="true"></span><span class="vh">, {p.level === 'crit' ? 'critical' : 'warning'}</span>{/if}
@@ -110,7 +110,7 @@
         {/each}
       </div>
     {:else if active}
-      <!-- one panel: no tabs, just its name (the section header above says "Vitals") -->
+      <!-- one panel: no tabs, just its name (the sheet title says "Infrastructure") -->
       <span class="solo">{active.name}</span>
     {/if}
     <!-- what the open panel shows; System labels each value -->
@@ -180,7 +180,7 @@
 
 <style>
   /* panels lay out by the card's width, not the viewport's, so they look the same wherever the card is */
-  .vitals-card { container: vitals / inline-size; padding: 22px; display: flex; flex-direction: column; gap: 16px; }
+  .infra-card { container: infra / inline-size; padding: 22px; display: flex; flex-direction: column; gap: 16px; }
   .solo { font-size: 14px; font-weight: 600; }
   .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
@@ -260,26 +260,26 @@
   .layer { position: absolute; inset: 0; }
   .dns { color: inherit; text-decoration: none; gap: 2px; }
 
-  @container vitals (min-width: 520px) {
+  @container infra (min-width: 520px) {
     /* WAN and LAN side by side, DNS across below them */
     .net:has(> .cell:nth-child(2)) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .net > .cell:nth-child(2) { padding-top: 0; border-top: 0; padding-left: 24px; border-left: 1px solid var(--track); }
     .net > .cell:nth-child(3) { grid-column: 1 / -1; }
   }
-  @container vitals (min-width: 880px) {
+  @container infra (min-width: 880px) {
     .net:has(> .cell:nth-child(3)) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .net > .cell:nth-child(3) { grid-column: auto; padding-top: 0; border-top: 0; padding-left: 24px; border-left: 1px solid var(--track); }
   }
-  @container vitals (max-width: 519.98px) {
+  @container infra (max-width: 519.98px) {
     /* phones: four equal segments across the card */
     .tabs { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); flex: 1 1 100%; }
     .tabs button { padding: 8px 2px; gap: 4px; }
     .gauges { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   }
   /* the smallest phones: a label and its dot must still fit a quarter of the card */
-  @container vitals (max-width: 299.98px) { .tabs button { font-size: 13px; padding-inline: 0; gap: 3px; } }
+  @container infra (max-width: 299.98px) { .tabs button { font-size: 13px; padding-inline: 0; gap: 3px; } }
   @media (max-width: 760px) {
-    .vitals-card { padding: 16px; border-radius: 22px; gap: 14px; }
+    .infra-card { padding: 16px; border-radius: 22px; gap: 14px; }
     /* phones: each panel only as tall as it needs */
     .panel.off { display: none; }
   }

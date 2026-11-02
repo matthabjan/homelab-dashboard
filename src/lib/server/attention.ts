@@ -1,4 +1,4 @@
-// Attention: the alerts that need looking at. Checks, widgets, the vitals panels and the config raise them; this
+// Attention: the alerts that need looking at. Checks, widgets, the infrastructure panels and the config raise them; this
 // module names them after their service, keeps the time each first appeared (by key, never by title), orders them,
 // counts what needs attention, and gives the headline, the feed and each tile's worst alert.
 import type { AttentionItem, FeedEvent, FeedItem, Level, Service, Severity } from '$lib/types';

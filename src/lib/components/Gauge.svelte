@@ -30,7 +30,7 @@
   </div>
 </div>
 
-<!-- a narrow card: compact tile (no ring, no sparkline); the two variants switch by the vitals card's width -->
+<!-- a narrow card: compact tile (no ring, no sparkline); the two variants switch by the infrastructure card's width -->
 <div class="mini lv-{g.level}" role="img" aria-label="{g.label} {g.val} {g.unit}{g.sub ? ', ' + g.sub : ''}">
   <div class="mini-head"><span class="label">{g.label}</span><span class="mono sub">{g.sub ?? ''}</span></div>
   <div class="mini-val"><span class="mono">{g.val}</span><span class="mono unit">{g.unit}</span></div>
@@ -55,7 +55,7 @@
 
   .mini { display: none; }
   /* a wide card: ring on the left, label and trend beside it, so the row stays low */
-  @container vitals (min-width: 880px) {
+  @container infra (min-width: 880px) {
     .gauge { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto auto 1fr; column-gap: 16px; row-gap: 2px; align-items: start; padding: 12px 16px 12px 12px; }
     .ring { grid-row: 1 / 4; align-self: center; width: 76px; height: 76px; }
     .ring svg { width: 100%; height: 100%; }
@@ -63,7 +63,7 @@
     .spark { align-self: end; height: 28px; }
   }
   /* a narrow card (phones): compact tile, no ring, no sparkline */
-  @container vitals (max-width: 519.98px) {
+  @container infra (max-width: 519.98px) {
     .gauge { display: none; }
     .mini {
       --arc: var(--acc);

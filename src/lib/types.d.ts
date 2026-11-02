@@ -680,7 +680,7 @@ export interface Snapshot {
   host: { name: string; href: string | null; facts: { label: string; value: string }[]; gauges: Gauge[] } | null;
   /** `off` rows (unavailable, detached, size unknown) draw `pct` as a grey bar: the last known fill, or empty */
   storage: { name: string; pct: number | null; level: Level | 'off'; sub: string }[];
-  /** the vitals card's Drives panel; empty when no widget reports drives */
+  /** the infrastructure sheet's Drives panel; empty when no widget reports drives */
   drives: {
     name: string;
     meta: string;

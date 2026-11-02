@@ -3,7 +3,7 @@
   import type { FeedItem, Job, Level, Snapshot, Tile } from '$lib/types';
   import type { PageProps } from './$types';
   import Icon from '$lib/components/Icon.svelte';
-  import Vitals from '$lib/components/Vitals.svelte';
+  import Infrastructure from '$lib/components/Infrastructure.svelte';
   import ThemeToggle from '$lib/components/ThemeToggle.svelte';
   import Palette from '$lib/components/Palette.svelte';
   import Beats from '$lib/components/Beats.svelte';
@@ -76,7 +76,7 @@
   const jobById = $derived(new Map((snap?.jobs ?? []).map((j) => [j.id, j])));
   const nextJob = $derived([...(snap?.jobs ?? [])].sort((a, b) => a.due - b.due)[0] ?? null);
 
-  type Card = { id: 'system' | 'storage' | 'network' | 'backups'; label: string; value: string; unit?: string; sub: string; level: Level | 'none' };
+  type Card = { id: 'system' | 'storage' | 'drives' | 'network' | 'backups'; label: string; value: string; unit?: string; sub: string; level: Level | 'none' };
   const worst = (levels: string[]): Level | 'none' => (levels.includes('crit') ? 'crit' : levels.includes('warn') ? 'warn' : 'none');
   const cards: Card[] = $derived.by(() => {
     if (!snap) return [];
@@ -92,13 +92,26 @@
       });
     }
     // a detached or unavailable row (a removable offsite disk) is expected: it never sets the card's figure or colour.
-    // The card turns amber only for what raises an alert (a row over storageWarnPct, a drive); the bar's amber stays in the sheet
+    // The card turns amber only for a row over storageWarnPct (it raises an alert); the bar's amber stays in the sheet
     const rows = snap.storage.filter((s) => s.level !== 'off' && s.pct != null);
     if (snap.storage.length) {
       const top = [...rows].sort((a, b) => (b.pct ?? 0) - (a.pct ?? 0))[0];
       const off = snap.storage.length - rows.length;
-      const drives = snap.drives.filter((d) => isProblem(d.level) || isProblem(d.lifeLevel)).length;
-      out.push({ id: 'storage', label: 'Storage', value: top ? `${Math.round(top.pct ?? 0)}%` : '—', unit: top ? 'fullest' : '', sub: [drives ? `${drives} drive${drives === 1 ? '' : 's'} to check` : top?.name, `${snap.storage.length} storages`, off && `${off} offline`].filter(Boolean).join(' · '), level: worst([...rows.map((s): string => (s.level === 'crit' ? 'warn' : 'ok')), ...snap.drives.flatMap((d) => [d.level, d.lifeLevel])]) });
+      out.push({ id: 'storage', label: 'Storage', value: top ? `${Math.round(top.pct ?? 0)}%` : '—', unit: top ? 'fullest' : '', sub: [top?.name, `${snap.storage.length} storages`, off && `${off} offline`].filter(Boolean).join(' · '), level: worst(rows.map((s): string => (s.level === 'crit' ? 'warn' : 'ok'))) });
+    }
+    if (snap.drives.length) {
+      const d = snap.drives;
+      const failing = d.filter((x) => x.status === 'failing').length;
+      const check = d.filter((x) => isProblem(x.level) || isProblem(x.lifeLevel)).length - failing;
+      // the hottest drive and the least life left, from the facts the Drives panel shows
+      const temps = d.flatMap((x) => x.facts.map((f) => (f.k === '' ? parseFloat(f.v) : NaN))).filter((t) => !Number.isNaN(t));
+      const lives = d.map((x) => x.life).filter((l): l is number => l != null);
+      out.push({
+        id: 'drives', label: 'Drives',
+        value: failing ? `${failing} failing` : check ? `${check} to check` : d.every((x) => x.status === 'ok') ? 'All healthy' : 'No problems',
+        sub: [`${d.length} drive${d.length === 1 ? '' : 's'}`, temps.length && `max ${Math.max(...temps)} °C`, lives.length && `${Math.min(...lives)}% life left`].filter(Boolean).join(' · '),
+        level: worst(d.flatMap((x) => [x.level, x.lifeLevel]))
+      });
     }
     if (snap.network) {
       const n = snap.network;
@@ -122,11 +135,11 @@
   });
 
   // ---- sheets: details on demand ----
-  type Open = { kind: 'service'; id: string } | { kind: 'vitals'; tab: 'system' | 'storage' | 'network' } | { kind: 'backups' } | { kind: 'activity' };
+  type Open = { kind: 'service'; id: string } | { kind: 'infra'; tab: 'system' | 'storage' | 'drives' | 'network' } | { kind: 'backups' } | { kind: 'activity' };
   let sheet = $state<Open | null>(null);
   let sheetOpen = $state(false);
   const show = (s: Open) => { sheet = s; sheetOpen = true; };
-  const openCard = (c: Card) => show(c.id === 'backups' ? { kind: 'backups' } : { kind: 'vitals', tab: c.id });
+  const openCard = (c: Card) => show(c.id === 'backups' ? { kind: 'backups' } : { kind: 'infra', tab: c.id });
   const sheetId = $derived(sheet?.kind === 'service' ? sheet.id : null);
   const sheetTile = $derived(sheetId ? allServices.find((t) => t.id === sheetId) ?? null : null);
   const sheetJob = $derived(sheetId ? jobById.get(sheetId) ?? null : null);
@@ -151,7 +164,7 @@
     return [...raised, ...past.filter((e) => !raised.some((a) => a.title.endsWith(e.title)))];
   });
   const sheetTitle = $derived(
-    sheet?.kind === 'service' ? sheetTile?.name ?? '' : sheet?.kind === 'vitals' ? 'Vitals' : sheet?.kind === 'backups' ? 'Backups' : 'Activity'
+    sheet?.kind === 'service' ? sheetTile?.name ?? '' : sheet?.kind === 'infra' ? 'Infrastructure' : sheet?.kind === 'backups' ? 'Backups' : 'Activity'
   );
   const sheetSub = $derived(
     sheet?.kind === 'service' ? [sheetTile?.group, sheetTile?.host].filter(Boolean).join(' · ')
@@ -351,7 +364,7 @@
     </section>
 
     {#if cards.length}
-      <section class="cards" aria-label="Vitals" style="--n: {cards.length}">
+      <section class="cards" aria-label="Infrastructure" style="--n: {cards.length}">
         {#each cards as c (c.id)}
           <button class="card vcard lift lv-{c.level}" class:alert={isProblem(c.level)} onclick={() => openCard(c)}>
             <span class="k">{c.label}</span>
@@ -492,8 +505,8 @@
           <p class="muted small">No events in the last 7 days.</p>
         {/if}
       </div>
-    {:else if sheet?.kind === 'vitals'}
-      <Vitals host={snap.host} storage={snap.storage} drives={snap.drives} network={snap.network} {target} initial={sheet.tab} />
+    {:else if sheet?.kind === 'infra'}
+      <Infrastructure host={snap.host} storage={snap.storage} drives={snap.drives} network={snap.network} {target} initial={sheet.tab} />
     {:else if sheet?.kind === 'backups'}
       {#if snap.backups?.known && snap.backups.oldestAge != null}
         <div class="facts">
@@ -516,7 +529,7 @@
       {#if snap.storage.some((s) => s.level === 'off')}
         <p class="muted small">A detached removable datastore (an offsite disk) is expected: it raises a reminder only after <code>offsiteMaxDetachedDays</code>.</p>
       {/if}
-      {#if snap.storage.length}<button class="link-btn" onclick={() => show({ kind: 'vitals', tab: 'storage' })}>Storage and drives</button>{/if}
+      {#if snap.storage.length}<button class="link-btn" onclick={() => show({ kind: 'infra', tab: 'storage' })}>Storage and drives</button>{/if}
     {:else if sheet?.kind === 'activity'}
       <div class="sh-block">
         <div class="sh-row"><span class="st">All services</span><span class="muted small">{pctTxt(snap.fleetAvail)} uptime</span></div>
@@ -599,7 +612,7 @@
   /* a service with a problem: one small marker, its colour from the level; the launcher shows nothing else */
   .pmark { position: absolute; top: -3px; right: -3px; width: 12px; height: 12px; border-radius: 50%; background: var(--lv); box-shadow: 0 0 0 2px var(--surface); }
 
-  /* vitals: one figure each; the card opens its sheet */
+  /* infrastructure and backups: one figure each; the card opens its sheet */
   .cards { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 14px; }
   .vcard { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 16px 18px; border: 0; border-radius: 18px; color: var(--text); font: inherit; text-align: left; cursor: pointer; min-width: 0; }
   .vcard.alert { background: var(--lv-soft); box-shadow: inset 0 0 0 1.5px var(--lv); }
@@ -688,6 +701,8 @@
   @media (max-width: 1000px) {
     .hero { grid-template-columns: minmax(0, 1fr); }
     .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    /* an odd count: the last card takes the whole row */
+    .vcard:last-child:nth-child(odd) { grid-column: 1 / -1; }
     .lower { grid-template-columns: minmax(0, 1fr); }
     .sbeats { width: 110px; }
   }
