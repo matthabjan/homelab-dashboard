@@ -241,7 +241,11 @@ function hostPanel(engine: SnapshotInput, now: number, mem: Memory, round: Round
     if (temps?.cpu != null) {
       const span = th.tempWarnC + 15 - th.tempMinC;
       const tp = Math.max(0, Math.min(100, ((temps.cpu - th.tempMinC) / span) * 100));
-      gauges.push({ key: 'temp', label: 'CPU temp', val: Math.round(temps.cpu), unit: '°C', pct: tp, level: level(temps.cpu, th.tempWarnC, th.tempWarnC + 10), sub: `warn ${th.tempWarnC} °C`, ...hist('host.temp'), max: null, warn: th.tempWarnC });
+      // the chart's dashed line shows the limit, so the corner gives the day's peak (15-minute averages); without
+      // history yet there is no chart, and the corner names the limit instead
+      const tempHist = hist('host.temp');
+      const peak = Math.max(...(tempHist.series ?? []).filter((v) => v != null));
+      gauges.push({ key: 'temp', label: 'CPU temp', val: Math.round(temps.cpu), unit: '°C', pct: tp, level: level(temps.cpu, th.tempWarnC, th.tempWarnC + 10), sub: tempHist.series ? `24 h peak ${Math.round(peak)} °C` : `warn ${th.tempWarnC} °C`, ...tempHist, max: null, warn: th.tempWarnC });
       // the kernel's sensors are the Proxmox node's (the dashboard shares its kernel), so its tile carries them
       const whose = hostSvc ? { service: hostSvc } : { source: 'host' };
       if (temps.cpu >= th.tempWarnC) round.raise({ ...whose, key: 'cpu-temp', sev: temps.cpu >= th.tempWarnC + 10 ? 'crit' : 'warn', title: `CPU at ${Math.round(temps.cpu)} °C`, detail: `limit ${th.tempWarnC} °C` });
