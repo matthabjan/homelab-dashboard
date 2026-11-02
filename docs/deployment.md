@@ -30,7 +30,7 @@ In Portainer, open **Stacks → Add stack → Web editor** and paste:
 ```yaml
 services:
   dashboard:
-    image: matthabjan/homelab-dashboard:0.1.13  # pin a release; see Updating
+    image: matthabjan/homelab-dashboard:0.2.4  # pin a release; see Updating
     container_name: dashboard
     restart: unless-stopped
     environment:
@@ -233,7 +233,7 @@ Use `https://` for every widget that sends credentials. Uptime and certificate-e
 
 ## When a widget fails
 
-The tile shows *Stats unavailable*. The reason is listed under *Needs attention*, and the details are in `docker logs dashboard`.
+The service's status line shows *Stats unavailable*, the reason is a note in **Activity** and on **Setup**, and the details are in `docker logs dashboard`.
 
 | Reason | Fix |
 |---|---|
@@ -248,10 +248,10 @@ If config changes don't take effect, the bind mount may not pass file-change eve
 ## Updating
 
 1. Read the [release notes](https://github.com/matthabjan/homelab-dashboard/releases) for the versions you are skipping.
-2. Change the image tag, for example `:0.1.12` → `:0.1.13`.
+2. Change the pinned image tag to the new version.
 3. In Portainer, redeploy the stack with **Re-pull image** switched on. With plain Compose: `docker compose pull && docker compose up -d`.
 
-The database schema is created and extended automatically, and config files from older versions keep working, because new settings have defaults. On `docker stop` the container stops polling, closes open streams and exits within a second.
+The database schema is created and migrated on start, and settings you leave out take their defaults. On `docker stop` the container stops polling, closes open streams and exits within a second.
 
 ## Backup and restore
 
