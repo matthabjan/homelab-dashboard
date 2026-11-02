@@ -102,7 +102,7 @@ test('a widget alert names its service in the attention list and headline, not o
     { name: 'Pi-hole', state: { widget: widget('Pi-hole is not filtering') } }
   ] }));
   assert.deepEqual(snap.attention.map((a) => a.title).sort(), ['Media server: Health is Degraded', 'Pi-hole is not filtering']);
-  assert.match(snap.verdict.title, /^(Media server: Health is Degraded|Pi-hole is not filtering)\.$/);
+  assert.match(snap.verdict.title, /^(Media server: Health is Degraded|Pi-hole is not filtering)$/);
   const tile = snap.groups[0].services.find((t) => t.name === 'Media server');
   assert.equal(tile?.line, 'Health is Degraded · critical when below 1');
 });

@@ -614,6 +614,24 @@ export interface Tile {
   beats: (Level | 'none')[] | null;
 }
 
+/** A heartbeat service as the dashboard sees it: when it last ran and when the next run is due. */
+export interface Job {
+  id: string;
+  name: string;
+  group: string;
+  href: string | null;
+  description: string;
+  every: number;
+  grace: number;
+  lastOk: number | null;
+  lastFail: number | null;
+  /** when the next run is expected; overdue after `due + grace` */
+  due: number;
+  state: 'up' | 'down' | 'pending';
+  failed: boolean;
+  backup: boolean;
+}
+
 export interface Gauge {
   key: string;
   label: string;
@@ -638,7 +656,16 @@ export interface Snapshot {
   deepLink: Settings['deepLink'];
   logo: string | null;
   staleAfter: number;
-  verdict: { level: Level; tag: string; title: string; sub: string };
+  /** the hero: the state in one sentence; while something needs attention, its top item and how to get to it */
+  verdict: { level: Level; tag: string; title: string; sub: string; action: { label: string; href: string } | null };
+  /** when the newest event happened, for "last change 2 h ago" */
+  lastChange: number | null;
+  /** recent events (went down, recovered, backups completed …), newest first, whatever needs attention */
+  events: FeedItem[];
+  /** heartbeat services: jobs that report when they ran, with their schedule */
+  jobs: Job[];
+  /** PBS backups and backup heartbeats together; null when there are none */
+  backups: BackupStatus | null;
   facts: Fact[];
   attention: AttentionItem[];
   needCount: number;

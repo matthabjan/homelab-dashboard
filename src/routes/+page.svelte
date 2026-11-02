@@ -1,29 +1,25 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { FeedItem, Snapshot, Tile } from '$lib/types';
+  import type { FeedItem, Job, Level, Snapshot, Tile } from '$lib/types';
   import type { PageProps } from './$types';
   import Icon from '$lib/components/Icon.svelte';
   import Vitals from '$lib/components/Vitals.svelte';
   import ThemeToggle from '$lib/components/ThemeToggle.svelte';
   import Palette from '$lib/components/Palette.svelte';
   import Beats from '$lib/components/Beats.svelte';
+  import Sheet from '$lib/components/Sheet.svelte';
   import { ago } from '$lib/ago.ts';
 
+  // The page answers "is everything fine?" at a glance and gets you to a service in one tap. Everything else (strips,
+  // charts, readings) is one tap deeper, in a sheet.
   let { data }: PageProps = $props();
   // svelte-ignore state_referenced_locally — only the first snapshot comes from load; the stream replaces it
   let snap = $state(data.snapshot);
   let live = $state<'connecting' | 'live' | 'reconnecting'>('connecting');
   let now = $state(Date.now());
   let paletteOpen = $state(false);
-  let feedOpen = $state(false); // phones: attention list expanded past the first 3
-  let section = $state<string>('top'); // phones: tab bar item for the section in view
 
   const allServices = $derived(snap ? snap.groups.flatMap((g) => g.services) : []);
-  // "13 of 16 up", over the services that have a check
-  const upNote = $derived.by(() => {
-    const known = allServices.filter((t) => t.level !== 'unknown');
-    return known.length ? `${known.filter((t) => t.status !== 'Down').length} of ${known.length} up` : '';
-  });
   const configLabel = $derived(!snap?.configProblems ? 'Setup' : `Setup, ${snap.configProblems} config problem${snap.configProblems === 1 ? '' : 's'}`);
   const stale = $derived(snap && now - snap.generatedAt > snap.staleAfter);
   // the stream has been down past a short grace (a server restart is a blip), or the device is offline
@@ -31,7 +27,7 @@
   let offline = $state(false);
   // a status page must not keep saying "all good" on old data: the page greys out instead
   const degraded = $derived(!!stale || lost || offline);
-  // tiles (and 'verdict') whose level changed in the last update, briefly highlighted
+  // services (and 'verdict') whose level changed in the last update, briefly highlighted
   let flash = $state(new Set<string>());
   function changes(prev: Snapshot, next: Snapshot) {
     const was = new Map(prev.groups.flatMap((g) => g.services).map((t) => [t.id, t.level]));
@@ -49,25 +45,111 @@
     clearTimeout(unflash);
     unflash = setTimeout(() => (flash = new Set()), 2400);
   }
-  // problems first; when all is well, recent changes too (built by the server: attention.ts)
-  const feed: FeedItem[] = $derived(snap?.feed ?? []);
   const target = $derived(snap?.linkTarget || '_blank');
   // this dashboard's own pages (the config view) open in place; services as settings.linkTarget says
   const linkTarget = (href: string | null | undefined) => (!href ? undefined : href.startsWith('/') ? undefined : target);
-  const isProblem = (level: Tile['level']) => level === 'crit' || level === 'warn';
-  // phones have no tooltips: a problem row in the services list leads with its status word ("Up · …") unless the line already says it
-  const statusWord = (t: Tile) => (isProblem(t.level) && t.status && !t.line.toLowerCase().includes(t.status.toLowerCase()) ? t.status : '');
-  const uptimeTxt = (t: Tile) => (t.uptime24 != null ? `${pctTxt(t.uptime24)} uptime in 24 h` : '');
-  // phones: the fleet ribbon slot under the finger, in place of the "Last 24 h" label
-  let fleetPick = $state<string | null>(null);
+  const isProblem = (level: string) => level === 'crit' || level === 'warn';
+  const pctTxt = (v: number | null, d = 2) => (v == null ? '—' : v >= 99.995 ? '100%' : v.toFixed(d) + '%');
+  /** "2 h ago", "just now" */
+  const since = (ts: number | null) => (ts == null ? 'never' : ago(ts, now) === 'now' ? 'just now' : `${ago(ts, now)} ago`);
+  /** "in 3 d", "now" for a time that has passed */
+  const until = (ts: number) => (ts <= now ? 'now' : `in ${ago(now, ts)}`);
   const today = $derived.by(() => {
     const d = new Date(now);
     return `${d.toLocaleDateString('en-GB', { weekday: 'long' })}, ${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`;
   });
 
+  // ---- what the page shows, from the snapshot ----
+  // under the hero: the other warnings and critical items (notes, such as pending updates, are the activity card's)
+  const also = $derived(snap?.needCount ? snap.attention.slice(1).filter((a) => a.sev !== 'info') : []);
+  const notes = $derived(snap ? snap.attention.filter((a) => a.sev === 'info') : []);
+  // the activity list: notes, then events, without an event that repeats a note (the alert logged it)
+  const activity = $derived.by(() => {
+    if (!snap) return [];
+    const said = new Set(notes.map((n) => `${n.sid ?? ''}\0${n.title}`));
+    return [...notes, ...snap.events.filter((e) => !notes.some((n) => (n.sid === e.sid || !e.sid) && n.title.endsWith(e.title)) && !said.has(`${e.sid ?? ''}\0${e.title}`))];
+  });
+  let alsoAll = $state(false);
+  const ALSO = 3;
+  // the launcher: only what can be opened (jobs and services without href live in the Status view and the sheets)
+  const launch = $derived(snap ? snap.groups.map((g) => ({ name: g.name, services: g.services.filter((t) => t.href) })).filter((g) => g.services.length) : []);
+  const jobById = $derived(new Map((snap?.jobs ?? []).map((j) => [j.id, j])));
+  const nextJob = $derived([...(snap?.jobs ?? [])].sort((a, b) => a.due - b.due)[0] ?? null);
+
+  type Card = { id: 'system' | 'storage' | 'network' | 'backups'; label: string; value: string; unit?: string; sub: string; level: Level | 'none' };
+  const worst = (levels: string[]): Level | 'none' => (levels.includes('crit') ? 'crit' : levels.includes('warn') ? 'warn' : 'none');
+  const cards: Card[] = $derived.by(() => {
+    if (!snap) return [];
+    const out: Card[] = [];
+    const g = (k: string) => snap?.host?.gauges.find((x) => x.key === k);
+    if (snap.host) {
+      const cpu = g('cpu'), mem = g('mem'), temp = g('temp');
+      out.push({
+        id: 'system', label: 'System',
+        value: [cpu && `${cpu.val}%`, mem?.pct != null && `${Math.round(mem.pct)}%`].filter(Boolean).join(' · ') || '—',
+        sub: [cpu && 'CPU', mem && 'memory', temp && `${temp.val} °C`].filter(Boolean).join(' · ') + ` · ${snap.host.name}`,
+        level: worst(snap.host.gauges.map((x) => x.level))
+      });
+    }
+    // a detached or unavailable row (a removable offsite disk) is expected: it never sets the card's figure or colour.
+    // The card turns amber only for what raises an alert (a row over storageWarnPct, a drive); the bar's amber stays in the sheet
+    const rows = snap.storage.filter((s) => s.level !== 'off' && s.pct != null);
+    if (snap.storage.length) {
+      const top = [...rows].sort((a, b) => (b.pct ?? 0) - (a.pct ?? 0))[0];
+      const off = snap.storage.length - rows.length;
+      const drives = snap.drives.filter((d) => isProblem(d.level) || isProblem(d.lifeLevel)).length;
+      out.push({ id: 'storage', label: 'Storage', value: top ? `${Math.round(top.pct ?? 0)}%` : '—', unit: top ? 'fullest' : '', sub: [drives ? `${drives} drive${drives === 1 ? '' : 's'} to check` : top?.name, `${snap.storage.length} storages`, off && `${off} offline`].filter(Boolean).join(' · '), level: worst([...rows.map((s): string => (s.level === 'crit' ? 'warn' : 'ok')), ...snap.drives.flatMap((d) => [d.level, d.lifeLevel])]) });
+    }
+    if (snap.network) {
+      const n = snap.network;
+      const r = (v: number | null) => (v == null ? '—' : v >= 100 ? String(Math.round(v)) : v.toFixed(1));
+      out.push({ id: 'network', label: 'Network', value: n.down != null ? `↓${r(n.down)} ↑${r(n.up)}` : n.dns ? `${n.dns.blockedPct?.toFixed(1) ?? '—'}%` : '—', unit: n.down != null ? 'Mbit/s' : 'blocked', sub: [n.source, n.dns && n.down != null && `DNS ${n.dns.blockedPct?.toFixed(1) ?? '—'}% blocked`].filter(Boolean).join(' · '), level: 'none' });
+    }
+    const jobs = snap.jobs;
+    if (jobs.length || snap.backups?.known) {
+      const late = jobs.filter((j) => j.state === 'down');
+      // PBS guests behind on backups: the merged count less the backup jobs that are late
+      const pbsLate = Math.max(0, (snap.backups?.overdue ?? 0) - late.filter((j) => j.backup).length);
+      const overdue = late.length + pbsLate;
+      out.push({
+        id: 'backups', label: 'Backups',
+        value: overdue ? `${overdue} overdue` : 'All current',
+        sub: overdue ? [...late.map((j) => j.name), pbsLate && `${pbsLate} PBS backup${pbsLate === 1 ? '' : 's'}`].filter(Boolean).join(', ') : nextJob ? `next: ${nextJob.name} ${until(nextJob.due)}` : snap.backups?.oldestAge != null ? `oldest backup ${ago(now - snap.backups.oldestAge, now)}` : '',
+        level: overdue || late.length ? 'crit' : 'none'
+      });
+    }
+    return out;
+  });
+
+  // ---- sheets: details on demand ----
+  type Open = { kind: 'service'; id: string } | { kind: 'vitals'; tab: 'system' | 'storage' | 'network' } | { kind: 'backups' } | { kind: 'activity' };
+  let sheet = $state<Open | null>(null);
+  let sheetOpen = $state(false);
+  const show = (s: Open) => { sheet = s; sheetOpen = true; };
+  const openCard = (c: Card) => show(c.id === 'backups' ? { kind: 'backups' } : { kind: 'vitals', tab: c.id });
+  const sheetId = $derived(sheet?.kind === 'service' ? sheet.id : null);
+  const sheetTile = $derived(sheetId ? allServices.find((t) => t.id === sheetId) ?? null : null);
+  const sheetJob = $derived(sheetId ? jobById.get(sheetId) ?? null : null);
+  const sheetTitle = $derived(
+    sheet?.kind === 'service' ? sheetTile?.name ?? '' : sheet?.kind === 'vitals' ? 'Vitals' : sheet?.kind === 'backups' ? 'Backups' : 'Activity'
+  );
+  const sheetSub = $derived(
+    sheet?.kind === 'service' ? [sheetTile?.group, sheetTile?.host].filter(Boolean).join(' · ')
+    : sheet?.kind === 'backups' ? cards.find((c) => c.id === 'backups')?.sub ?? ''
+    : sheet?.kind === 'activity' ? 'Last 24 hours' : ''
+  );
+
+  // ---- services: launch (plain icons) or status (every service with its state and 24 h strip) ----
+  let mode = $state<'launch' | 'status'>('launch');
+  function setMode(m: 'launch' | 'status') {
+    mode = m;
+    try { localStorage.setItem('servicesView', m); } catch {}
+  }
+
   /** (re)open the stream now: the banner's Retry, coming back online. Set once mounted */
   let connect = () => {};
   onMount(() => {
+    try { const m = localStorage.getItem('servicesView'); if (m === 'status' || m === 'launch') mode = m; } catch {}
     let es: EventSource | undefined;
     let retry: ReturnType<typeof setTimeout> | undefined;
     let grace: ReturnType<typeof setTimeout> | undefined;
@@ -94,9 +176,8 @@
     addEventListener('offline', net);
     net();
     now = Date.now(); // the server rendered the date in its own timezone
-    const spy = watchSections();
     return () => {
-      es?.close(); clearInterval(tick); clearTimeout(retry); clearTimeout(grace); clearTimeout(unflash); spy.disconnect();
+      es?.close(); clearInterval(tick); clearTimeout(retry); clearTimeout(grace); clearTimeout(unflash);
       document.removeEventListener('visibilitychange', vis); removeEventListener('online', net); removeEventListener('offline', net);
     };
   });
@@ -108,23 +189,6 @@
     const nav: Navigator & { setAppBadge?: (n?: number) => Promise<void>; clearAppBadge?: () => Promise<void> } = navigator;
     (n ? nav.setAppBadge?.(n) : nav.clearAppBadge?.())?.catch(() => {});
   });
-
-  // tab bar highlight: the last section whose top has passed a line at 30% of the viewport
-  function watchSections() {
-    const ids = ['attention', 'vitals', 'services'];
-    const spy = new IntersectionObserver(() => {
-      const line = innerHeight * 0.3;
-      let best = 'top', bestTop = -Infinity;
-      for (const id of ids) {
-        const r = document.getElementById(id)?.getBoundingClientRect();
-        if (r?.height && r.top <= line && r.top > bestTop) { best = id; bestTop = r.top; }
-      }
-      section = best;
-    }, { rootMargin: '-30% 0px -69% 0px' });
-    for (const id of ['top', ...ids]) { const el = document.getElementById(id); if (el) spy.observe(el); }
-    return spy;
-  }
-  const current = (id: string): 'location' | undefined => (section === id ? 'location' : undefined);
 
   function onKey(e: KeyboardEvent) {
     // key events target the focused element (the body when nothing is focused)
@@ -143,19 +207,30 @@
     } catch {}
   }
 
-  const pctTxt = (v: number | null, d = 2) => (v == null ? '—' : v >= 99.995 ? '100%' : v.toFixed(d) + '%');
   const ICONS: Record<FeedItem['sev'], string> = {
     crit: 'M12 9v4M12 17h.01M10.3 3.9 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z',
     warn: 'M12 7v5l3 2M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z',
     info: 'M12 16v-4M12 8h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z',
     ok: 'M20 6 9 17l-5-5'
   };
+  const KIND: Record<string, string> = { http: 'HTTP', tcp: 'TCP', container: 'Container state', heartbeat: 'Heartbeat' };
+  const jobState = (j: Job) => (j.state === 'down' ? (j.failed ? 'failed' : 'overdue') : j.state === 'pending' ? 'waiting for its first run' : 'on schedule');
 </script>
 
 <svelte:window onkeydown={onKey} />
 
 <!-- setup: the header button and the footer link -->
 {#snippet sliders()}<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1" /><circle cx="15" cy="6" r="2" /><circle cx="9" cy="12" r="2" /><circle cx="17" cy="18" r="2" /></svg>{/snippet}
+{#snippet arrow()}<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8" /></svg>{/snippet}
+
+<!-- one event or alert in a list: what happened, about which service, and when -->
+{#snippet event(a: FeedItem)}
+  <li class="ev lv-{a.sev}">
+    <span class="ev-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={ICONS[a.sev] ?? ICONS.info} /></svg></span>
+    <span class="txt"><span class="t">{a.title}</span>{#if a.detail}<span class="d muted">{a.detail}</span>{/if}</span>
+    <span class="mono muted small when">{ago(a.ts, now)}</span>
+  </li>
+{/snippet}
 
 {#if !snap}
   <main class="boot"><p class="muted">Starting up…</p></main>
@@ -168,28 +243,24 @@
       </a>
       <button class="search card" onclick={() => (paletteOpen = true)} aria-label="Search or jump to a service" aria-keyshortcuts="/ Control+K Meta+K">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
-        <span class="ph">Search or jump to…</span>
+        <span class="ph">Open a service…</span>
         <kbd class="mono">/</kbd>
       </button>
       <div class="right">
         <span class="live" class:warn={stale || live === 'reconnecting'} role="status">
           <span class="pulse"></span>
-          <!-- phones: just the dot while live, one short word when not, so the title keeps its room; the banner below says the rest -->
           {#if live === 'reconnecting'}<span class="only-desktop">Reconnecting…</span><span class="only-phone">Retrying</span>{:else if stale}<span class="only-desktop">Data {ago(snap.generatedAt, now)} old</span><span class="only-phone">Stale</span>{:else}<span class="live-word">Live</span>{/if}
           {#if snap.demo}<span class="demo">demo</span>{/if}
         </span>
-        <!-- phones show it only when the config has problems; otherwise the footer, the palette and config alerts lead there -->
-        <a class="cfg" class:quiet={!snap.configProblems} href="/config" aria-label={configLabel} title={configLabel}>
+        {#if snap.deepLink?.href}
+          <a class="deep lift" href={snap.deepLink.href} target={target} rel="noopener">{snap.deepLink.name ?? 'Monitoring'} {@render arrow()}</a>
+        {/if}
+        <button class="hbtn only-phone" onclick={() => (paletteOpen = true)} aria-label="Open a service"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg></button>
+        <a class="hbtn cfg" href="/config" aria-label={configLabel} title={configLabel}>
           {@render sliders()}
           {#if snap.configProblems}<span class="cfg-badge mono" aria-hidden="true">{snap.configProblems}</span>{/if}
         </a>
-        <ThemeToggle />
-        {#if snap.deepLink?.href}
-          <a class="deep lift" href={snap.deepLink.href} target={target} rel="noopener">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4" /></svg>
-            {snap.deepLink.name ?? 'Monitoring'}
-          </a>
-        {/if}
+        <span class="only-desktop"><ThemeToggle /></span>
       </div>
     </header>
 
@@ -205,136 +276,140 @@
       </div>
     {/if}
 
-    <section class="hero" aria-label="Overall status">
-      <div class="card verdict lv-{degraded ? 'none' : snap.verdict.level}" class:flash={flash.has('verdict')}>
-        <div class="tag"><span class="halo"></span>{degraded ? 'Last known state' : snap.verdict.tag}</div>
-        <h1>{snap.verdict.title}</h1>
-        <p class="muted">{snap.verdict.sub}</p>
-        {#if snap.facts?.length}
-          <div class="facts">
-            {#each snap.facts as f}
-              {@const [n, of] = f.v.split(' / ')}
-              <div class="fact lv-{f.level ?? 'none'}"><span class="mono v" class:hl={f.level === 'warn' || f.level === 'crit'}>{n}{#if of}<span class="of">/{of}</span>{/if}</span><span class="muted k">{f.k}</span></div>
+    <!-- the answer first: one sentence; while something needs attention, the way to it -->
+    <section class="card hero lv-{degraded ? 'none' : snap.verdict.level}" class:alert={!degraded && isProblem(snap.verdict.level)} class:flash={flash.has('verdict')} aria-label="Overall status">
+      <div class="state">
+        <span class="mark" aria-hidden="true">
+          {#if snap.verdict.level === 'ok'}<svg viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5" /></svg>{:else}<svg viewBox="0 0 24 24"><path d="M12 7v6M12 17h.01" /></svg>{/if}
+        </span>
+        <div class="say">
+          {#if degraded}<span class="tag">Last known state</span>{/if}
+          <h1>{snap.verdict.title}</h1>
+          {#if snap.verdict.sub || snap.lastChange}
+            <p class="muted">{[snap.verdict.sub, !snap.needCount && snap.lastChange ? `last change ${since(snap.lastChange)}` : ''].filter(Boolean).join(' · ')}</p>
+          {/if}
+        </div>
+        {#if snap.verdict.action}
+          <a class="primary lift" href={snap.verdict.action.href} target={linkTarget(snap.verdict.action.href)} rel="noopener">{snap.verdict.action.label} {@render arrow()}</a>
+        {/if}
+      </div>
+
+      {#if also.length}
+        <div class="also">
+          <h2 class="k">Also needs attention · {also.length}</h2>
+          <ul class="probs" id="also">
+            {#each alsoAll ? also : also.slice(0, ALSO) as a (a.key)}
+              <li class="prob lv-{a.sev}" class:flash={!!a.sid && flash.has(a.sid)}>
+                <!-- the card opens the service's details; Open goes straight to the service -->
+                <svelte:element this={a.sid ? 'button' : 'div'} class="pbody" onclick={() => a.sid && show({ kind: 'service', id: a.sid })} role={a.sid ? undefined : 'group'}>
+                  <span class="ev-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={ICONS[a.sev] ?? ICONS.info} /></svg></span>
+                  <span class="txt"><span class="t">{a.title}</span>{#if a.detail}<span class="d muted">{a.detail}</span>{/if}</span>
+                </svelte:element>
+                {#if a.href}<a class="ghost" href={a.href} target={linkTarget(a.href)} rel="noopener" aria-label="Open {a.service ?? 'service'}">Open {@render arrow()}</a>{/if}
+              </li>
             {/each}
-          </div>
-        {/if}
-        <div class="fleet">
-          <div class="fleet-head"><span class="muted" class:picked={fleetPick} aria-live="polite">{fleetPick ?? 'Last 24 h'}</span><span><span class="mono pct">{pctTxt(snap.fleetAvail)}</span> <span class="muted">uptime</span></span></div>
-          <Beats beats={snap.fleet} end={snap.generatedAt} label="Availability of all services over the last 24 hours" onpick={(t) => (fleetPick = t)} />
-          <div class="fleet-head muted mono small"><span>−24 h</span><span>−12 h</span><span>now</span></div>
-        </div>
-      </div>
-
-      <!-- one attention item: a card row with icon and age on desktop, a list row with dot and chevron on phones -->
-      {#snippet feedItem(a: FeedItem, kind: 'item' | 'row')}
-        <svelte:element this={a.href ? 'a' : 'div'} class="{kind} lv-{a.sev}" class:lift={!!a.href} class:flash={!!a.sid && flash.has(a.sid)} href={a.href} target={linkTarget(a.href)} rel={a.href ? 'noopener' : undefined}>
-          {#if kind === 'item'}
-            <span class="ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={ICONS[a.sev] ?? ICONS.info} /></svg></span>
-          {:else}
-            <span class="dot lv-{a.sev}"></span>
+          </ul>
+          {#if also.length > ALSO}
+            <button class="link-btn" aria-expanded={alsoAll} aria-controls="also" onclick={() => (alsoAll = !alsoAll)}>{alsoAll ? 'Show fewer' : `Show ${also.length - ALSO} more`}</button>
           {/if}
-          <span class="txt"><span class="t">{a.title}</span>{#if a.detail}<span class="d muted">{a.detail}</span>{/if}</span>
-          {#if kind === 'item'}
-            <span class="mono muted small when">{ago(a.ts, now)}</span>
-          {:else if a.href}
-            <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
-          {/if}
-        </svelte:element>
-      {/snippet}
-
-      <div class="feed" id="attention">
-        <div class="sec-head">
-          <h2>{snap.needCount ? 'Needs attention' : 'Recent activity'}</h2>
-          <span class="note">{snap.needCount ? 'most severe first' : 'last 24 h'}</span>
         </div>
-        {#if feed.length}
-          <div class="card feed-card only-desktop" id="feed-items">
-            {#each feedOpen ? feed : feed.slice(0, 5) as a}{@render feedItem(a, 'item')}{/each}
-            {#if feed.length > 5}
-              <button class="see-all" aria-expanded={feedOpen} aria-controls="feed-items" onclick={() => (feedOpen = !feedOpen)}>{feedOpen ? 'Show less' : `Show all ${feed.length}`}</button>
-            {/if}
-          </div>
-          <div class="rows only-phone" id="feed-rows">
-            {#each feedOpen ? feed : feed.slice(0, 3) as a}{@render feedItem(a, 'row')}{/each}
-          </div>
-          {#if feed.length > 3}
-            <button class="see-all only-phone" aria-expanded={feedOpen} aria-controls="feed-rows" onclick={() => (feedOpen = !feedOpen)}>{feedOpen ? 'Show less' : `See all (${feed.length})`}</button>
-          {/if}
-        {:else}
-          <div class="card feed-card empty"><p class="muted">No changes in the last 24 hours.</p></div>
-        {/if}
-      </div>
-    </section>
+      {/if}
 
-    {#if snap.host || snap.storage.length || snap.drives.length || snap.network}
-      <section class="block vitals" id="vitals" aria-labelledby="h-vitals">
-        <div class="sec-head"><h2 id="h-vitals">Vitals</h2></div>
-        <Vitals host={snap.host} storage={snap.storage} drives={snap.drives} network={snap.network} {target} />
-      </section>
-    {/if}
-
-    {#if snap.mostUsed.length}
-      <section class="block" aria-labelledby="h-most">
-        <div class="sec-head"><h2 id="h-most">Most used</h2></div>
-        <div class="pins">
-          {#each snap.mostUsed as t (t.id)}
-            <a class="card pin lift lv-{t.level}" class:flash={flash.has(t.id)} class:alert={t.level === 'crit' || t.level === 'warn'} href={t.href} target={target} rel="noopener" onclick={() => opened(t.id)} aria-label="{t.name}, {t.status}{t.lineLevel ? ', ' + t.line : ''}">
-              <div class="pin-top">
-                <span class="ic big"><Icon src={t.icon} dark={t.iconDark} name={t.name} size={30} /></span>
-                <span class="dot lv-{t.level}" title={t.status}></span>
-              </div>
-              <div class="pin-name"><span class="n">{t.name}</span><span class="mono muted hostname">{t.host}</span><span class="pline only-phone" class:hl={isProblem(t.level)}>{t.line}</span></div>
-              {#if t.stats.length}
-                <div class="pin-stats">
-                  {#each t.stats.slice(0, 2) as s}
-                    <div class="lv-{s.level ?? 'none'}"><span class="mono v" class:hl={s.level === 'warn' || s.level === 'crit'}>{s.v}</span><span class="muted k">{s.k}</span></div>
-                  {/each}
-                </div>
-              {:else}
-                <!-- only http and tcp checks are timed; a container or heartbeat check shows the week's uptime instead of a p95 that can't exist -->
-                <div class="pin-stats"><div><span class="mono v">{pctTxt(t.uptime24, 1)}</span><span class="muted k">uptime 24 h</span></div>{#if t.check === 'http' || t.check === 'tcp'}<div><span class="mono v">{t.p95 == null ? '—' : Math.round(t.p95) + ' ms'}</span><span class="muted k">p95</span></div>{:else}<div><span class="mono v">{pctTxt(t.uptime7, 1)}</span><span class="muted k">uptime 7 d</span></div>{/if}</div>
-              {/if}
-            </a>
-          {/each}
-        </div>
-      </section>
-    {/if}
-
-    <div id="services">
-      <!-- one list for both layouts: a grid of tiles on desktop; on phones the same tiles are rows of an inset list
-           per group (problems are already at the top, under Needs attention) -->
-      <section class="block services" aria-labelledby="h-services">
-        <div class="sec-head"><h2 id="h-services">Services</h2>{#if upNote}<span class="note">{upNote}</span>{/if}</div>
-      {#each snap.groups as g (g.name)}
-        <section class="group" aria-label={g.name}>
-          <div class="grp-head"><h3>{g.name}</h3><span class="mono muted small">{g.summary}</span></div>
-          <div class="tiles">
-            {#each g.services as t (t.id)}
-              {@const up = uptimeTxt(t)}
-              {@const word = statusWord(t)}
-              <a class="tile lift lv-{t.level}" class:flash={flash.has(t.id)} class:alert={t.level === 'crit' || t.level === 'warn'} href={t.href} target={target} rel="noopener" onclick={() => opened(t.id)} aria-label="{t.name}, {t.status}, {t.line}{up ? ', ' + up : ''}">
-                <span class="ic"><Icon src={t.icon} dark={t.iconDark} name={t.name} size={24} /></span>
-                <span class="txt">
-                  <span class="n">{t.name}</span>
-                  <!-- hl: the line itself is a problem (desktop); problem: the service is (phones, which add the status word) -->
-                  <span class="l" class:hl={t.lineLevel === 'crit' || t.lineLevel === 'warn'} class:problem={isProblem(t.level)} title={t.line}>{#if word}<span class="word"><b>{word}</b>{' · '}</span>{/if}{t.line}</span>
-                </span>
-                <span class="dot lv-{t.level}" title={t.status}></span>
-                <!-- the strip with its exact uptime as text; the tile's label already says both -->
-                {#if t.beats}
-                  <span class="beats" aria-hidden="true"><Beats beats={t.beats} end={snap.generatedAt} label="" /><span class="mono">{pctTxt(t.uptime24)}</span></span>
-                {/if}
+      {#if snap.mostUsed.length}
+        <div class="most">
+          <h2 class="k">Most used</h2>
+          <div class="apps">
+            {#each snap.mostUsed as t (t.id)}
+              <a class="app lift" href={t.href} target={target} rel="noopener" onclick={() => opened(t.id)} aria-label="{t.name}{isProblem(t.level) ? `, ${t.status}` : ''}">
+                <span class="ic big lv-{t.level}"><Icon src={t.icon} dark={t.iconDark} name={t.name} size={28} />{#if isProblem(t.level)}<span class="pmark" aria-hidden="true"></span>{/if}</span>
+                <span class="an">{t.name}</span>
               </a>
             {/each}
           </div>
-        </section>
-      {/each}
+        </div>
+      {/if}
+    </section>
+
+    {#if cards.length}
+      <section class="cards" aria-label="Vitals" style="--n: {cards.length}">
+        {#each cards as c (c.id)}
+          <button class="card vcard lift lv-{c.level}" class:alert={isProblem(c.level)} onclick={() => openCard(c)}>
+            <span class="k">{c.label}</span>
+            <span class="v">{c.value}{#if c.unit}<span class="u">{c.unit}</span>{/if}</span>
+            <span class="s">{c.sub}</span>
+          </button>
+        {/each}
+      </section>
+    {/if}
+
+    <div class="lower">
+      <section class="card sec services" aria-labelledby="h-services">
+        <div class="sec-head">
+          <h2 id="h-services">Services</h2>
+          <div class="seg" role="group" aria-label="Show services as">
+            <button aria-pressed={mode === 'launch'} onclick={() => setMode('launch')}>Launch</button>
+            <button aria-pressed={mode === 'status'} onclick={() => setMode('status')}>Status</button>
+          </div>
+        </div>
+
+        {#if mode === 'launch'}
+          <div class="launch">
+            {#each launch as g (g.name)}
+              <div class="lgroup">
+                <h3>{g.name}</h3>
+                <div class="apps">
+                  {#each g.services as t (t.id)}
+                    <a class="app lift" class:flash={flash.has(t.id)} href={t.href} target={target} rel="noopener" onclick={() => opened(t.id)} aria-label="{t.name}{isProblem(t.level) ? `, ${t.status}` : ''}">
+                      <span class="ic lv-{t.level}"><Icon src={t.icon} dark={t.iconDark} name={t.name} size={24} />{#if isProblem(t.level)}<span class="pmark" aria-hidden="true"></span>{/if}</span>
+                      <span class="an">{t.name}</span>
+                    </a>
+                  {/each}
+                </div>
+              </div>
+            {:else}
+              <p class="muted">No service has a link (<code>href</code>) yet.</p>
+            {/each}
+          </div>
+        {:else}
+          <!-- the density view: every service and job, with its state, status line and 24 h strip; a row opens its sheet -->
+          <div class="fleet">
+            <span class="muted small">All services, last 24 h · {pctTxt(snap.fleetAvail)} uptime</span>
+            <Beats beats={snap.fleet} end={snap.generatedAt} label="Availability of all services over the last 24 hours" />
+          </div>
+          {#each snap.groups as g (g.name)}
+            <div class="sgroup">
+              <h3>{g.name} <span class="mono muted small">{g.summary}</span></h3>
+              <ul class="srows">
+                {#each g.services as t (t.id)}
+                  <li>
+                    <button class="srow lv-{t.level}" class:flash={flash.has(t.id)} onclick={() => show({ kind: 'service', id: t.id })}>
+                      <span class="ic"><Icon src={t.icon} dark={t.iconDark} name={t.name} size={22} /></span>
+                      <span class="txt"><span class="t">{t.name}</span><span class="d" class:hl={isProblem(t.lineLevel ?? '')}>{t.line}</span></span>
+                      {#if t.beats}<span class="sbeats" aria-hidden="true"><Beats beats={t.beats} end={snap.generatedAt} label="" /></span>{/if}
+                      <span class="mono small muted up">{pctTxt(t.uptime24, 1)}</span>
+                      <span class="dot lv-{t.level}" title={t.status}></span>
+                    </button>
+                  </li>
+                {/each}
+              </ul>
+            </div>
+          {/each}
+        {/if}
+      </section>
+
+      <section class="card sec activity" aria-labelledby="h-activity">
+        <div class="sec-head"><h2 id="h-activity">Activity</h2>{#if activity.length > 5}<button class="link-btn" onclick={() => show({ kind: 'activity' })}>Show all</button>{/if}</div>
+        {#if activity.length}
+          <ul class="evs">{#each activity.slice(0, 5) as a (a.ts + a.title)}{@render event(a)}{/each}</ul>
+        {:else}
+          <p class="muted small">No changes in the last 24 hours.</p>
+        {/if}
       </section>
     </div>
 
     {#if snap.bookmarks.length}
       <section class="block" aria-labelledby="h-links">
-        <div class="sec-head"><h2 id="h-links">Links</h2></div>
+        <h2 id="h-links" class="k">Links</h2>
         <div class="links">
           {#each snap.bookmarks as b}
             <a class="card link lift" href={b.href} target={target} rel="noopener"><Icon src={b.icon} dark={b.iconDark} name={b.name} size={18} />{b.name}</a>
@@ -349,152 +424,193 @@
         <span><span class="t">Setup</span><span class="d muted">{snap.configProblems ? `${snap.configProblems} problem${snap.configProblems === 1 ? '' : 's'} in your config` : 'What loaded, which widgets connect'}</span></span>
       </a>
       <span class="muted small ver">
+        <span class="only-phone"><ThemeToggle /></span>
         <a href="https://github.com/matthabjan/homelab-dashboard/tree/main/docs" target="_blank" rel="noopener">Documentation</a>
         {#if snap.version}<span class="mono">v{snap.version}</span>{/if}
       </span>
     </footer>
   </div>
 
-  <nav class="tabbar" aria-label="Sections">
-    <a href="#top" aria-current={current('top')}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z" /></svg>Home</a>
-    <a href="#attention" class="bell" aria-current={current('attention')}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0" /></svg>Alerts{#if snap.needCount}<span class="badge mono">{snap.needCount}</span>{/if}</a>
-    {#if snap.host || snap.storage.length || snap.drives.length || snap.network}<a href="#vitals" aria-current={current('vitals')}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h18v6H3zM3 14h18v6H3zM7 7h.01M7 17h.01" /></svg>Vitals</a>{/if}
-    <a href="#services" aria-current={current('services')}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" /></svg>Services</a>
-    <button onclick={() => (paletteOpen = true)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14ZM20 20l-3.5-3.5" /></svg>Search</button>
-  </nav>
+  <Sheet bind:open={sheetOpen} title={sheetTitle} sub={sheetSub}>
+    {#if sheet?.kind === 'service' && sheetTile}
+      {@const t = sheetTile}
+      {@const j = sheetJob}
+      <div class="sh-head">
+        <span class="ic big"><Icon src={t.icon} dark={t.iconDark} name={t.name} size={28} /></span>
+        <span class="txt"><span class="state-w lv-{t.level}"><span class="dot lv-{t.level}" aria-hidden="true"></span>{t.status}</span><span class="d" class:hl={isProblem(t.lineLevel ?? '')}>{t.line}</span></span>
+      </div>
+      {#if t.href}<a class="primary wide" href={t.href} target={target} rel="noopener" onclick={() => opened(t.id)}>Open {t.name} {@render arrow()}</a>{/if}
+      {#if t.beats}
+        <div class="sh-block">
+          <div class="sh-row"><span class="st">Last 24 hours</span><span class="muted small">{[`${pctTxt(t.uptime24)} up`, (t.check === 'http' || t.check === 'tcp') && `p95 ${t.p95 == null ? '—' : Math.round(t.p95) + ' ms'}`].filter(Boolean).join(' · ')}</span></div>
+          <Beats beats={t.beats} end={snap.generatedAt} label="{t.name} over the last 24 hours" />
+          <div class="sh-row muted small mono"><span>−24 h</span><span>now</span></div>
+        </div>
+      {/if}
+      {#if t.stats.length}
+        <div class="facts">
+          {#each t.stats as s}<div class="fact lv-{s.level ?? 'none'}"><span class="muted k">{s.k}</span><span class="fv" class:hl={isProblem(s.level ?? '')}>{s.v}</span></div>{/each}
+        </div>
+      {/if}
+      <dl class="kv">
+        {#if j}
+          <div><dt>Schedule</dt><dd>every {ago(0, j.every)} · grace {ago(0, j.grace)}</dd></div>
+          <div><dt>Last run</dt><dd>{since(j.lastOk)}{#if j.lastFail && (!j.lastOk || j.lastFail > j.lastOk)} · failure reported {since(j.lastFail)}{/if}</dd></div>
+          <div><dt>Next run</dt><dd>{until(j.due)} · {jobState(j)}</dd></div>
+        {:else if t.check}
+          <div><dt>Check</dt><dd>{KIND[t.check] ?? t.check}</dd></div>
+        {/if}
+        {#if t.uptime7 != null}<div><dt>Uptime 7 d</dt><dd>{pctTxt(t.uptime7)}</dd></div>{/if}
+        {#if t.cert}<div><dt>Certificate</dt><dd>{t.cert.days < 0 ? 'expired' : `valid ${t.cert.days} d`}{t.cert.selfSigned ? ' · self-signed' : ''}</dd></div>{/if}
+        {#if t.description}<div><dt>About</dt><dd>{t.description}</dd></div>{/if}
+      </dl>
+    {:else if sheet?.kind === 'vitals'}
+      <Vitals host={snap.host} storage={snap.storage} drives={snap.drives} network={snap.network} {target} initial={sheet.tab} />
+    {:else if sheet?.kind === 'backups'}
+      {#if snap.backups?.known && snap.backups.oldestAge != null}
+        <div class="facts">
+          <div class="fact"><span class="muted k">Oldest backup</span><span class="fv">{ago(now - snap.backups.oldestAge, now)}</span></div>
+          <div class="fact lv-{snap.backups.overdue ? 'crit' : 'none'}"><span class="muted k">Overdue</span><span class="fv" class:hl={!!snap.backups.overdue}>{snap.backups.overdue}</span></div>
+        </div>
+      {/if}
+      {#if snap.jobs.length}
+        <ul class="jobs">
+          {#each [...snap.jobs].sort((a, b) => a.due - b.due) as j (j.id)}
+            <li>
+              <button class="job" onclick={() => show({ kind: 'service', id: j.id })}>
+                <span class="txt"><span class="t">{j.name}</span><span class="d muted">every {ago(0, j.every)} · last run {since(j.lastOk)}</span></span>
+                <span class="jr"><span class="state-w lv-{j.state === 'down' ? 'crit' : j.state === 'up' ? 'ok' : 'none'}"><span class="dot lv-{j.state === 'down' ? 'crit' : j.state === 'up' ? 'ok' : 'none'}" aria-hidden="true"></span>{jobState(j)}</span><span class="muted small">next {until(j.due)}</span></span>
+              </button>
+            </li>
+          {/each}
+        </ul>
+      {/if}
+      {#if snap.storage.some((s) => s.level === 'off')}
+        <p class="muted small">A detached removable datastore (an offsite disk) is expected: it raises a reminder only after <code>offsiteMaxDetachedDays</code>.</p>
+      {/if}
+      {#if snap.storage.length}<button class="link-btn" onclick={() => show({ kind: 'vitals', tab: 'storage' })}>Storage and drives</button>{/if}
+    {:else if sheet?.kind === 'activity'}
+      <div class="sh-block">
+        <div class="sh-row"><span class="st">All services</span><span class="muted small">{pctTxt(snap.fleetAvail)} uptime</span></div>
+        <Beats beats={snap.fleet} end={snap.generatedAt} label="Availability of all services over the last 24 hours" />
+      </div>
+      <ul class="evs">{#each activity as a (a.ts + a.title)}{@render event(a)}{/each}</ul>
+    {/if}
+  </Sheet>
 
   <Palette bind:open={paletteOpen} services={allServices} bookmarks={snap.bookmarks} mostUsed={snap.mostUsed} {target} onopen={opened} />
 {/if}
 
 <style>
   .boot { min-height: 100vh; display: grid; place-items: center; }
-  .page { max-width: 1320px; margin: 0 auto; padding: max(20px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 64px max(16px, env(safe-area-inset-left)); display: flex; flex-direction: column; gap: 28px; }
+  .page { max-width: 1240px; margin: 0 auto; padding: max(20px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 56px max(16px, env(safe-area-inset-left)); display: flex; flex-direction: column; gap: 16px; }
   .small { font-size: 12px; }
-  /* one section header everywhere, desktop and phone: the title, and a note on the right when there is one */
   h2 { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
-  .sec-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 16px; }
-  .note { font-size: 12.5px; color: var(--muted); }
+  h2.k, .k { font-size: 13px; font-weight: 500; color: var(--muted); letter-spacing: 0; }
+  h3 { font-size: 12px; font-weight: 600; color: var(--muted); }
+  .sec-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
+  .txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+  .txt .t { font-size: 14px; font-weight: 500; }
+  .txt .d { font-size: 12.5px; overflow-wrap: anywhere; }
+  .hl { color: color-mix(in srgb, var(--lv) 85%, var(--text)); }
 
   /* header */
-  .top { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; }
-  .brand { display: flex; align-items: center; gap: 12px; }
+  .top { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; }
+  .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
   .brand img { width: 40px; height: 40px; border-radius: 12px; }
   .btxt { display: flex; flex-direction: column; min-width: 0; }
-  .date { font-size: 13px; font-weight: 500; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .bname { font-size: 26px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .search {
-    flex: 1 1 280px; max-width: 560px; display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 12px 0 14px;
-    border: 1px solid var(--line); border-radius: 12px; color: var(--muted); cursor: pointer; text-align: left;
-  }
+  .date { font-size: 12.5px; font-weight: 500; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bname { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .search { flex: 1 1 260px; max-width: 420px; margin-left: auto; display: flex; align-items: center; gap: 10px; min-height: 42px; padding: 0 12px 0 14px; border: 0; border-radius: 12px; color: var(--muted); cursor: pointer; text-align: left; }
   .search:hover { color: var(--text); }
   .search .ph { flex: 1; }
   kbd { font-size: 11px; padding: 2px 7px; border-radius: 6px; background: var(--surface-2); }
-  .right { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+  .right { display: flex; align-items: center; gap: 8px; }
   .live { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); white-space: nowrap; }
   .pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 4px var(--ok-soft); animation: breathe 3s ease-in-out infinite; }
   .live.warn .pulse { background: var(--warn); box-shadow: 0 0 0 4px var(--warn-soft); }
   .demo { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; padding: 2px 6px; border-radius: 5px; background: var(--surface-3); color: var(--text); }
-  /* setup: next to the theme toggle, the same height; the badge counts config problems */
-  .cfg { position: relative; display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 12px; background: var(--surface-2); color: var(--muted); }
-  .cfg:hover { color: var(--text); }
-  .cfg svg, .foot-cfg svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+  .hbtn { position: relative; display: flex; align-items: center; justify-content: center; width: 42px; height: 42px; border: 0; border-radius: 12px; background: var(--surface); box-shadow: var(--shadow); color: var(--text); cursor: pointer; }
+  .hbtn svg, .foot-cfg svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
   .cfg-badge { position: absolute; top: -4px; right: -4px; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 9px; background: var(--warn); color: var(--bg); font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center; }
-  .deep { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; padding: 0 14px; min-height: 40px; border-radius: 10px; background: var(--surface-2); }
+  .deep { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; padding: 0 14px; min-height: 42px; border-radius: 12px; background: var(--surface); box-shadow: var(--shadow); }
   @keyframes breathe { 50% { box-shadow: 0 0 0 7px transparent; } }
 
-  /* hero */
-  .hero { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 16px; }
-  .verdict {
-    padding: 28px; display: flex; flex-direction: column; gap: 16px; container: verdict / inline-size;
-    background: radial-gradient(120% 90% at 0% 0%, var(--lv-soft), transparent 55%), var(--surface);
-  }
-  .tag { display: flex; align-items: center; gap: 10px; font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--lv); }
-  .halo { width: 10px; height: 10px; border-radius: 50%; background: var(--lv); box-shadow: 0 0 0 5px var(--lv-soft); }
-  .verdict h1 { font-size: clamp(28px, 4vw, 40px); line-height: 1.05; font-weight: 600; letter-spacing: -0.03em; text-wrap: balance; }
-  .verdict p { margin: 0; font-size: 15px; }
-  /* stats: no boxes, hairline dividers between them */
-  .facts { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); row-gap: 14px; margin-top: 4px; padding: 14px 0; border-block: 1px solid var(--line); }
-  .fact { display: flex; flex-direction: column; gap: 4px; padding: 0 16px; min-width: 0; }
-  .fact:first-child { padding-left: 0; }
-  .fact + .fact { border-left: 1px solid var(--line); }
-  /* a narrow card: two by two, each row starting flush left */
-  @container verdict (max-width: 500px) {
-    .facts { grid-auto-flow: row; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .fact:nth-child(odd) { padding-left: 0; border-left: 0; }
-  }
-  .fact .v { font-size: 22px; font-weight: 500; letter-spacing: -0.02em; white-space: nowrap; }
-  .fact .v.hl { color: var(--lv); }
-  .fact .of { color: var(--muted); font-size: 0.7em; margin-left: 2px; }
-  .fact .k { font-size: 12px; line-height: 1.3; }
-  .fleet { margin-top: auto; display: flex; flex-direction: column; gap: 8px; }
-  .fleet-head { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; }
-  .fleet-head.small { font-size: 11px; }
-  .pct { font-size: 14px; font-weight: 500; }
-  /* one continuous rounded ribbon; problems rise above it, set apart by a hairline */
+  /* hero: the sentence, the way to what needs attention, the most used services */
+  .hero { padding: 28px 30px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 22px 32px; align-items: center; }
+  .hero.alert { box-shadow: inset 0 0 0 1.5px var(--lv), var(--shadow); }
+  .state { display: flex; align-items: center; gap: 18px; min-width: 0; }
+  .hero:has(.also) .state, .hero:has(.also) .also { grid-column: 1 / -1; }
+  .mark { width: 54px; height: 54px; border-radius: 50%; background: var(--lv-soft); color: var(--lv); display: flex; align-items: center; justify-content: center; flex: none; }
+  .mark svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+  .hero.lv-none .mark { color: var(--muted); }
+  .say { display: flex; flex-direction: column; gap: 6px; min-width: 0; flex: 1; }
+  .tag { font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+  h1 { font-size: clamp(28px, 3.4vw, 38px); line-height: 1.1; font-weight: 700; letter-spacing: -0.025em; text-wrap: balance; }
+  .say p { margin: 0; font-size: 15px; }
+  .primary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 18px; border-radius: 12px; background: var(--text); color: var(--bg); font-size: 14px; font-weight: 600; flex: none; }
+  .primary.wide { width: 100%; box-sizing: border-box; min-height: 46px; }
+  .also { display: flex; flex-direction: column; gap: 8px; }
+  .probs { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 10px; }
+  .prob { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 6px; border-radius: 16px; background: var(--lv-soft); min-width: 0; }
+  .pbody { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 6px; border: 0; border-radius: 12px; background: none; color: var(--text); font: inherit; text-align: left; }
+  button.pbody { cursor: pointer; }
+  button.pbody:hover .t { text-decoration: underline; text-underline-offset: 3px; }
+  .prob .t, .prob .d { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ev-ico { width: 32px; height: 32px; border-radius: 10px; display: flex; align-items: center; justify-content: center; background: var(--lv-soft); color: var(--lv); flex: none; }
+  .prob .ev-ico { background: var(--surface); }
+  .ghost { flex: none; min-height: 36px; padding: 0 12px; border: 0; border-radius: 10px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+  .most { display: flex; flex-direction: column; gap: 6px; }
+  .hero:has(.also) .most { grid-column: 1 / -1; }
+  .apps { display: flex; flex-wrap: wrap; gap: 4px; }
+  .app { width: 96px; display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 10px 2px; border-radius: 14px; text-align: center; font-size: 12px; }
+  .app:hover { background: var(--surface-2); }
+  .an { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: break-word; hyphens: auto; line-height: 1.25; max-width: 100%; }
+  .ic { position: relative; width: 40px; height: 40px; border-radius: 12px; background: var(--surface-2); display: flex; align-items: center; justify-content: center; flex: none; }
+  .ic.big { width: 50px; height: 50px; border-radius: 15px; }
+  /* a service with a problem: one small marker, its colour from the level; the launcher shows nothing else */
+  .pmark { position: absolute; top: -3px; right: -3px; width: 12px; height: 12px; border-radius: 50%; background: var(--lv); box-shadow: 0 0 0 2px var(--surface); }
 
-  /* the verdict spans the header and the card beside it, so both columns start and end together */
-  .feed { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-  .feed-card { flex: 1; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
-  .feed-card.empty { align-items: center; justify-content: center; min-height: 120px; }
-  .feed-card.empty p { margin: 0; }
-  .item { display: flex; align-items: center; gap: 14px; padding: 11px 14px; border-radius: 14px; background: var(--surface-2); min-height: 56px; }
-  .ico { width: 32px; height: 32px; border-radius: 10px; display: flex; align-items: center; justify-content: center; background: var(--lv-soft); color: var(--lv); flex: 0 0 auto; }
-  .txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
-  .item .t { font-size: 14px; font-weight: 500; }
-  .item .d { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .when { flex: 0 0 auto; }
-  .see-all { align-self: center; min-height: 40px; padding: 0 16px; border: 0; border-radius: 12px; background: none; color: var(--acc); font-size: 14px; font-weight: 500; cursor: pointer; }
-  .see-all:hover, .see-all:active { background: var(--surface-2); }
+  /* vitals: one figure each; the card opens its sheet */
+  .cards { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 14px; }
+  .vcard { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 16px 18px; border: 0; border-radius: 18px; color: var(--text); font: inherit; text-align: left; cursor: pointer; min-width: 0; }
+  .vcard.alert { background: var(--lv-soft); box-shadow: inset 0 0 0 1.5px var(--lv); }
+  .vcard .v { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; white-space: nowrap; }
+  .vcard .u { margin-left: 5px; font-size: 14px; font-weight: 500; color: var(--muted); }
+  .vcard .s { font-size: 12.5px; color: var(--muted); max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .vcard.alert .k, .vcard.alert .s, .vcard.alert .u { color: color-mix(in srgb, var(--lv) 75%, var(--text)); }
 
+  /* services and activity */
+  .lower { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+  .sec { padding: 20px 22px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+  .seg { display: inline-flex; padding: 3px; border-radius: 10px; background: var(--surface-2); }
+  .seg button { min-height: 32px; padding: 0 12px; border: 0; border-radius: 8px; background: none; color: var(--muted); font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; }
+  .seg button[aria-pressed='true'] { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+  .launch { display: flex; flex-wrap: wrap; gap: 14px 26px; }
+  .lgroup { display: flex; flex-direction: column; gap: 2px; }
+  .lgroup h3 { padding-left: 10px; }
+  .fleet { display: flex; flex-direction: column; gap: 6px; --beats-h: 12px; }
+  .sgroup { display: flex; flex-direction: column; gap: 4px; }
+  .sgroup h3 { display: flex; gap: 8px; align-items: baseline; padding-top: 4px; }
+  .srows { list-style: none; margin: 0; padding: 0; }
+  .srow { width: 100%; display: flex; align-items: center; gap: 12px; padding: 9px 8px; border: 0; border-radius: 12px; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+  .srow:hover { background: var(--surface-2); }
+  .srow .d { color: var(--muted); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; line-clamp: 1; overflow: hidden; }
+  .srow .d.hl { color: color-mix(in srgb, var(--lv) 85%, var(--text)); }
+  .sbeats { width: 150px; flex: none; --beats-h: 8px; }
+  .up { width: 5.5ch; text-align: right; flex: none; }
+  .evs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+  .ev { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+  .ev:first-child { border-top: 0; }
+  .ev.lv-ok .ev-ico { background: var(--surface-2); color: var(--muted); }
+  .when { flex: none; }
+  .link-btn { border: 0; background: none; padding: 6px 0; color: var(--acc); font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; align-self: flex-start; }
 
-  /* most used */
-  .block { display: flex; flex-direction: column; gap: 12px; }
-  /* services: groups as sub-sections under one header */
-  .services { gap: 14px; }
-  .group { display: flex; flex-direction: column; gap: 10px; }
-  .group + .group { margin-top: 10px; }
-  .grp-head { display: flex; align-items: baseline; gap: 10px; }
-  h3 { font-size: 14px; font-weight: 600; }
-  .pins { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
-  .pin { display: flex; flex-direction: column; gap: 16px; padding: 18px; border-radius: 18px; }
-  .pin.alert { background: var(--lv-soft); box-shadow: inset 0 0 0 1px var(--lv); }
-  .pin-top { display: flex; justify-content: space-between; align-items: flex-start; }
-  .ic { width: 40px; height: 40px; border-radius: 12px; background: var(--surface-2); display: flex; align-items: center; justify-content: center; flex: 0 0 auto; }
-  .ic.big { width: 48px; height: 48px; border-radius: 14px; }
-  .pin.alert .ic { background: var(--surface); }
-  .pin-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-  .pin-name .n { font-size: 15px; font-weight: 600; }
-  .hostname { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .pin-stats { display: flex; gap: 16px; }
-  .pin-stats > div { display: flex; flex-direction: column; min-width: 0; }
-  .pin-stats .v { font-size: 14px; font-weight: 500; white-space: nowrap; }
-  .pin-stats .v.hl { color: var(--lv); }
-  .pin-stats .k { font-size: 11px; white-space: nowrap; }
-
-  /* service tiles: a grid on desktop (here), rows of an inset list on phones (under max-width: 760px) */
-  /* the status line may take two lines: it often joins several facts ("Pool 71% · SMART 1 / 1 ok") */
-  .tile .l { font-size: 12px; line-height: 1.35; color: var(--muted); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
-  /* a service's 24 h strip and its exact uptime */
-  .beats { display: flex; align-items: center; gap: 8px; --beats-h: 10px; }
-  .beats > :global(.strip) { flex: 1; }
-  .beats .mono { flex: none; min-width: 6.5ch; text-align: right; font-size: 11px; color: var(--muted); }
-  @media not all and (max-width: 760px) {
-    .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
-    .tile { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px 12px; padding: 12px 14px; border-radius: 14px; background: var(--surface); box-shadow: var(--shadow); min-height: 66px; }
-    .tile.alert { background: var(--lv-soft); box-shadow: inset 0 0 0 1px var(--lv); }
-    .tile.alert .ic { background: var(--surface); }
-    .tile .n { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .tile .l.hl { color: var(--lv); }
-    .tile .word { display: none; }
-    .tile .beats { grid-column: 1 / -1; }
-  }
-
-  /* links */
+  /* links, footer */
+  .block { display: flex; flex-direction: column; gap: 10px; }
   .links { display: flex; flex-wrap: wrap; gap: 8px; }
   .link { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 14px 0 10px; border-radius: 10px; font-size: 13px; }
-
-  /* footer: the way into setup, and what is running */
-  .foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; padding-top: 20px; border-top: 1px solid var(--line); }
+  .foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; padding-top: 18px; border-top: 1px solid var(--line); }
   .foot-cfg { display: flex; align-items: center; gap: 12px; min-height: 44px; padding-right: 8px; border-radius: 12px; }
   .foot-cfg > svg { box-sizing: content-box; padding: 9px; border-radius: 11px; background: var(--surface-2); color: var(--muted); }
   .foot-cfg > span { display: flex; flex-direction: column; }
@@ -503,103 +619,28 @@
   .foot-cfg:hover .t { color: var(--acc); }
   .ver { display: flex; align-items: center; gap: 14px; }
   .ver a { text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--line); }
-  .ver a:hover { color: var(--text); }
 
-  /* bottom tab bar (phones) */
-  .tabbar { display: none; }
+  /* sheets */
+  .sh-head { display: flex; align-items: center; gap: 14px; }
+  .state-w { display: inline-flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 600; }
+  .sh-block { display: flex; flex-direction: column; gap: 8px; --beats-h: 22px; }
+  .sh-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+  .st { font-size: 15px; font-weight: 600; }
+  .facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
+  .fact { display: flex; flex-direction: column; gap: 3px; padding: 12px 14px; border-radius: 14px; background: var(--surface-2); min-width: 0; }
+  .fact .k { font-size: 12px; }
+  .fv { font-size: 18px; font-weight: 600; overflow-wrap: anywhere; }
+  .kv { margin: 0; display: flex; flex-direction: column; }
+  .kv > div { display: flex; justify-content: space-between; gap: 16px; padding: 10px 0; border-top: 1px solid var(--line); font-size: 14px; }
+  .kv dt { color: var(--muted); flex: none; }
+  .kv dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
+  .jobs { list-style: none; margin: 0; padding: 0; }
+  .job { width: 100%; display: flex; align-items: center; gap: 12px; padding: 12px 0; border: 0; border-top: 1px solid var(--line); background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+  .job:hover .t { color: var(--acc); }
+  .jr { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex: none; }
+  .jr .state-w { font-size: 13px; font-weight: 500; }
 
-  @media (max-width: 860px) {
-    .hero { grid-template-columns: minmax(0, 1fr); }
-  }
-  @media (max-width: 760px) {
-    /* the tab bar floats over the bottom: clear it plus the home indicator */
-    .page { gap: 22px; padding-bottom: calc(110px + env(safe-area-inset-bottom)); }
-    .search, .deep, .live :global(.demo) { display: none; }
-    .cfg { width: 44px; height: 44px; border-radius: 14px; background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
-    .cfg.quiet { display: none; }
-
-    /* header: logo, date over title, live dot, theme button; a long title wraps to a second line instead of being cut */
-    .top { flex-wrap: nowrap; gap: 12px; }
-    .brand { flex: 1 1 auto; min-width: 0; }
-    .right { flex: none; gap: 8px; }
-    .live { min-height: 28px; padding: 0 10px; border-radius: 14px; background: var(--surface); box-shadow: var(--shadow); gap: 7px; }
-    .live:not(.warn) { min-width: 28px; padding: 0; justify-content: center; }
-    .live-word { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-    .bname { font-size: 24px; line-height: 1.12; white-space: normal; text-wrap: balance; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
-    .pulse { width: 7px; height: 7px; box-shadow: 0 0 0 3px var(--ok-soft); }
-    .live.warn .pulse { box-shadow: 0 0 0 3px var(--warn-soft); }
-
-    /* verdict */
-    .verdict { padding: 20px; border-radius: 22px; gap: 12px; }
-    .verdict h1 { font-size: 26px; line-height: 1.12; }
-    .verdict p { font-size: 13px; }
-    /* stats: the same hairline 2×2 as a narrow desktop card, just tighter */
-    .facts { margin-top: 0; padding: 12px 0; row-gap: 12px; }
-    .fact { padding: 0 12px; gap: 2px; }
-    .fact .v { font-size: 19px; }
-    .fact .k { font-size: 11.5px; }
-    .fleet { margin-top: 4px; --beats-h: 16px; }
-    .fleet-head .picked { color: var(--text); font-variant-numeric: tabular-nums; }
-
-    .feed { gap: 10px; }
-    .rows { display: flex; flex-direction: column; gap: 8px; }
-    .row { display: flex; align-items: center; gap: 12px; min-height: 60px; padding: 10px 14px 10px 16px; border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); }
-    .row .dot { scale: 1.25; }
-    /* status text on phones: previews (feed rows, pins) wrap to two lines; the services list shows it whole */
-    .row .t, .row .d, .pline { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
-    .row .t { font-size: 15px; font-weight: 500; line-height: 1.3; }
-    .row .d { font-size: 12px; line-height: 1.35; }
-    .chev { flex: none; color: var(--muted); }
-    .see-all { min-height: 44px; }
-
-    /* most used: icon, name, one status line */
-    .pins { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-    .pin { padding: 14px; gap: 12px; }
-    .ic.big { width: 44px; height: 44px; border-radius: 13px; }
-    .hostname, .pin-stats { display: none; }
-    .pline { font-size: 13px; line-height: 1.35; color: var(--muted); }
-    .tile .l b { font-weight: 600; }
-    /* problem text sits on the tinted card: lean toward --text so it keeps 4.5:1 */
-    .pline.hl { color: color-mix(in srgb, var(--lv) 80%, var(--text)); }
-
-    /* all services: one inset grouped list; a row is icon, text and dot, the strip under the text */
-    .tiles { border-radius: 18px; overflow: hidden; display: flex; flex-direction: column; background: var(--surface); box-shadow: var(--shadow); }
-    .tile { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; column-gap: 12px; min-height: 60px; padding: 10px 16px 10px 12px; transition: none; }
-    .tile:has(.beats) :is(.ic, .dot) { grid-row: span 2; }
-    .tile + .tile::before { content: ''; position: absolute; top: 0; left: 62px; right: 0; border-top: 1px solid var(--line); }
-    .tile:first-child { border-radius: 18px 18px 0 0; }
-    .tile:last-child { border-radius: 0 0 18px 18px; }
-    .tile:only-child { border-radius: 18px; }
-    .tile:active { background: var(--surface-2); transform: none; }
-    /* the list clips (overflow: hidden), so a changed row is ringed inside its own edges, over the divider */
-    .tile.flash { animation-name: flash-in; }
-    .tile:focus-visible { outline-offset: -2px; border-radius: 0; }
-    .tile .ic { width: 38px; height: 38px; border-radius: 11px; --icon: 22px; }
-    .tile .n { font-size: 15px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .tile .l { display: block; -webkit-line-clamp: none; line-clamp: none; }
-    .tile .l.problem { color: var(--lv); }
-    .tile .beats { grid-column: 2; margin-top: 7px; --beats-h: 8px; }
-    .tabbar {
-      position: fixed; left: 12px; right: 12px; bottom: max(14px, env(safe-area-inset-bottom)); z-index: 40;
-      display: flex; justify-content: space-around; padding: 6px; border-radius: 24px;
-      background: var(--glass); backdrop-filter: saturate(1.6) blur(20px); -webkit-backdrop-filter: saturate(1.6) blur(20px);
-      border: 1px solid var(--line); box-shadow: var(--shadow-lg);
-    }
-    .tabbar a, .tabbar button {
-      touch-action: manipulation; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
-      position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
-      min-width: 56px; min-height: 52px; border: 0; border-radius: 18px; background: transparent; color: var(--muted);
-      font-size: 10px; font-weight: 500; cursor: pointer;
-    }
-    .tabbar a:active, .tabbar button:active, .tabbar [aria-current] { background: var(--surface-2); color: var(--text); }
-    .tabbar svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
-    /* a count from old data must not look live */
-    .page:has(.banner) + .tabbar .badge { background: var(--muted); color: var(--surface); }
-    .badge { position: absolute; top: 4px; right: 10px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--crit); color: #fff; font-size: 10px; display: flex; align-items: center; justify-content: center; }
-  }
   :global(html) { scroll-padding-top: 12px; }
-  @media (prefers-reduced-motion: no-preference) { :global(html) { scroll-behavior: smooth; } }
-
   /* connection lost or data stale: say so, and stop showing status colour as if it were current */
   .banner {
     display: flex; align-items: center; gap: 12px; padding: 12px 12px 12px 16px; border-radius: 16px;
@@ -610,15 +651,51 @@
   .banner .t { font-weight: 600; }
   .banner .d { font-size: 12px; color: var(--muted); }
   .banner button { min-height: 36px; padding: 0 14px; border: 0; border-radius: 10px; background: var(--surface); box-shadow: var(--shadow); font-weight: 500; cursor: pointer; }
-  .page:has(.banner) :is(.hero, .vitals, .block) { filter: grayscale(0.7); opacity: 0.8; transition: filter 0.3s, opacity 0.3s; }
-  @media (max-width: 760px) {
-    .banner { padding-block: 8px; }
-    .banner button { min-height: 44px; min-width: 64px; }
-  }
+  .page:has(.banner) :is(.hero, .cards, .lower) { filter: grayscale(0.7); opacity: 0.8; transition: filter 0.3s, opacity 0.3s; }
   @keyframes drop { from { opacity: 0; transform: translateY(-6px); } }
-
   /* a status that just changed: one soft ring in its new colour */
   .flash { animation: flash 2.4s ease-out; }
   @keyframes flash { 0%, 30% { box-shadow: 0 0 0 3px var(--lv), var(--shadow); } }
-  @keyframes flash-in { 0%, 30% { box-shadow: inset 0 0 0 2px var(--lv); } }
+
+  @media (max-width: 1000px) {
+    .hero { grid-template-columns: minmax(0, 1fr); }
+    .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .lower { grid-template-columns: minmax(0, 1fr); }
+    .sbeats { width: 110px; }
+  }
+  /* phones: the same order, tighter; search and setup in the header, the theme in the footer */
+  @media (max-width: 760px) {
+    .page { gap: 14px; }
+    .search, .deep, .live :global(.demo) { display: none; }
+    .top { flex-wrap: nowrap; gap: 10px; }
+    .brand { flex: 1 1 auto; }
+    .right { margin-left: auto; }
+    .live { min-width: 28px; min-height: 28px; justify-content: center; }
+    .live-word { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+    .hbtn { width: 44px; height: 44px; border-radius: 14px; }
+    .bname { font-size: 19px; }
+    .hero { padding: 20px; border-radius: 22px; gap: 18px; }
+    .state { flex-wrap: wrap; gap: 12px; }
+    .mark { width: 44px; height: 44px; }
+    .mark svg { width: 22px; height: 22px; }
+    .say { flex-basis: 100%; }
+    h1 { font-size: 28px; }
+    .say p { font-size: 14px; }
+    .primary { width: 100%; min-height: 48px; font-size: 15px; }
+    .probs { grid-template-columns: minmax(0, 1fr); }
+    .prob .t, .prob .d { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
+    .prob .ghost { min-height: 44px; padding: 0 12px; }
+    .apps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+    .app { width: auto; }
+    /* phones: one grid of four, in services.yaml order, without the group labels */
+    .launch { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+    .lgroup, .lgroup .apps { display: contents; }
+    .lgroup h3 { display: none; }
+    .vcard { padding: 14px 16px; }
+    .vcard .v { font-size: 19px; }
+    .sec { padding: 16px; border-radius: 20px; }
+    .sbeats, .up { display: none; }
+    .seg button { min-height: 36px; }
+    .banner button { min-height: 44px; min-width: 64px; }
+  }
 </style>

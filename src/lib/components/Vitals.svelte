@@ -10,8 +10,10 @@
     drives: Snapshot['drives'];
     network: Snapshot['network'];
     target: string;
+    /** the panel to open with (a sheet opened from its card); without it, the one this browser last chose */
+    initial?: 'system' | 'storage' | 'drives' | 'network';
   }
-  let { host, storage, drives, network, target }: Props = $props();
+  let { host, storage, drives, network, target, initial }: Props = $props();
 
   /** a tab of the card: its panel id, its name and the dot it shows */
   interface Panel {
@@ -49,8 +51,10 @@
   });
 
   // which panel is open. Remembered per browser as a convenience, so storage errors are ignored
-  let picked = $state<string>('system');
+  // svelte-ignore state_referenced_locally — the panel it opens with; the tabs change it from there
+  let picked = $state<string>(initial ?? 'system');
   onMount(() => {
+    if (initial) return;
     try { picked = localStorage.getItem('vitalsView') ?? picked; } catch {}
   });
   // the remembered panel may have no data (any more): fall back to the first one

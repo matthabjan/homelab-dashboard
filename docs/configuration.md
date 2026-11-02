@@ -97,7 +97,7 @@ CPU usage is measured between two polls, so the CPU gauge shows `—` for the fi
 
 ### `mostUsed`
 
-The *Most used* row above the groups fills itself from how often you open each service from the dashboard or the command palette. Each open loses half its weight every `halfLifeDays`, so services you stopped using drop out over time.
+The *Most used* row, next to the overall state, fills itself from how often you open each service from the dashboard or the command palette. Each open loses half its weight every `halfLifeDays`, so services you stopped using drop out over time.
 
 | Key | Default | Description |
 |---|---|---|
@@ -297,7 +297,7 @@ labels:
 - `dashboard.group` and `dashboard.name` are required. Every other `dashboard.<key>` maps to the YAML key of the same name, and nested keys use dots (`dashboard.widget.type=adguard`). The values `true` and `false` become booleans.
 - `dashboard.weight` sets the order within the group (lowest first, then by name).
 - A labelled service joins the `services.yaml` group with the same name, or creates a new group at the end. If `services.yaml` already defines a service with the same group and name, that one is used and the label is ignored.
-- A labelled service **without** `siteMonitor` uses the container's state as its health, recorded on each widget poll like a probe (uptime, 24-hour strip): running is up, anything else (including unhealthy) is down. A finished one-shot job (exit code 0, restart policy `no` or `on-failure`) shows *Done* and counts as up. Any other stopped container raises a critical *is down* alert and logs *went down* / *recovered*; unhealthy raises a warning. There is no latency, so its *Most used* card shows the 7-day uptime instead of p95. While the widget's API is unreachable, nothing is recorded.
+- A labelled service **without** `siteMonitor` uses the container's state as its health, recorded on each widget poll like a probe (uptime, 24-hour strip): running is up, anything else (including unhealthy) is down. A finished one-shot job (exit code 0, restart policy `no` or `on-failure`) shows *Done* and counts as up. Any other stopped container raises a critical *is down* alert and logs *went down* / *recovered*; unhealthy raises a warning. There is no latency, so its sheet shows the 7-day uptime instead of p95. While the widget's API is unreachable, nothing is recorded.
 - Without `dashboard.icon`, an icon is [picked automatically](#automatic-icons) from the name and the image.
 - Label values are **used literally**. `${…}` placeholders are not filled in, so a container image can't extract your secrets. Define services whose widgets need credentials in `services.yaml`.
 - Add `dashboard.ignore=true` to a container to hide it from discovery and from the container counts.

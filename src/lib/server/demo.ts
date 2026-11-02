@@ -77,9 +77,9 @@ export function seedHistory(services: Service[]) {
         insertProbe(s.id, ts, !(down || blip), down || blip ? null : isSlow(s) ? 150 + r() * 300 : baseMs(s) + r() * 14);
       }
     }
-    // heartbeats: the job last ran 6 h ago, or (issues) 27 h ago with a 24 h schedule, so it is overdue
+    // heartbeats: a daily job last ran 6 h ago, or (issues) 27 h ago, so it is overdue; a longer one 40% of its interval ago
     for (const s of services.filter((x): x is Service & { heartbeat: Heartbeat } => !!x.heartbeat)) {
-      const lastOk = now - (calm() ? 6 : 27) * 3600_000;
+      const lastOk = now - (s.heartbeat.every > 86_400_000 ? s.heartbeat.every * 0.4 : (calm() ? 6 : 27) * 3600_000);
       const due = lastOk + s.heartbeat.every + s.heartbeat.grace;
       kvSet(kvKey(s.heartbeat.id), { since: now - 7 * 86_400_000, lastOk, lastFail: null });
       for (let ts = now - 86_400_000; ts < now; ts += 120_000) insertProbe(s.id, ts, ts <= due, null);
