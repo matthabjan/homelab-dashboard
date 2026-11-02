@@ -75,6 +75,15 @@
   const ALSO = 3;
   // the launcher: only what can be opened (jobs and services without href live in the Status view and the sheets)
   const launch = $derived(snap ? snap.groups.map((g) => ({ name: g.name, services: g.services.filter((t) => t.href) })).filter((g) => g.services.length) : []);
+  // the Links card: bookmarks by group, in bookmarks.yaml order
+  const linkGroups = $derived.by(() => {
+    const groups: { name: string; links: Snapshot['bookmarks'] }[] = [];
+    for (const b of snap?.bookmarks ?? []) {
+      const g = groups.find((x) => x.name === b.group) ?? groups[groups.push({ name: b.group, links: [] }) - 1];
+      g.links.push(b);
+    }
+    return groups;
+  });
   const jobById = $derived(new Map((snap?.jobs ?? []).map((j) => [j.id, j])));
   const nextJob = $derived([...(snap?.jobs ?? [])].sort((a, b) => a.due - b.due)[0] ?? null);
 
@@ -478,11 +487,22 @@
     </div>
 
     {#if snap.bookmarks.length}
-      <section class="block" aria-labelledby="h-links">
-        <h2 id="h-links" class="k">Links</h2>
-        <div class="links">
-          {#each snap.bookmarks as b}
-            <a class="card link lift" href={b.href} target={target} rel="noopener"><Icon src={b.icon} dark={b.iconDark} name={b.name} size={18} />{b.name}</a>
+      <!-- the same card and launch grid as Services: groups with their label, an icon chip over each name -->
+      <section class="card sec" aria-labelledby="h-links">
+        <div class="sec-head"><h2 id="h-links">Links</h2></div>
+        <div class="launch">
+          {#each linkGroups as g (g.name)}
+            <div class="lgroup">
+              {#if g.name && linkGroups.length > 1}<h3>{g.name}</h3>{/if}
+              <div class="apps">
+                {#each g.links as b (b.href + b.name)}
+                  <a class="app lift" href={b.href} target={target} rel="noopener">
+                    <span class="ic"><Icon src={b.icon} dark={b.iconDark} name={b.name} size={24} /></span>
+                    <span class="an">{b.name}</span>
+                  </a>
+                {/each}
+              </div>
+            </div>
           {/each}
         </div>
       </section>
@@ -705,9 +725,6 @@
   .link-btn { border: 0; background: none; padding: 6px 0; color: var(--acc); font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; align-self: flex-start; }
 
   /* links, footer */
-  .block { display: flex; flex-direction: column; gap: 10px; }
-  .links { display: flex; flex-wrap: wrap; gap: 8px; }
-  .link { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 14px 0 10px; border-radius: 10px; font-size: 13px; }
   .foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; padding-top: 18px; border-top: 1px solid var(--line); }
   .foot-cfg { display: flex; align-items: center; gap: 12px; min-height: 44px; padding-right: 8px; border-radius: 12px; }
   .foot-cfg > svg { box-sizing: content-box; padding: 9px; border-radius: 11px; background: var(--surface-2); color: var(--muted); }
