@@ -73,6 +73,33 @@ test('PBS: a guest is as fresh as its latest backup in any store; guests of ever
   assert.equal(res.backups?.overdue, 0);
 });
 
+test('PBS: one job run is one event naming its guests, timed at its last backup', async () => {
+  const t0 = Date.now();
+  const MIN = 60_000;
+  // backup-id → minutes after t0 it finished, per store; 300 goes to both stores, 400 is a later job
+  const landed: Record<string, [string, string, number][]> = { main: [['100', 'vm', 5], ['300', 'vm', 9], ['105', 'ct', 12], ['400', 'vm', 120]], offsite: [['300', 'vm', 10]] };
+  const at = (now: number): Transport => async (url) => {
+    const path = new URL(url).pathname;
+    if (path.endsWith('/status/datastore-usage')) return Response.json({ data: ['main', 'offsite'].map((store) => ({ store, total: 100, used: 10 })) });
+    const store = path.match(/datastore\/([^/]+)\/groups$/)?.[1];
+    if (store) {
+      return Response.json({ data: landed[store].map(([id, type, m]) => ({ 'backup-type': type, 'backup-id': id, 'last-backup': Math.floor((t0 + (t0 + m * MIN <= now ? m : m - 1440) * MIN) / 1000) })) });
+    }
+    return new Response('', { status: 404 });
+  };
+  const kv = memoryKv();
+  const shared: Shared = { guests: { 'https://pve.test pve': { 100: 'web', 300: 'db', 400: 'mail' } } };
+  const poll = async (m: number) => (await INTEGRATIONS.proxmoxbackupserver.collect({ type: 'proxmoxbackupserver', ...WIDGETS.proxmoxbackupserver },
+    createContext({ transport: at(t0 + m * MIN), kv, settings: DEFAULT_SETTINGS, now: t0 + m * MIN, shared }))).events;
+  assert.deepEqual(await poll(0), [], 'baseline');
+  for (const m of [6, 10, 13, 20]) assert.deepEqual(await poll(m), [], `still running at +${m} min`);
+  const done = await poll(28);
+  assert.deepEqual(done, [{ sev: 'ok', title: 'Backups completed', detail: 'CT 105, db, web · main, offsite', ts: Math.floor((t0 + 12 * MIN) / 1000) * 1000 }]);
+  assert.deepEqual(await poll(40), [], 'reported once');
+  await poll(121);
+  assert.equal((await poll(140))?.[0]?.detail, 'mail · main');
+});
+
 test('Portainer: a stopped container is a failure, a finished one-shot job is not', async () => {
   const run = async (scenario: string) => {
     const ctx = createContext({ transport: fixtureTransport(FIXTURES.portainer, { scenario }), kv: memoryKv(), settings: DEFAULT_SETTINGS, now: Date.now() });

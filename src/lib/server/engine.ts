@@ -175,7 +175,7 @@ export class Engine extends EventEmitter {
       });
       try {
         const res = await withTimeout(INTEGRATIONS[s.widget.type].collect(s.widget, ctx), 25_000, s.widget.type);
-        for (const e of res.events || []) insertEvent(now, e.sev, s.id, e.title, e.detail);
+        for (const e of res.events || []) insertEvent(e.ts ?? now, e.sev, s.id, e.title, e.detail);
         st.widget = { ok: true, ts: now, lastOk: now, ...res };
       } catch (caught) {
         // undici's "fetch failed" carries the reason in cause; getJson attaches the upstream body for the log

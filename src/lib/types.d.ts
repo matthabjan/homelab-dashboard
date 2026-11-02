@@ -271,6 +271,8 @@ export interface WidgetEvent {
   sev: Severity | 'ok';
   title: string;
   detail?: string;
+  /** when it happened, if not at this poll (ms) */
+  ts?: number;
 }
 
 export interface Stat {

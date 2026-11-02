@@ -101,6 +101,30 @@ async function pbsDrives(ctx: Context, base: string, opts: object): Promise<Driv
   }));
 }
 
+/** Backups that landed since the last reported event: guest key → label, the stores they went to, the newest (PBS seconds). */
+interface BackupBatch {
+  guests: Record<string, string>;
+  stores: string[];
+  last: number;
+}
+
+/** A job run's backups land minutes apart; this long without a new one ends the run. */
+const BATCH_QUIET_MS = 15 * 60_000;
+
+/** The guest's Proxmox name, else the group's comment, else "VM 101" / "CT 105" (a host backup's id is its hostname). */
+function guestLabel(g: PbsBackupGroup, guests: Record<string, string> | null): string {
+  const id = String(g['backup-id']);
+  const name = (guests && Object.hasOwn(guests, id) ? guests[id] : '') || g.comment || '';
+  return name || (g['backup-type'] === 'host' ? id : `${g['backup-type'].toUpperCase()} ${id}`);
+}
+
+/** "web, db, dns and 3 more · main"; a single store, or several joined. */
+function batchDetail(b: BackupBatch): string {
+  const names = Object.values(b.guests).sort((x, y) => x.localeCompare(y));
+  const shown = names.length > 4 ? `${names.slice(0, 3).join(', ')} and ${names.length - 3} more` : names.join(', ');
+  return `${shown} · ${b.stores.sort().join(', ')}`;
+}
+
 export async function collect(w: Widget, ctx: Context): Promise<WidgetResult> {
   const base = trimUrl(w.url) + '/api2/json';
   const opts = { headers: { Authorization: `PBSAPIToken=${w.username}:${w.password}` }, insecure: ctx.insecure };
@@ -156,17 +180,26 @@ export async function collect(w: Widget, ctx: Context): Promise<WidgetResult> {
     }
   }
 
-  // Event when new backups landed since the last poll; the baseline is durable so backups made during a restart count.
-  // No groups (missing permission, API error) leaves it alone, so the next good poll doesn't report every backup as new.
+  // New backups since the last poll are collected (durably, so backups made during a restart count) and reported as one
+  // event once none has landed for BATCH_QUIET_MS: a job run is one event, naming its guests, at its last backup's time.
+  // No groups (missing permission, API error) leaves the baseline alone, so the next good poll doesn't report every backup as new.
   const latest = Math.max(0, ...groups.map((g) => g['last-backup']));
   if (latest) {
     const key = `pbs.latest.${base}`;
     const stored = ctx.kv.get<number>(key);
     const prevLatest = stored ?? latest;
-    if (latest > prevLatest) {
-      const fresh = groups.filter((g) => g['last-backup'] > prevLatest);
-      events.push({ sev: 'ok', title: 'Backups completed', detail: `${fresh.length} ${fresh.length === 1 ? 'guest' : 'guests'} · ${stores.map((s) => s.store).join(', ')}` });
+    const batchKey = `pbs.batch.${base}`;
+    const batch = ctx.kv.get<BackupBatch>(batchKey) ?? { guests: {}, stores: [], last: 0 };
+    const fresh = groups.filter((g) => g['last-backup'] > prevLatest);
+    for (const g of fresh) {
+      batch.guests[`${g['backup-type']}/${g['backup-id']}`] = guestLabel(g, guests);
+      if (!batch.stores.includes(g.store)) batch.stores.push(g.store);
+      batch.last = Math.max(batch.last, g['last-backup']);
     }
+    if (batch.last && now - batch.last * 1000 >= BATCH_QUIET_MS) {
+      events.push({ sev: 'ok', title: 'Backups completed', detail: batchDetail(batch), ts: batch.last * 1000 });
+      ctx.kv.set(batchKey, null);
+    } else if (fresh.length) ctx.kv.set(batchKey, batch);
     if (latest !== stored) ctx.kv.set(key, latest);
   }
 
