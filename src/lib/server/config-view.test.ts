@@ -140,7 +140,7 @@ test('services: every service once, in dashboard order, with its source; setting
   assert.deepEqual(view.services.map((r) => r.id), engine.cfg.groups.flatMap((g) => g.services.map((s) => s.id)));
   const svc = (name: string) => view.services.find((r) => r.name === name);
   assert.deepEqual([svc('Labelled')?.source, svc('PVE')?.source], ['labels via Portainer', 'services.yaml']);
-  assert.deepEqual([svc('PVE')?.level, svc('PVE')?.reason, svc('PVE')?.icon], ['unknown', null, null], 'no snapshot yet');
+  assert.equal(svc('PVE')?.icon, null, 'no snapshot yet');
   const setting = (k: string) => view.settings.find((x) => x.k === k);
   assert.deepEqual([setting('title')?.changed, setting('intervals.probe')?.changed], [true, false]);
 });

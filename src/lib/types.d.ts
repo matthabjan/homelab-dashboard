@@ -535,22 +535,18 @@ export interface ConfigView {
     kind: CheckKind;
     target: string;
     interval: string;
-    state: string;
-    level: Level | 'unknown';
   }[];
   icons: { id: string; name: string; group: string; yaml: string; icon: string; iconDark: string | null }[];
-  /** every service once, in dashboard order, with what its tile shows: the page joins widgets, checks and icons on it */
+  /** every service once, in dashboard order: the page joins widgets, checks and icons on it */
   services: {
     id: string;
     name: string;
     group: string;
     /** services.yaml, or the container labels a widget discovered */
     source: string;
+    /** the icon the dashboard shows (automatic or configured) */
     icon: string | null;
     iconDark: string | null;
-    level: Level | 'unknown';
-    /** the tile's status line while it shows a problem (the same text every viewer sees); null otherwise */
-    reason: string | null;
   }[];
   /** every setting with its effective value; `changed` when it differs from the default */
   settings: (KeyValue & { changed: boolean })[];

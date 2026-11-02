@@ -24,7 +24,7 @@
     const known = allServices.filter((t) => t.level !== 'unknown');
     return known.length ? `${known.filter((t) => t.status !== 'Down').length} of ${known.length} up` : '';
   });
-  const configLabel = $derived(!snap?.configProblems ? 'Config & status' : `Config & status, ${snap.configProblems} problem${snap.configProblems === 1 ? '' : 's'}`);
+  const configLabel = $derived(!snap?.configProblems ? 'Setup' : `Setup, ${snap.configProblems} config problem${snap.configProblems === 1 ? '' : 's'}`);
   const stale = $derived(snap && now - snap.generatedAt > snap.staleAfter);
   // the stream has been down past a short grace (a server restart is a blip), or the device is offline
   let lost = $state(false);
@@ -154,7 +154,7 @@
 
 <svelte:window onkeydown={onKey} />
 
-<!-- config & status: the header button and the footer link -->
+<!-- setup: the header button and the footer link -->
 {#snippet sliders()}<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1" /><circle cx="15" cy="6" r="2" /><circle cx="9" cy="12" r="2" /><circle cx="17" cy="18" r="2" /></svg>{/snippet}
 
 {#if !snap}
@@ -346,7 +346,7 @@
     <footer class="foot">
       <a class="foot-cfg" href="/config">
         {@render sliders()}
-        <span><span class="t">Config & status</span><span class="d muted">{snap.configProblems ? `${snap.configProblems} problem${snap.configProblems === 1 ? '' : 's'} in your config` : 'What loaded, which widgets work'}</span></span>
+        <span><span class="t">Setup</span><span class="d muted">{snap.configProblems ? `${snap.configProblems} problem${snap.configProblems === 1 ? '' : 's'} in your config` : 'What loaded, which widgets connect'}</span></span>
       </a>
       <span class="muted small ver">
         <a href="https://github.com/matthabjan/homelab-dashboard/tree/main/docs" target="_blank" rel="noopener">Documentation</a>
@@ -394,7 +394,7 @@
   .pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 4px var(--ok-soft); animation: breathe 3s ease-in-out infinite; }
   .live.warn .pulse { background: var(--warn); box-shadow: 0 0 0 4px var(--warn-soft); }
   .demo { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; padding: 2px 6px; border-radius: 5px; background: var(--surface-3); color: var(--text); }
-  /* config & status: next to the theme toggle, the same height; the badge counts config problems */
+  /* setup: next to the theme toggle, the same height; the badge counts config problems */
   .cfg { position: relative; display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 12px; background: var(--surface-2); color: var(--muted); }
   .cfg:hover { color: var(--text); }
   .cfg svg, .foot-cfg svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
@@ -493,7 +493,7 @@
   .links { display: flex; flex-wrap: wrap; gap: 8px; }
   .link { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 14px 0 10px; border-radius: 10px; font-size: 13px; }
 
-  /* footer: the way into config & status, and what is running */
+  /* footer: the way into setup, and what is running */
   .foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; padding-top: 20px; border-top: 1px solid var(--line); }
   .foot-cfg { display: flex; align-items: center; gap: 12px; min-height: 44px; padding-right: 8px; border-radius: 12px; }
   .foot-cfg > svg { box-sizing: content-box; padding: 9px; border-radius: 11px; background: var(--surface-2); color: var(--muted); }

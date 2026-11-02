@@ -20,7 +20,7 @@ It is made for your **LAN or VPN** (WireGuard, Tailscale, …): it has no login 
 
 **Integrations:** Proxmox VE · Proxmox Backup Server · OPNsense · OpenMediaVault · AdGuard Home · Pi-hole · Portainer · Docker · FRITZ!Box · any JSON API (`customapi`)
 
-**Not included:** notifications (it shows problems but doesn't send them; pair it with a monitor that alerts, such as Uptime Kuma), user accounts, and editing the configuration in the browser. A read-only **Config & status** page shows what loaded, which widgets work and any missing secrets, never their values.
+**Not included:** notifications (it shows problems but doesn't send them; pair it with a monitor that alerts, such as Uptime Kuma), user accounts, and editing the configuration in the browser. A read-only **Setup** page shows whether your config is right: what loaded, which widgets connect and any missing secrets, never their values.
 
 ## Screenshots
 
@@ -67,7 +67,7 @@ volumes:
 docker compose up -d
 ```
 
-[Configuration](docs/configuration.md) covers settings, services, bookmarks and secrets; [Integrations](docs/integrations.md) each widget's least-privilege account. **Config & status** (`/config`, the sliders button in the header) shows what loaded, which widgets work and any problem in your files.
+[Configuration](docs/configuration.md) covers settings, services, bookmarks and secrets; [Integrations](docs/integrations.md) each widget's least-privilege account. **Setup** (`/config`, the sliders button in the header) shows what loaded, which widgets connect and any problem in your files.
 
 The app has **no login of its own**. To open it beyond localhost, put it behind a reverse proxy that handles TLS and access control, for example Traefik with an IP allowlist and basic auth; never forward a port to it from the internet. See [Deployment](docs/deployment.md).
 

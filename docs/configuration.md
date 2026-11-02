@@ -13,13 +13,13 @@ config/
 
 **Reloading.** Saving any `*.yaml` file reloads the config within a second, without a restart and keeping history. Files in `icons/` and `images/` are read on request (browsers cache them for up to 5 minutes).
 
-**Mistakes.** A file with a YAML syntax error or the wrong structure keeps its last version that loaded, and *Needs attention* shows `services.yaml has an error` with the line and reason (the full error is in the container log). A malformed group or entry is skipped and reported the same way; the rest of the file loads. Several problems in one file are one alert (`services.yaml has 3 problems`), listed on **Config & status**. Fixing the file clears the alert on save.
+**Mistakes.** A file with a YAML syntax error or the wrong structure keeps its last version that loaded, and *Needs attention* shows `services.yaml has an error` with the line and reason (the full error is in the container log). A malformed group or entry is skipped and reported the same way; the rest of the file loads. Several problems in one file are one alert (`services.yaml has 3 problems`), listed on **Setup**. Fixing the file clears the alert on save.
 
-**Checking what loaded.** **Config & status** (`/config`, from the sliders button in the header, the footer, the command palette or any config alert) shows what the dashboard made of your files, read-only:
+**Checking what loaded.** **Setup** (`/config`, from the sliders button in the header, the footer, the command palette or any config alert) shows whether your configuration is right, read-only. How the services are doing stays on the dashboard.
 
-- **Summary:** problems, checks up, widgets OK and changed settings at a glance, each linking to its section.
+- **Summary:** problems in the files, how many services loaded (from `services.yaml` and from labels), how many widgets connect, how many settings you changed; each links to its section.
 - **Problems:** files with errors, skipped entries, secrets that aren't set (by name), heartbeats without a token, a `docker` widget on a socket path. Only shown when there are any.
-- **Services:** every service once, grouped as on the dashboard, with what its tile reports when there is a problem; its check (HTTP, TCP, container state or heartbeat: target, interval, state); its widget (type, linked to its documentation; the scheme, host and port of its `url`; a few harmless options such as `node` or `env`; the last poll and when it last succeeded); where it came from (`services.yaml` or container labels); and, marked *auto*, the icon picked for it automatically. *Needs attention* shows only the services with a problem.
+- **Services:** every service once, grouped as on the dashboard: where it came from, its icon (marked *auto* when picked automatically), its check (kind, interval, target) and its widget (whether it connects and when it last did, the type linked to its documentation, the scheme, host and port of its `url`, a few harmless options such as `node` or `env`, and the error when it fails). *Needs a fix* shows only services whose widget fails or has an unknown type.
 - **Settings:** the values `settings.yaml` changes, and every effective setting under *All settings*.
 
 It never shows usernames, passwords, keys, tokens, headers, request bodies, URL paths or queries, or label values beyond group and name: what it shows is chosen field by field, so a new kind of secret can't slip through.
@@ -253,7 +253,7 @@ A service without `icon` (in `services.yaml` or as the `dashboard.icon` label) g
 - **Matching**, in this order: the service name (`AdGuard Home` → `adguard-home`); for a [labelled container](#services-from-container-labels), its image (`ghcr.io/immich-app/immich-server` → `immich-server`, then `immich`); the widget type (`proxmoxbackupserver` → `proxmox-backup-server`); last the name's leading words (`OPNsense Firewall` → `opnsense`). Names match with or without hyphens (`MusicAssistant` finds `music-assistant`). selfh.st is checked first.
 - **Themes.** The icon itself is used in both themes. Where it would barely show against its background in one theme, such as a near-black icon (GitHub, LLDAP) in dark mode, its light or dark variant replaces it there. An `iconDark` you set yourself wins.
 - **Updates.** Both indexes are downloaded from jsDelivr once a day and kept in the database. Without jsDelivr, services without `icon` show a monogram, and it retries an hour later.
-- **A wrong match** is fixed by setting `icon`. **Config & status** lists every automatic icon.
+- **A wrong match** is fixed by setting `icon`. **Setup** lists every automatic icon.
 
 Local files can be `png`, `svg`, `webp`, `jpg`, `jpeg`, `gif` or `ico`. Local SVGs are served with a restrictive Content-Security-Policy, so scripts inside them don't run.
 

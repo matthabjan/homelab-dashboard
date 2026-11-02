@@ -99,15 +99,13 @@ function widgetRows(engine: ConfigViewInput): ConfigView['widgets'] {
 }
 
 /**
- * One row per service with a check: its kind, target (origin only), interval and current state from the snapshot.
+ * One row per service with a check: its kind, target (origin only) and interval. How it is doing is the dashboard's.
  */
 function checkRows(engine: ConfigViewInput): ConfigView['checks'] {
   const iv = engine.cfg.settings.intervals;
-  const tiles: Map<string, Tile> = new Map((engine.snapshot?.groups ?? []).flatMap((g) => g.services.map((t) => [t.id, t])));
   return engine.cfg.services.flatMap((s) => {
     const kind = kindOf(s);
     if (!kind) return [];
-    const t = tiles.get(s.id);
     const hb = s.heartbeat;
     return [{
       id: s.id,
@@ -115,9 +113,7 @@ function checkRows(engine: ConfigViewInput): ConfigView['checks'] {
       group: s.group,
       kind,
       target: hb ? `/api/heartbeat/${hb.id}` : kind === 'container' ? 'container state' : originOf(s.probe) ?? '—',
-      interval: hb ? `every ${fmtDuration(hb.every)} + ${fmtDuration(hb.grace)} grace` : `every ${fmtDuration((kind === 'container' ? iv.widgets : iv.probe) * 1000)}`,
-      state: t?.status ?? 'Checking',
-      level: t?.level ?? 'unknown'
+      interval: hb ? `every ${fmtDuration(hb.every)} + ${fmtDuration(hb.grace)} grace` : `every ${fmtDuration((kind === 'container' ? iv.widgets : iv.probe) * 1000)}`
     }];
   });
 }
@@ -133,14 +129,13 @@ function iconRows(engine: ConfigViewInput): ConfigView['icons'] {
   });
 }
 
-/** Every service once, with its tile's icon, level and (while it shows a problem) its line. */
+/** Every service once, with where it came from and the icon its tile shows. */
 function serviceRows(engine: ConfigViewInput): ConfigView['services'] {
   const tiles: Map<string, Tile> = new Map((engine.snapshot?.groups ?? []).flatMap((g) => g.services.map((t) => [t.id, t])));
   const sourceOf = sources(engine);
   return engine.cfg.groups.flatMap((g) => g.services.map((s) => {
     const t = tiles.get(s.id);
-    const level = t?.level ?? 'unknown';
-    return { id: s.id, name: s.name, group: g.name, source: sourceOf(s), icon: t?.icon ?? null, iconDark: t?.iconDark ?? null, level, reason: t && (level === 'warn' || level === 'crit') ? t.line : null };
+    return { id: s.id, name: s.name, group: g.name, source: sourceOf(s), icon: t?.icon ?? null, iconDark: t?.iconDark ?? null };
   }));
 }
 

@@ -36,7 +36,7 @@ Terms used in the code and in design discussions.
 
 **Check** — how a service's up/down is found: an HTTP or TCP probe (`siteMonitor`), a container's state (label discovery), or a heartbeat. A service has at most one. `check.ts` turns each reading into the service's check state (a probe is down after two failures in a row, the others at once), a probe history row and the *went down* / *recovered* events, and gives the tile's status from it.
 
-**Config view** — the read-only page `/config` (Config & status): problems, widgets, checks, automatic icons and settings, built by `config-view.ts` from an allowlist so no secret can appear in it.
+**Config view** — the read-only page `/config` (Setup): whether the configuration is right (problems, each service's check, widget connection and icon, settings), not how services are doing; built by `config-view.ts` from an allowlist so no secret can appear in it.
 
 **Storage row** — one line in the Storage panel: usage (`used`, `total`, `pct`, `sub`) or `offline` (an unavailable PVE storage, a detached removable datastore).
 

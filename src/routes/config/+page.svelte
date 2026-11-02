@@ -7,10 +7,12 @@
   import type { PageProps } from './$types';
   import { ago } from '$lib/ago.ts';
 
+  // Setup answers "is my configuration right?": what loaded, how each service is set up, whether its widget can
+  // connect. How the services are doing is the dashboard's job, not this page's.
   let { data }: PageProps = $props();
   const view = $derived(data.view);
   let now = $state(Date.now());
-  let filter = $state<'all' | 'attention'>('all');
+  let filter = $state<'all' | 'fix'>('all');
 
   // live: reload the page data when the stream reports an update, at most every 5 s
   onMount(() => {
@@ -31,38 +33,32 @@
     return a === 'now' ? 'just now' : `${a} ago`;
   }
 
-  type Service = ConfigView['services'][number];
   type Widget = ConfigView['widgets'][number];
-  type Check = ConfigView['checks'][number];
-  type AutoIcon = ConfigView['icons'][number];
-  type Row = Service & { check: Check | null; widget: Widget | null; auto: AutoIcon | null; attention: boolean };
+  type Row = ConfigView['services'][number] & { check: ConfigView['checks'][number] | null; widget: Widget | null; auto: ConfigView['icons'][number] | null; fix: boolean };
 
-  const STATUS: Record<Widget['status'], [Level | 'none', string]> = { ok: ['ok', 'OK'], error: ['crit', 'Error'], never: ['none', 'Not run yet'], unsupported: ['warn', 'Not supported'] };
-  const KIND: Record<CheckKind, string> = { http: 'HTTP', tcp: 'TCP', container: 'Container', heartbeat: 'Heartbeat' };
-  const bad = (l: string) => l === 'warn' || l === 'crit';
-  /** a check's own result; the tile's level (which an alert can raise) is the service column's */
-  const checkLevel = (c: Check): Level | 'none' => (c.state === 'Down' ? 'crit' : c.state === 'Slow' ? 'warn' : c.state === 'Checking' ? 'none' : 'ok');
+  /** a widget's connection: whether its URL, credentials and permissions work */
+  const CONN: Record<Widget['status'], [Level | 'none', string]> = { ok: ['ok', 'Connected'], error: ['crit', 'Failing'], never: ['none', 'Not polled yet'], unsupported: ['warn', 'Unknown type'] };
+  const KIND: Record<CheckKind, string> = { http: 'HTTP', tcp: 'TCP', container: 'Container state', heartbeat: 'Heartbeat' };
+  const broken = (w: Widget | null) => w?.status === 'error' || w?.status === 'unsupported';
 
   // one row per service: its check, widget and automatic icon side by side
   const rows: Row[] = $derived.by(() => {
     const by = <T extends { id: string }>(list: T[]) => new Map(list.map((x) => [x.id, x]));
     const checks = by(view.checks), widgets = by(view.widgets), icons = by(view.icons);
     return view.services.map((s) => {
-      const check = checks.get(s.id) ?? null, widget = widgets.get(s.id) ?? null;
-      const attention = bad(s.level) || (check != null && bad(checkLevel(check))) || widget?.status === 'error' || widget?.status === 'unsupported';
-      return { ...s, check, widget, auto: icons.get(s.id) ?? null, attention };
+      const widget = widgets.get(s.id) ?? null;
+      return { ...s, check: checks.get(s.id) ?? null, widget, auto: icons.get(s.id) ?? null, fix: broken(widget) };
     });
   });
-  const attentionCount = $derived(rows.filter((r) => r.attention).length);
+  const fixCount = $derived(rows.filter((r) => r.fix).length);
   const groups = $derived.by(() => {
     const out = new Map<string, Row[]>();
-    for (const r of rows) if (filter === 'all' || r.attention) out.set(r.group, [...(out.get(r.group) ?? []), r]);
+    for (const r of rows) if (filter === 'all' || r.fix) out.set(r.group, [...(out.get(r.group) ?? []), r]);
     return [...out];
   });
 
-  const checksUp = $derived(view.checks.filter((c) => c.state !== 'Down').length);
-  const checksLevel = $derived(view.checks.some((c) => checkLevel(c) === 'crit') ? 'crit' : view.checks.some((c) => checkLevel(c) === 'warn') ? 'warn' : 'ok');
-  const widgetsOk = $derived(view.widgets.filter((w) => w.status === 'ok').length);
+  const fromLabels = $derived(rows.filter((r) => r.source !== 'services.yaml').length);
+  const connected = $derived(view.widgets.filter((w) => w.status === 'ok').length);
   const widgetsLevel = $derived(view.widgets.some((w) => w.status === 'error') ? 'crit' : view.widgets.some((w) => w.status === 'unsupported') ? 'warn' : 'ok');
   const problemsLevel = $derived(view.problems.some((p) => p.level === 'crit') ? 'crit' : view.problems.length ? 'warn' : 'ok');
   const changed = $derived(view.settings.filter((s) => s.changed));
@@ -80,7 +76,7 @@
 </script>
 
 <svelte:head>
-  <title>Config & status · {view.title}</title>
+  <title>Setup · {view.title}</title>
   <meta name="robots" content="noindex, nofollow" />
 </svelte:head>
 
@@ -91,28 +87,28 @@
       Dashboard
     </a>
     <div class="ttl">
-      <h1>Config & status</h1>
-      <p class="muted">What {view.title} loaded, read-only. Credentials, tokens and URL paths are never shown.{#if view.demo} <span class="demo">demo</span>{/if}</p>
+      <h1>Setup</h1>
+      <p class="muted">What {view.title} loaded from your config, read-only. Credentials, tokens and URL paths are never shown.{#if view.demo} <span class="demo">demo</span>{/if}</p>
     </div>
     <div class="right"><ThemeToggle /></div>
   </header>
 
-  <!-- the four answers first; each opens its section -->
+  <!-- is the config right? four answers, each opening its section -->
   <nav class="summary" aria-label="Summary">
     <a class="stat card lift lv-{problemsLevel}" href="#problems" id={view.problems.length ? undefined : 'problems'}>
-      <span class="k">Problems</span>
-      <span class="v"><span class="dot lv-{problemsLevel}" aria-hidden="true"></span>{view.problems.length || 'None'}</span>
-      <span class="s muted">{view.problems.length ? 'in your config files' : 'every file loaded, every secret set'}</span>
+      <span class="k">Config files</span>
+      <span class="v"><span class="dot lv-{problemsLevel}" aria-hidden="true"></span>{view.problems.length ? `${view.problems.length} problem${view.problems.length === 1 ? '' : 's'}` : 'No problems'}</span>
+      <span class="s muted">{view.problems.length ? 'listed below' : 'every file loaded, every secret set'}</span>
     </a>
-    <a class="stat card lift lv-{checksLevel}" href="#services">
-      <span class="k">Checks</span>
-      <span class="v"><span class="dot lv-{checksLevel}" aria-hidden="true"></span>{checksUp} / {view.checks.length} up</span>
-      <span class="s muted">HTTP, TCP, containers, heartbeats</span>
+    <a class="stat card lift" href="#services">
+      <span class="k">Services</span>
+      <span class="v">{rows.length}</span>
+      <span class="s muted">{fromLabels ? `${rows.length - fromLabels} from services.yaml, ${fromLabels} from labels` : 'from services.yaml'}</span>
     </a>
     <a class="stat card lift lv-{widgetsLevel}" href="#services">
       <span class="k">Widgets</span>
-      <span class="v"><span class="dot lv-{widgetsLevel}" aria-hidden="true"></span>{widgetsOk} / {view.widgets.length} OK</span>
-      <span class="s muted">last poll of each API</span>
+      <span class="v"><span class="dot lv-{widgetsLevel}" aria-hidden="true"></span>{connected} / {view.widgets.length} connected</span>
+      <span class="s muted">{fixCount ? `${fixCount} need${fixCount === 1 ? 's' : ''} a fix: see below` : 'URL, credentials and permissions work'}</span>
     </a>
     <a class="stat card lift" href="#settings">
       <span class="k">Settings</span>
@@ -140,12 +136,10 @@
       <h2 id="h-services">Services <span class="count mono">{rows.length}</span></h2>
       <div class="seg" role="group" aria-label="Show">
         <button aria-pressed={filter === 'all'} onclick={() => (filter = 'all')}>All</button>
-        <button aria-pressed={filter === 'attention'} onclick={() => (filter = 'attention')} disabled={!attentionCount}>Needs attention <span class="mono">{attentionCount}</span></button>
+        <button aria-pressed={filter === 'fix'} onclick={() => (filter = 'fix')} disabled={!fixCount}>Needs a fix <span class="mono">{fixCount}</span></button>
       </div>
     </div>
-    {#if view.icons.length}
-      <p class="muted intro"><span class="auto">auto</span> icons were picked by name, image or widget type. To use another, set <code>icon</code> on the service in <code>services.yaml</code>.</p>
-    {/if}
+    <p class="muted intro">How each service is set up; how it is doing is on the dashboard.{#if view.icons.length}{' '}<span class="auto">auto</span> icons were picked by name, image or widget type: to use another, set <code>icon</code> in <code>services.yaml</code>.{/if}</p>
 
     {#if !rows.length}
       <p class="muted">No services in <code>services.yaml</code> yet.</p>
@@ -156,23 +150,21 @@
           <h3>{group}</h3>
           <ul class="rows">
             {#each list as r (r.id)}
-              {@const cl = r.check ? checkLevel(r.check) : 'none'}
-              {@const [wl, word] = r.widget ? STATUS[r.widget.status] : ['none', '']}
-              <li class="row" class:attn={r.attention}>
+              {@const [wl, word] = r.widget ? CONN[r.widget.status] : ['none', '']}
+              <li class="row">
                 <div class="svc">
                   <span class="ic"><Icon src={r.icon ?? `/assets/monogram/${encodeURIComponent(r.name)}.svg`} dark={r.iconDark} name={r.name} size={22} /></span>
                   <span class="who">
                     <span class="n">{r.name}</span>
                     {#if r.auto}<span class="sub mono"><span class="auto">auto</span> {r.auto.icon}{#if r.auto.iconDark} · dark {r.auto.iconDark}{/if}</span>{/if}
                     {#if r.source !== 'services.yaml'}<span class="sub muted">{r.source}</span>{/if}
-                    {#if r.reason}<span class="reason lv-{r.level}">{r.reason}</span>{/if}
                   </span>
                 </div>
                 <div class="cell">
                   <span class="lbl">Check</span>
                   {#if r.check}
-                    <span class="state lv-{cl}"><span class="dot lv-{cl}" aria-hidden="true"></span>{r.check.state}</span>
-                    <span class="sub mono line"><span>{KIND[r.check.kind]}</span><span class="sep lead">·</span><span class="addr">{r.check.target}</span><span class="sep">·</span><span>{r.check.interval}</span></span>
+                    <span class="what">{KIND[r.check.kind]}<span class="sep">·</span><span class="muted">{r.check.interval}</span></span>
+                    {#if r.check.kind !== 'container'}<span class="sub mono">{r.check.target}</span>{/if}
                   {:else}
                     <span class="muted none">No check</span>
                   {/if}
@@ -180,7 +172,7 @@
                 <div class="cell">
                   <span class="lbl">Widget</span>
                   {#if r.widget}
-                    <span class="state lv-{wl}"><span class="dot lv-{wl}" aria-hidden="true"></span>{word}{#if r.widget.status === 'ok' || r.widget.status === 'error'}<span class="muted when"> · last success {since(r.widget.lastOk)}</span>{/if}</span>
+                    <span class="what"><span class="state"><span class="dot lv-{wl}" aria-hidden="true"></span>{word}</span>{#if r.widget.status === 'ok' || r.widget.status === 'error'}<span class="sep">·</span><span class="muted when">last success {since(r.widget.lastOk)}</span>{/if}</span>
                     <span class="sub mono line">
                       <span>{#if r.widget.docs}<a class="docs" href={r.widget.docs} target="_blank" rel="noopener">{r.widget.type}<span class="sr"> (documentation, opens in a new tab)</span></a>{:else}{r.widget.type}{/if}</span><span class="sep lead">·</span><span class="addr">{r.widget.origin ?? '—'}</span>{#if r.widget.options.length}<span class="sep">·</span><span>{r.widget.options.map((o) => `${o.k}: ${o.v}`).join(' · ')}</span>{/if}
                     </span>
@@ -272,21 +264,20 @@
   .seg .mono { font-size: 11px; }
 
   /* services: one row per service, check and widget side by side */
-  .cols, .row { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1.3fr) minmax(0, 1.55fr); gap: 16px; }
+  .cols, .row { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1.2fr) minmax(0, 1.65fr); gap: 16px; }
   .cols { font-size: 11px; font-weight: 500; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); padding: 4px 0 0; }
   .rows { list-style: none; margin: 0; padding: 0; }
   .row { padding: 10px 0; border-top: 1px solid var(--line); align-items: start; }
   .svc { display: flex; gap: 10px; align-items: flex-start; min-width: 0; }
   .ic { width: 32px; height: 32px; border-radius: 9px; background: var(--surface-2); display: flex; align-items: center; justify-content: center; flex: none; }
-  .who, .cell { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 13px; }
-  .who .n { line-height: 32px; height: 32px; margin-bottom: -8px; }
+  .who, .cell { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 13px; padding-top: 6px; }
   .lbl { display: none; }
-  .state { display: inline-flex; align-items: baseline; gap: 7px; font-weight: 500; flex-wrap: wrap; }
+  .what { font-weight: 500; }
+  .what .muted { font-weight: 400; }
+  .state { display: inline-flex; align-items: baseline; gap: 7px; }
   .state .dot { position: relative; top: -1px; }
   .when { font-weight: 400; font-size: 12px; }
-  .cell { padding-top: 6px; }
   .none { font-size: 13px; }
-  .reason { font-size: 12px; color: color-mix(in srgb, var(--lv) 80%, var(--text)); overflow-wrap: anywhere; }
   .err { color: color-mix(in srgb, var(--lv) 80%, var(--text)); }
   .auto { display: inline-block; font-family: 'Geist', system-ui, sans-serif; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding: 0 5px; border-radius: 4px; background: var(--surface-3); color: var(--text); }
   .sep { padding: 0 0.5ch; color: var(--muted); }
@@ -315,20 +306,20 @@
     .top { gap: 12px; }
     .ttl { order: 3; flex-basis: 100%; }
     .ttl h1 { font-size: 22px; }
-    .stat .s { white-space: normal; }
-    /* the address on a line of its own, kind and interval (or type and options) under it */
-    .line { display: flex; flex-wrap: wrap; }
-    .line .addr { order: -1; flex-basis: 100%; }
-    .line .lead { display: none; }
-    .sec { padding: 16px; border-radius: 18px; }
     .stat { padding: 12px 14px; }
     .stat .v { font-size: 16px; }
+    .stat .s { white-space: normal; }
+    .sec { padding: 16px; border-radius: 18px; }
     .cols { display: none; }
     .row { grid-template-columns: minmax(0, 1fr); gap: 6px; padding: 12px 0; }
     .cell { display: grid; grid-template-columns: 3.9em minmax(0, 1fr); column-gap: 6px; padding: 0 0 0 42px; }
     .cell > :not(.lbl) { grid-column: 2; }
     .lbl { display: block; grid-row: 1; font-size: 12px; color: var(--muted); }
     .cell > .lbl + * { grid-row: 1; }
+    /* the address on a line of its own, the widget type and options under it */
+    .line { display: flex; flex-wrap: wrap; }
+    .line .addr { order: -1; flex-basis: 100%; }
+    .line .lead { display: none; }
     .seg { width: 100%; }
     .seg button { flex: 1; justify-content: center; min-height: 36px; }
   }
