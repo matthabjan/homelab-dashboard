@@ -148,7 +148,7 @@
           token: ${HB_RESTIC}     # the job calls /api/heartbeat/backups-nightly-restic?token=…
           backup: true            # counts in "oldest backup" and "backups overdue"
     - Offsite disk sync:
-        icon: sh-proxmox-backup-server
+        icon: rclone
         description: Monthly copy to the removable offsite datastore
         heartbeat:
           every: 30d
@@ -156,7 +156,7 @@
           token: ${HB_OFFSITE}
           backup: true
     - Weekly verify:
-        icon: sh-proxmox-backup-server
+        icon: proxmox-backup-server
         description: Verify job on the main datastore
         heartbeat:
           every: 7d

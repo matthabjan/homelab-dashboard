@@ -29,6 +29,7 @@ export function openDb(): DatabaseSync {
     CREATE INDEX IF NOT EXISTS metrics_key_ts ON metrics (key, ts);
     CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, sev TEXT NOT NULL, sid TEXT, title TEXT NOT NULL, detail TEXT);
     CREATE INDEX IF NOT EXISTS events_ts ON events (ts);
+    CREATE INDEX IF NOT EXISTS events_sid_ts ON events (sid, ts);
     CREATE TABLE IF NOT EXISTS opens (sid TEXT PRIMARY KEY, n INTEGER NOT NULL DEFAULT 0, last INTEGER, score REAL NOT NULL DEFAULT 0);
     CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT);
   `);
@@ -57,6 +58,11 @@ export const insertEvent = (ts: number, sev: WidgetEvent['sev'], sid: string | n
 
 export function recentEvents(since: number, limit = 6) {
   return all<EventRow>('SELECT ts, sev, sid, title, detail FROM events WHERE ts >= ? ORDER BY ts DESC LIMIT ?', since, limit);
+}
+
+/** One service's events, newest first: the service sheet's activity. */
+export function serviceEvents(sid: string, since: number, limit = 30) {
+  return all<EventRow>('SELECT ts, sev, sid, title, detail FROM events WHERE sid = ? AND ts >= ? ORDER BY ts DESC LIMIT ?', sid, since, limit);
 }
 
 export function lastProbes(sid: string, n: number) {
