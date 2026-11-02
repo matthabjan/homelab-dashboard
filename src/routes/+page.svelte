@@ -155,6 +155,17 @@
     return out;
   });
 
+  /** a card's figure as words: "19% CPU · 64% RAM · 49°C TEMP", "90% full", "2 overdue" */
+  const figText = (c: Card) => (c.stats ? c.stats.map((x) => (x.k ? `${x.v} ${x.k}` : x.v)).join(' · ') : [c.value, c.unit].filter(Boolean).join(' '));
+  // the infrastructure card's header and its phone summary: what needs attention, or, when nothing does, the key figures
+  const infraProblems = $derived(cards.filter((c) => isProblem(c.level)));
+  const infraStatus = $derived(infraProblems.length ? `${infraProblems.length} need${infraProblems.length === 1 ? 's' : ''} attention` : 'All healthy');
+  const infraSay = $derived.by(() => {
+    if (infraProblems.length) return infraProblems.map((c) => ({ k: c.label, v: figText(c) }));
+    const sys = cards.find((c) => c.id === 'system'), sto = cards.find((c) => c.id === 'storage');
+    return [sys && { k: '', v: figText(sys) }, sto && { k: 'Storage', v: figText(sto) }].filter((x) => !!x);
+  });
+
   // ---- sheets: details on demand ----
   // A stack: a sheet opened from inside another (Backups → a job) is a level deeper, with a back button to the one
   // below. Each level is a history entry (shallow routing), so the browser's and Android's back go up one level, and
@@ -421,8 +432,13 @@
     </section>
 
     {#if cards.length}
-      <!-- infrastructure and backups in one card: a row per area, side by side when wide, two tiles a row on phones; each opens its sheet -->
-      <section class="card infra" aria-label="Infrastructure" style="--n: {cards.length}">
+      <!-- infrastructure and backups in one card: a row per area, side by side when wide; on phones collapsed to the area
+           icons and one sentence. Each area opens its sheet -->
+      <section class="card infra" aria-labelledby="h-infra" style="--n: {cards.length}">
+        <div class="ihead">
+          <h2 id="h-infra">Infrastructure</h2>
+          <span class="muted small" class:hl={infraProblems.length > 0}>{infraStatus}</span>
+        </div>
         <div class="irows">
         {#each cards as c (c.id)}
           <button class="irow lv-{c.level}" class:alert={isProblem(c.level)} onclick={() => openCard(c)}>
@@ -441,6 +457,8 @@
           </button>
         {/each}
         </div>
+        <!-- phones: the figures the collapsed rows leave out; only what needs attention when something does -->
+        <p class="isay">{#each infraSay as x, i (i)}{#if i}{' · '}{/if}{#if x.k}<b>{x.k}</b>{' '}{/if}{x.v}{/each}</p>
       </section>
     {/if}
 
@@ -713,6 +731,9 @@
   /* infrastructure and backups: one card, a row per area: its icon, then label, figure and context stacked; a column
      each when the card is wide, two tiles a row on phones */
   .infra { container: infra-sum / inline-size; padding: 6px; }
+  .ihead { display: flex; align-items: baseline; justify-content: space-between; gap: 8px 16px; padding: 14px 16px 4px; }
+  .ihead .hl { color: var(--text); font-weight: 500; }
+  .isay { display: none; }
   .irows { display: flex; flex-direction: column; gap: 2px; }
   .irow {
     display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; grid-template-areas: 'ic k chev' 'ic fig chev' 'ic s chev'; align-items: center; gap: 1px 14px;
@@ -863,17 +884,21 @@
     .lgroup, .lgroup .apps { display: contents; }
     .lgroup h3 { display: none; }
     .infra { border-radius: 22px; }
-    /* phones: the wide layout's columns as tiles, two a row (the first full width when the count is odd), without the
-       context line: the figure says what is wrong and a tap opens the rest */
-    .irows { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; }
-    .irow:first-child:nth-last-child(odd) { grid-column: 1 / -1; }
-    .irow { grid-template-columns: 26px minmax(0, 1fr); grid-template-areas: 'ic k' 'fig fig'; align-content: start; gap: 8px 10px; padding: 12px; }
-    /* a healthy tile is the card's colour, as on desktop, outlined where desktop has its rules; grey while pressed */
-    .irow:not(.alert) { box-shadow: inset 0 0 0 1px var(--line); }
-    .irow:not(.alert):active { background: var(--surface-2); }
-    .irow + .irow::before, .irow .s, .chev { display: none; }
-    .iico { align-self: center; width: 26px; height: 26px; border-radius: 8px; }
-    .iico :global(svg) { width: 14px; height: 14px; }
+    /* phones: collapsed. Each area is its icon and name in one row of cells (a problem's icon outlined in its colour,
+       its shape on the corner); the sentence below gives the figures. A tap opens the area's sheet */
+    .ihead { padding: 10px 10px 4px; }
+    .infra { padding: 6px 6px 14px; }
+    .irows { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 2px; padding-top: 4px; }
+    .irow { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px 0; text-align: center; }
+    .irow, .irow.alert, .irow:hover { background: none; }
+    .irow:active { background: var(--surface-2); }
+    .irow + .irow::before, .irow .fig, .irow .s, .irow .kw, .chev { display: none; }
+    .iico { align-self: center; width: 44px; height: 44px; border-radius: 14px; }
+    .irow.alert .iico { background: var(--lv-soft); box-shadow: inset 0 0 0 1.5px var(--lv); }
+    .irow .k { font-size: 12px; color: var(--text); }
+    .irow .k .dot { position: absolute; top: 5px; left: calc(50% + 17px); margin: 0; }
+    .isay { display: block; margin: 6px 10px 0; font-size: 14px; line-height: 1.45; color: var(--muted); }
+    .isay b { color: var(--text); font-weight: 600; }
     .sec { padding: 16px; border-radius: 20px; }
     .sbeats, .up { display: none; }
     .seg button { min-height: 36px; }
