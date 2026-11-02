@@ -1,17 +1,26 @@
 <script lang="ts">
-  import type { Snippet } from 'svelte';
+  import { untrack, type Snippet } from 'svelte';
+  import { fly } from 'svelte/transition';
 
   // Details on demand: a modal side panel on desktop, a bottom sheet on phones. The native <dialog> brings focus
   // handling, Esc, Android's back gesture and the backdrop; a click on the backdrop closes it too. On phones the
   // sheet can also be swiped down; the close button stays, as the tap alternative to the drag (WCAG 2.5.7).
+  // Sheets stack: a deeper level slides in from the right with a back button to the one below. Esc and Android's back
+  // gesture go up one level (`onback`); the close button, the backdrop and a swipe close them all (`onclose`).
   interface Props {
     open: boolean;
+    /** how many levels are open: a change slides the content in from the side it came from */
+    depth?: number;
     title: string;
     /** a line under the title */
     sub?: string;
+    /** the title of the level below, for the back button; unset on the first level */
+    backTo?: string;
+    onback: () => void;
+    onclose: () => void;
     children: Snippet;
   }
-  let { open = $bindable(), title, sub, children }: Props = $props();
+  let { open, depth = 1, title, sub, backTo, onback, onclose, children }: Props = $props();
   let dialog: HTMLDialogElement | undefined = $state();
   let body: HTMLDivElement | undefined = $state();
 
@@ -24,6 +33,19 @@
     }
     if (!open && dialog.open) dialog.close();
   });
+
+  // which way the content slides: in from the right going deeper, from the left coming back; to the top either way
+  let prev = 1;
+  let dir = $state(1);
+  $effect.pre(() => {
+    const d = depth;
+    untrack(() => {
+      dir = d >= prev ? 1 : -1;
+      if (d !== prev && body) body.scrollTop = 0;
+      prev = d;
+    });
+  });
+  const reduce = () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   // swipe down to close (phones only): starts when the content is scrolled to the top, follows the finger, and
   // closes past a quarter of the sheet's height or on a quick flick; otherwise the sheet snaps back
@@ -63,7 +85,7 @@
       if (!start || !dragging) { start = null; return; }
       const fast = dy / Math.max(1, e.timeStamp - start.t) > 0.5;
       start = null;
-      if (dy > d.offsetHeight / 4 || (fast && dy > 30)) settle('translateY(100%)', () => (open = false));
+      if (dy > d.offsetHeight / 4 || (fast && dy > 30)) settle('translateY(100%)', onclose);
       else settle('');
     };
     d.addEventListener('touchstart', down, { passive: true });
@@ -79,19 +101,35 @@
   });
 </script>
 
-<dialog bind:this={dialog} class="sheet" aria-labelledby="sheet-title" onclose={() => (open = false)} onclick={(e) => { if (e.target === dialog) open = false; }}>
+<!-- Esc and the back gesture (cancel) go up a level; the dialog closing any other way closes all -->
+<dialog
+  bind:this={dialog} class="sheet" aria-labelledby="sheet-title"
+  oncancel={(e) => { e.preventDefault(); onback(); }}
+  onclose={() => { if (open) onclose(); }}
+  onclick={(e) => { if (e.target === dialog) onclose(); }}
+>
   <div class="body" bind:this={body}>
     <span class="grabber" aria-hidden="true"></span>
     <header>
       <div class="ttl">
+        {#if backTo}
+          <button class="back" onclick={onback}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
+            <span class="vh">Back to </span>{backTo}
+          </button>
+        {/if}
         <h2 id="sheet-title">{title}</h2>
         {#if sub}<p class="muted">{sub}</p>{/if}
       </div>
-      <button class="close" onclick={() => (open = false)} aria-label="Close">
+      <button class="close" onclick={onclose} aria-label={backTo ? 'Close all' : 'Close'}>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
       </button>
     </header>
-    {#if open}{@render children()}{/if}
+    {#if open}
+      {#key depth}
+        <div class="level" in:fly={{ x: dir * 28, duration: reduce() || (depth === 1 && dir === 1) ? 0 : 220, opacity: 0 }}>{@render children()}</div>
+      {/key}
+    {/if}
   </div>
 </dialog>
 
@@ -108,6 +146,13 @@
   .ttl p { margin: 2px 0 0; font-size: 13px; }
   .close { flex: none; width: 40px; height: 40px; border: 0; border-radius: 12px; background: var(--surface-2); color: var(--text); display: flex; align-items: center; justify-content: center; cursor: pointer; }
   .close:hover { background: var(--surface-3); }
+  .level { display: flex; flex-direction: column; gap: inherit; min-width: 0; }
+  .back {
+    display: inline-flex; align-items: center; gap: 2px; margin: -4px 0 4px -6px; padding: 4px 8px 4px 4px; min-height: 32px;
+    border: 0; border-radius: 8px; background: none; color: var(--acc); font: inherit; font-size: 14px; font-weight: 500; cursor: pointer;
+  }
+  .back:hover { background: var(--surface-2); }
+  .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .grabber { display: none; }
   @media (prefers-reduced-motion: no-preference) {
     .sheet[open] { animation: in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1); }

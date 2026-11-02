@@ -389,6 +389,9 @@ export interface BackupStatus {
   stores?: string[];
 }
 
+/** What a sheet shows: one level of the sheet stack (the page keeps it in history state). */
+export type SheetRef = { kind: 'service'; id: string } | { kind: 'infra'; tab: 'system' | 'storage' | 'drives' | 'network' } | { kind: 'backups' } | { kind: 'activity' };
+
 /** One PBS server's guest backups, as a row among the jobs in the Backups sheet. */
 export interface GuestBackups {
   /** the PBS service */

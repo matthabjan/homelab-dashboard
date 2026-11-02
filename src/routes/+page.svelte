@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { FeedItem, Job, Level, Snapshot, Tile } from '$lib/types';
+  import { pushState } from '$app/navigation';
+  import { page } from '$app/state';
+  import type { FeedItem, Job, Level, SheetRef, Snapshot, Tile } from '$lib/types';
   import type { PageProps } from './$types';
   import Icon from '$lib/components/Icon.svelte';
   import Infrastructure from '$lib/components/Infrastructure.svelte';
@@ -145,10 +147,15 @@
   });
 
   // ---- sheets: details on demand ----
-  type Open = { kind: 'service'; id: string } | { kind: 'infra'; tab: 'system' | 'storage' | 'drives' | 'network' } | { kind: 'backups' } | { kind: 'activity' };
-  let sheet = $state<Open | null>(null);
-  let sheetOpen = $state(false);
-  const show = (s: Open) => { sheet = s; sheetOpen = true; };
+  // A stack: a sheet opened from inside another (Backups → a job) is a level deeper, with a back button to the one
+  // below. Each level is a history entry (shallow routing), so the browser's and Android's back go up one level, and
+  // closing (✕, the backdrop, a swipe down) pops them all.
+  const stack = $derived<SheetRef[]>(page.state.sheets ?? []);
+  const sheet = $derived(stack.at(-1) ?? null);
+  const sheetOpen = $derived(stack.length > 0);
+  const show = (s: SheetRef) => pushState('', { sheets: [...stack, s] });
+  const back = () => history.back();
+  const closeSheets = () => { if (stack.length) history.go(-stack.length); };
   const openCard = (c: Card) => show(c.id === 'backups' ? { kind: 'backups' } : { kind: 'infra', tab: c.id });
   const sheetId = $derived(sheet?.kind === 'service' ? sheet.id : null);
   const sheetTile = $derived(sheetId ? allServices.find((t) => t.id === sheetId) ?? null : null);
@@ -185,9 +192,10 @@
     const past = svcEvents?.sid === sheetId ? svcEvents.items : snap.events.filter((e) => e.sid === sheetId);
     return [...raised, ...past.filter((e) => !raised.some((a) => a.title.endsWith(e.title)))];
   });
-  const sheetTitle = $derived(
-    sheet?.kind === 'service' ? sheetTile?.name ?? '' : sheet?.kind === 'infra' ? 'Infrastructure' : sheet?.kind === 'backups' ? 'Backups' : 'Activity'
-  );
+  const titleOf = (s: SheetRef | null | undefined) =>
+    !s ? '' : s.kind === 'service' ? allServices.find((t) => t.id === s.id)?.name ?? '' : s.kind === 'infra' ? 'Infrastructure' : s.kind === 'backups' ? 'Backups' : 'Activity';
+  const sheetTitle = $derived(titleOf(sheet));
+  const backTo = $derived(stack.length > 1 ? titleOf(stack.at(-2)) : undefined);
   const sheetSub = $derived(
     sheet?.kind === 'service' ? [sheetTile?.group, sheetTile?.host].filter(Boolean).join(' · ')
     : sheet?.kind === 'backups' ? cards.find((c) => c.id === 'backups')?.sub ?? ''
@@ -493,7 +501,7 @@
     </footer>
   </div>
 
-  <Sheet bind:open={sheetOpen} title={sheetTitle} sub={sheetSub}>
+  <Sheet open={sheetOpen} depth={stack.length} title={sheetTitle} sub={sheetSub} {backTo} onback={back} onclose={closeSheets}>
     {#if sheet?.kind === 'service' && sheetTile}
       {@const t = sheetTile}
       {@const j = sheetJob}
