@@ -89,7 +89,7 @@
 
   /** `stats`: labelled figures shown instead of value and sub, where one figure can't say it; `where`: beside the label */
   type Card = {
-    id: 'system' | 'storage' | 'drives' | 'network' | 'backups'; label: string; where?: string; value: string; unit?: string; sub: string; sub2?: string;
+    id: 'system' | 'storage' | 'drives' | 'network' | 'backups'; label: string; where?: string; value: string; unit?: string; sub: string;
     stats?: { k: string; v: string; level: Level | 'none' }[]; level: Level | 'none';
   };
   /** a storage row's name for prose: "media · NAS" → "media (NAS)" */
@@ -118,7 +118,7 @@
     if (snap.storage.length) {
       const top = [...rows].sort((a, b) => (b.pct ?? 0) - (a.pct ?? 0))[0];
       const off = snap.storage.length - rows.length;
-      out.push({ id: 'storage', label: 'Storage', value: top ? `${Math.round(top.pct ?? 0)}%` : '—', unit: top ? 'full' : '', sub: top ? `fullest: ${storageName(top.name)}` : 'no usage reported', sub2: [`${snap.storage.length} storage${snap.storage.length === 1 ? '' : 's'}`, off && `${off} offline`].filter(Boolean).join(' · '), level: worst(rows.map((s): string => (s.level === 'crit' ? 'warn' : 'ok'))) });
+      out.push({ id: 'storage', label: 'Storage', value: top ? `${Math.round(top.pct ?? 0)}%` : '—', unit: top ? 'full' : '', sub: [top ? storageName(top.name) : 'no usage reported', off && `${off} offline`].filter(Boolean).join(' · '), level: worst(rows.map((s): string => (s.level === 'crit' ? 'warn' : 'ok'))) });
     }
     if (snap.drives.length) {
       const d = snap.drives;
@@ -414,7 +414,6 @@
             {:else}
               <span class="v">{c.value}{#if c.unit}<span class="u">{c.unit}</span>{/if}</span>
               <span class="s">{c.sub}</span>
-              {#if c.sub2}<span class="s">{c.sub2}</span>{/if}
             {/if}
           </button>
         {/each}

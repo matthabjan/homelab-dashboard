@@ -10,7 +10,7 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dashboard-snapshot-'));
 process.env.DATA_DIR = path.join(tmp, 'data');
 process.env.CONFIG_DIR = tmp;
 delete process.env.DEMO;
-const { createSnapshot, driveTempKey } = await import('./snapshot.ts');
+const { createSnapshot } = await import('./snapshot.ts');
 const { snapshotInput } = await import('./test-helpers.ts');
 const { insertProbe, insertMetric } = await import('./db.ts');
 const { fmtClock } = await import('./format.ts');
@@ -93,15 +93,13 @@ test('drives: a failing drive turns the reporting tile red, a past SMART problem
   assert.deepEqual([tile(snap, 'Old').level, tile(snap, 'Old').status, tile(snap, 'Old').line], ['crit', 'Down', `Down since ${fmtClock(now - MIN)} · Timed out`]);
 });
 
-test('trends: a storage row and a drive show 24 h from their metric, once there are two samples', () => {
+test('trends: a storage row shows 24 h from its metric, once there are two samples', () => {
   const now = day(14);
-  const disk = toDrive({ model: 'Disk T', serial: 'T1', kind: 'HDD', size: 8e12, status: 'GOOD', smart: { tempC: 38, hours: null, written: null, lifeLeft: null, errors: null, failing: false } });
   for (let i = 1; i <= 6; i++) {
     insertMetric('storage.pve.tank', now - i * 60 * MIN, 50 + i);
-    insertMetric(driveTempKey(disk), now - i * 60 * MIN, 35);
   }
   insertMetric('storage.pve.fresh', now - MIN, 10);
-  const nas: TestService = probed('NAS', now, { state: { widget: { ...widget(now, []), drives: [disk], storage: [
+  const nas: TestService = probed('NAS', now, { state: { widget: { ...widget(now, []), storage: [
     { name: 'tank', used: 50, total: 100, pct: 50, sub: '50 / 100 GiB', source: 'pve', metric: 'storage.pve.tank' },
     { name: 'fresh', used: 10, total: 100, pct: 10, sub: '10 / 100 GiB', source: 'pve', metric: 'storage.pve.fresh' },
     { name: 'none', used: 10, total: 100, pct: 10, sub: '10 / 100 GiB', source: 'pve' }
@@ -111,7 +109,6 @@ test('trends: a storage row and a drive show 24 h from their metric, once there 
   assert.ok(tank && tank.from === now - 6 * 60 * MIN);
   assert.deepEqual([tank.values[0], tank.values.at(-1)], [55.5, 51.5], 'oldest first, about two samples per bucket');
   assert.deepEqual(snap.storage.filter((s) => s.name !== 'tank').map((s) => s.trend), [null, null], 'one sample, or no metric: nothing to draw');
-  assert.ok(snap.drives[0].temps?.values.every((v) => v == null || v === 35));
 });
 
 test('certificates: a warning under certWarnDays, critical under 3 days, then expired', () => {

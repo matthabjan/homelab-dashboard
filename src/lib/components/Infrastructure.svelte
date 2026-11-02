@@ -165,10 +165,6 @@
               <div class="bar drive lv-{d.lifeLevel}" title="{d.name} · {d.meta} · {d.detail}">
                 <div class="bar-head">
                   <span class="name">{d.name}</span>
-                  {#if d.temps}
-                    {@const m = moved(d.temps, ' °C')}
-                    <span class="trend temp" role="img" aria-label="{d.name} temperature, {m?.text ?? ''}" title="Temperature, {m?.text ?? ''}"><Sparkline values={d.temps.values} min={null} minSpan={8} color="var(--muted)" height={14} /></span>
-                  {/if}
                   {#each d.facts as f}<span class="dfact mono" class:lv-warn={f.level === 'warn'}>{f.v}{f.k ? ` ${f.k}` : ''}</span>{/each}
                   <span class="dstatus lv-{d.level}">{d.status}</span>
                 </div>
@@ -248,7 +244,6 @@
   .pct { flex: none; font-size: 14px; font-weight: 500; }
   /* a small trend beside the figure: shape only, the numbers are in its tooltip and label */
   .trend { flex: none; width: 56px; align-self: center; }
-  .trend.temp { width: 40px; }
   .bar.lv-off .trend { opacity: 0.5; }
   .bar.lv-warn .pct, .bar.lv-crit .pct { color: var(--lv); }
   .bar.lv-off { --fill: color-mix(in srgb, var(--muted) 50%, transparent); }

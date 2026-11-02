@@ -94,10 +94,9 @@ export function seedHistory(services: Service[]) {
       insertMetric('net.up', ts, Math.max(1, 8 + day * 5 + r() * 8));
       insertMetric('lan.down', ts, Math.max(1, 6 + r() * 20 + (i % 288 > 20 && i % 288 < 30 ? 300 : 0))); // nightly backup burst
       insertMetric('lan.up', ts, Math.max(1, 15 + day * 10 + r() * 30));
-      // storage fills slowly through the day (the nightly backup adds a step); drives follow the room and the load
+      // storage fills slowly through the day (the nightly backup adds a step)
       const grow = i / 288;
       for (const [key, pct, step] of STORAGE_TRENDS) insertMetric(key, ts, pct(calm()) - step * (1 - grow) - (i % 288 < 25 ? step / 2 : 0));
-      for (const [serial, c] of DRIVE_TEMPS) insertMetric(`drive.${serial}.temp`, ts, Math.round(c + day * 2 + r() * 1.5));
     }
     // a few opens so the "Most used" row has something to show
     const used: Record<string, number> = { portainer: 9, 'proxmox ve': 7, 'adguard home': 5, opnsense: 4 };
@@ -128,8 +127,6 @@ const STORAGE_TRENDS: [string, (calm: boolean) => number, number][] = [
   ['storage.omv.data · NAS', () => 71.3, 0.3],
   ['storage.omv.scratch · NAS', (calm) => (calm ? 24 : 90), 3]
 ];
-/** drive serial → typical °C, as in the Proxmox, OMV and PBS fixtures */
-const DRIVE_TEMPS: [string, number][] = [['EXNV00000001', 40], ['EXSA00000001', 35], ['EXHD00000001', 34], ['EXUS00000001', 30]];
 
 export function demoSources(): Sources {
   const scenario = SCENARIO;

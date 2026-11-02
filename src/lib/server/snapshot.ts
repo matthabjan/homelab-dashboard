@@ -58,8 +58,6 @@ const trend24 = (mem: Memory, now: number, key: string | undefined, points: numb
   const s = series24(mem, now, key, points);
   return s.values.filter((v) => v != null).length > 1 ? s : null;
 };
-/** Where a drive's temperature is recorded (the engine writes it, the Drives panel reads it). */
-export const driveTempKey = (d: Pick<Drive, 'serial' | 'model'>) => `drive.${d.serial ?? d.model}.temp`;
 
 const level = (v: number | null | undefined, warn: number, crit: number): Level | 'none' => (v == null ? 'none' : v >= crit ? 'crit' : v >= warn ? 'warn' : 'ok');
 
@@ -280,7 +278,7 @@ function storagePanel(engine: SnapshotInput, th: Th, round: Round, now: number, 
 }
 
 /** The Drives panel: one row per disk (a disk passed through whole is listed once), its problems raised. */
-function drivesPanel(engine: SnapshotInput, th: Th, round: Round, now: number, mem: Memory): Snapshot['drives'] {
+function drivesPanel(engine: SnapshotInput, th: Th, round: Round): Snapshot['drives'] {
   const drives: Snapshot['drives'] = [];
   const seenSerials = new Set();
   for (const s of engine.cfg.services) {
@@ -291,7 +289,7 @@ function drivesPanel(engine: SnapshotInput, th: Th, round: Round, now: number, m
       if (d.serial) seenSerials.add(d.serial);
       const { row, problems } = driveStatus(d, d.where ?? s.name, th);
       for (const [sev, text, key] of problems) round.raise({ sev, service: s, key: `drive-${d.serial ?? d.model}-${key}`, title: `${d.model} ${text}`, detail: row.meta });
-      drives.push({ ...row, temps: d.tempC != null ? trend24(mem, now, driveTempKey(d), 48) : null });
+      drives.push(row);
     }
   }
   return drives;
@@ -452,7 +450,7 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
   const tiles = serviceTiles(engine, now, mem, round);
   const host = hostPanel(engine, now, mem, round);
   const storage = storagePanel(engine, th, round, now, mem);
-  const drives = drivesPanel(engine, th, round, now, mem);
+  const drives = drivesPanel(engine, th, round);
 
   const events = recentEvents(now - 24 * H, 20).map((e) => ({ ...e, href: (e.sid && engine.cfg.services.find((s) => s.id === e.sid)?.href) ?? null }));
   const att = round.close(events);

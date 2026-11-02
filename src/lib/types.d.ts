@@ -727,8 +727,6 @@ export interface Snapshot {
     life: number | null;
     lifeLevel: Level;
     facts: Fact[];
-    /** temperature, last 24 h */
-    temps: Trend | null;
   }[];
   network: (Traffic & {
     /** the Proxmox host NIC, shown under WAN on its own scale */
