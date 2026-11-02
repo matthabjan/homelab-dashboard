@@ -8,7 +8,7 @@ A self-hosted launcher and status page for a homelab on **any Docker host**: it 
 
 It is made for your **LAN or VPN** (WireGuard, Tailscale, …): it has no login of its own and must not be reachable from the internet.
 
-![Dashboard in dark mode with problems: the top problem with its Open button, the others that need attention, the most used services, the infrastructure and backup cards, the launcher and recent activity](docs/screenshots/desktop-dark.png)
+![Dashboard in dark mode with problems: the top problem with its Open button, the others that need attention, the most used services, the infrastructure card with a row per area, the launcher and recent activity](docs/screenshots/desktop-dark.png)
 
 - **One glance.** One sentence gives the state ("All 15 services up · 3 jobs on schedule", or the most important problem with a button to open that service), then whatever else needs attention, most severe first. When all is well, the page is short and quiet.
 - **Infrastructure at a glance, details on demand.** One card with a row per area: **System** (CPU, memory, temperature of the Proxmox node or the machine the dashboard runs on), **Storage** (the fullest), **Drives** (SMART health, hottest drive, least life left), **Network** (WAN traffic, DNS block rate) and **Backups** (PBS and backup jobs, the next one due). A row opens a sheet with the full detail: 24-hour charts you can scrub through (CPU, memory, disk, temperature), every storage with its fill, grouped by the host or NAS it belongs to, every drive with SMART health, traffic charts, each job's schedule.
@@ -24,7 +24,7 @@ It is made for your **LAN or VPN** (WireGuard, Tailscale, …): it has no login 
 
 ## Screenshots
 
-![Light mode with everything healthy: "All 15 services up", the most used services, the infrastructure and backup cards, the launcher and recent activity](docs/screenshots/desktop-light.png)
+![Light mode with everything healthy: "All 15 services up", the most used services, the infrastructure card with a row per area, the launcher and recent activity](docs/screenshots/desktop-light.png)
 
 ![On a phone: the top problem and the attention list in dark mode, and the Backups sheet with each job's schedule in light mode](docs/screenshots/phones.png)
 
