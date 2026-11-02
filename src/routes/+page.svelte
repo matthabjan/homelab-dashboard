@@ -189,6 +189,9 @@
   const RECENT = 5;
   let recentAll = $state(false);
   $effect(() => { if (sheet?.kind !== 'backups') recentAll = false; });
+  // the same for a service's activity: short again for every service opened
+  let svcAll = $state(false);
+  $effect(() => { void sheetId; svcAll = false; });
   $effect(() => {
     void snap?.lastChange;
     if (sheet?.kind !== 'backups' || !sheetOpen) return;
@@ -560,7 +563,10 @@
       <div class="sh-block">
         <div class="sh-row"><span class="st">Activity</span><span class="muted small">Last 7 days</span></div>
         {#if sheetActivity.length}
-          <ul class="evs">{#each sheetActivity as a (a.ts + a.title)}{@render event(a)}{/each}</ul>
+          <ul class="evs" id="svc-activity">{#each svcAll ? sheetActivity : sheetActivity.slice(0, RECENT) as a (a.ts + a.title)}{@render event(a)}{/each}</ul>
+          {#if sheetActivity.length > RECENT}
+            <button class="link-btn" aria-expanded={svcAll} aria-controls="svc-activity" onclick={() => (svcAll = !svcAll)}>{svcAll ? 'Show fewer' : `Show all ${sheetActivity.length}`}</button>
+          {/if}
         {:else}
           <p class="muted small">No events in the last 7 days.</p>
         {/if}
