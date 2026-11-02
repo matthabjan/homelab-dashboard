@@ -3,6 +3,9 @@
 #   push to development → :dev
 #   push to main        → :edge (+ :sha-<commit>)
 #   tag vX.Y.Z          → :X.Y.Z, :X.Y, :X, :latest (+ GitHub Release, Docker Hub description)
+# Build once, promote: main and tags have the files development had (merging changes the commit, not the tree),
+# so when :dev was built from the same tree, those tags are added to that image, the exact one that was tested,
+# and nothing is checked or built again. Otherwise (development has moved on) they are checked and built here.
 #   pull request        → all checks and both architectures built, nothing is pushed
 #                         (skipped for development → main: the push run already checked that tree)
 # Published images carry buildx provenance and an SBOM, plus a GitHub artifact attestation:
@@ -29,24 +32,58 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  check:
-    # the image job needs this one, so it is skipped along with it
+  plan:
+    # every other job needs this one, so they are skipped along with it
     if: github.event_name != 'pull_request' || github.head_ref != 'development'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      promote: ${{ steps.dev.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Version from package.json
+        id: version
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [[ "$GITHUB_REF" == refs/tags/v* && "v$version" != "$GITHUB_REF_NAME" ]]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match package.json version $version"
+            exit 1
+          fi
+
+      # the digest is read first and the revision from it, so a :dev pushed in between cannot slip in
+      - name: Is :dev built from this tree?
+        id: dev
+        if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          digest=$(docker buildx imagetools inspect "$IMAGE:dev" --format '{{json .Manifest.Digest}}' | jq -r .) || exit 0
+          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || exit 0
+          rev=$(docker buildx imagetools inspect "$IMAGE@$digest" --format '{{json .Image}}' |
+            jq -r '[.[].config.Labels["org.opencontainers.image.revision"]] | unique | if length == 1 then .[0] else "" end') || exit 0
+          [[ "$rev" =~ ^[0-9a-f]{40}$ ]] || exit 0
+          tree=$(gh api "repos/$GITHUB_REPOSITORY/git/commits/$rev" --jq .tree.sha) || exit 0
+          if [ "$tree" = "$(git rev-parse 'HEAD^{tree}')" ]; then
+            echo "Promoting $IMAGE@$digest, built from $rev (same tree)"
+            echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          else
+            echo ":dev was built from $rev, which has other files: checking and building"
+          fi
+
+  check:
+    needs: plan
+    if: needs.plan.outputs.promote == ''
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-
-      - name: Tag matches package.json version
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: |
-          pkg="v$(node -p "require('./package.json').version")"
-          if [ "$pkg" != "$GITHUB_REF_NAME" ]; then
-            echo "::error::Tag $GITHUB_REF_NAME does not match package.json version $pkg"
-            exit 1
-          fi
 
       # the Node major of the image (NODE_IMAGE in the Dockerfile), so tests and image agree on the runtime
       - name: Node version from the Dockerfile
@@ -59,6 +96,7 @@ jobs:
           # no npm cache: this workflow publishes, and a restored cache is a poisoning path (zizmor).
           # The buildx cache (type=gha) is kept deliberately: it saves the rebuilds, and tag and main
           # runs only restore caches written on main, which takes push access to main to poison.
+          # (A promoted release image was built on development, so pushing there is trusted the same.)
 
       - run: npm ci --ignore-scripts
       - name: Type check
@@ -67,7 +105,7 @@ jobs:
         run: npm test
 
   image:
-    needs: check
+    needs: [plan, check]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -136,15 +174,18 @@ jobs:
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ${{ env.IMAGE }}
-          flavor: |
+          flavor: &flavor |
             latest=auto
-          tags: |
+          tags: &tags |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
             type=raw,value=dev,enable=${{ github.ref == 'refs/heads/development' }}
             type=raw,value=edge,enable=${{ github.ref == 'refs/heads/main' }}
             type=sha,prefix=sha-,enable=${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') }}
+          # package.json's version rather than the tag's, so a :dev image promoted to a release carries it
+          labels: |
+            org.opencontainers.image.version=${{ needs.plan.outputs.version }}
 
       - name: Build and push
         id: build
@@ -168,9 +209,43 @@ jobs:
           subject-digest: ${{ steps.build.outputs.digest }}
           push-to-registry: true
 
+  # the provenance, SBOM and attestation were made for this digest when it was built, so they carry over
+  promote:
+    needs: plan
+    if: needs.plan.outputs.promote != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Log in to Docker Hub
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Tags
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.IMAGE }}
+          flavor: *flavor
+          tags: *tags
+
+      - name: Tag the :dev image
+        env:
+          DIGEST: ${{ needs.plan.outputs.promote }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          mapfile -t tags < <(grep . <<<"$TAGS")
+          docker buildx imagetools create "${tags[@]/#/--tag=}" "$IMAGE@$DIGEST"
+          for tag in "${tags[@]}"; do
+            got=$(docker buildx imagetools inspect "$tag" --format '{{json .Manifest.Digest}}' | jq -r .)
+            [ "$got" = "$DIGEST" ] || { echo "::error::$tag is $got, expected $DIGEST"; exit 1; }
+            echo "$tag → $DIGEST"
+          done
+
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: image
+    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') && (needs.image.result == 'success' || needs.promote.result == 'success') }}
+    needs: [image, promote]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -190,8 +265,8 @@ jobs:
           fi
 
   hub-description:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: image
+    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') && (needs.image.result == 'success' || needs.promote.result == 'success') }}
+    needs: [image, promote]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
