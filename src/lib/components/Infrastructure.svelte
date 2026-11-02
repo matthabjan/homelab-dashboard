@@ -3,6 +3,7 @@
   import type { Level, Snapshot, Traffic, Trend } from '$lib/types';
   import Gauge from './Gauge.svelte';
   import Sparkline from './Sparkline.svelte';
+  import Reading from './Reading.svelte';
 
   interface Props {
     host: Snapshot['host'];
@@ -28,9 +29,6 @@
   /** the worst problem among the levels, for the dot on a tab: a hidden panel must not hide one */
   const worst = (levels: string[]): Level | null => (levels.includes('crit') ? 'crit' : levels.includes('warn') ? 'warn' : null);
   const count = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
-  /** whether the reading has a chart (two points or more); a guard, so the chart can read its series */
-  const charted = (t: Traffic | null | undefined): t is Traffic & { seriesDown: (number | null)[] } =>
-    (t?.seriesDown ?? []).filter((v) => v != null).length > 1;
 
   const panels = $derived.by(() => {
     const list: Panel[] = [];
@@ -46,8 +44,8 @@
       list.push({ id: 'drives', name: 'Drives', level: worst(drives.flatMap((d) => [d.level, d.lifeLevel])), meta: count(drives.length, 'drive') + (smart ? ` · ${smart}` : '') });
     }
     if (network) {
-      const span = charted(network) ? network.spanH : charted(network.lan) ? network.lan?.spanH : null;
-      list.push({ id: 'network', name: 'Network', level: null, meta: span ? `Last ${span} h` : '' });
+      // each tile's axis says how far back it goes
+      list.push({ id: 'network', name: 'Network', level: null });
     }
     return list;
   });
@@ -91,22 +89,15 @@
   const fmtNum = (n: number | null) => (n == null ? '—' : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(n >= 1e4 ? 0 : 1) + 'k' : String(n));
 </script>
 
-{#snippet traffic(t: Traffic, what: string, downWord: string, upWord: string)}
-  <!-- one traffic reading: where it comes from, the current rates, then the recent chart -->
-  <div class="cell">
-    <div class="net-row">
-      <span class="net-src"><span class="net-what">{what}</span><span class="muted">{t.source}</span></span>
-      <span class="net-vals mono"><span style:color="var(--acc)">{fmtRate(t.down)}</span> <span class="muted">{downWord}</span> <span style:color="var(--acc-2)">{fmtRate(t.up)}</span> <span class="muted">{upWord} Mbit/s</span></span>
-    </div>
-    <!-- a fresh metric has fewer than two points: no chart, so no blank space either -->
-    {#if charted(t)}
-      {@const down = t.seriesDown.filter((v): v is number => v != null)}
-      <div class="netchart">
-        <div class="layer"><Sparkline values={t.seriesDown} color="var(--acc)" area height={40} min={0} label="{what} {downWord}, last {t.spanH ?? 24} hours" /></div>
-        <div class="layer"><Sparkline values={t.seriesUp} color="var(--acc-2)" height={40} min={0} max={Math.max(1, ...down) * 1.1} /></div>
-      </div>
-    {/if}
-  </div>
+{#snippet traffic(t: Traffic, what: string)}
+  <!-- one traffic reading as a tile: download filled, upload as a second line, both in Mbit/s -->
+  <Reading
+    label={what} source={t.source} href={t.href} {target} {now}
+    current={{ a: `↓${fmtRate(t.down)}`, b: `↑${fmtRate(t.up)}`, unit: 'Mbit/s' }}
+    values={t.seriesDown} values2={t.seriesUp} from={t.from}
+    at={(v, v2) => ({ a: `↓${fmtRate(v)}`, b: `↑${fmtRate(v2)}`, unit: 'Mbit/s' })}
+    format={(v) => `${fmtRate(v)} Mbit/s down`}
+  />
 {/snippet}
 
 <div class="card infra-card">
@@ -179,13 +170,19 @@
           </div>
         {:else if p.id === 'network' && network}
           <div class="net">
-            {#if network.source}{@render traffic(network, 'WAN', 'down', 'up')}{/if}
-            {#if network.lan}{@render traffic(network.lan, 'LAN', 'in', 'out')}{/if}
+            {#if network.source}{@render traffic(network, 'WAN')}{/if}
+            {#if network.lan}{@render traffic(network.lan, 'LAN')}{/if}
             {#if network.dns}
-              <a class="cell net-row dns" href={network.dns.href} target={target} rel="noopener">
-                <span class="net-src"><span class="net-what">DNS</span><span class="muted">{network.dns.name}{network.dns.period ? ` · ${network.dns.period}` : ''}</span></span>
-                <span class="net-vals mono">{fmtNum(network.dns.queries)} <span class="muted">queries</span> {network.dns.blockedPct.toFixed(1)}% <span class="muted">blocked</span></span>
-              </a>
+              {@const d = network.dns}
+              <!-- DNS: the share blocked, over the server's statistics interval when it reports one per hour (AdGuard) -->
+              <Reading
+                label="DNS" source={d.name} href={d.href} {target} {now}
+                current={{ a: `${d.blockedPct.toFixed(1)}%`, unit: 'blocked' }}
+                detail="{fmtNum(d.queries)} queries{d.period ? ` · ${d.period}` : ''}"
+                values={d.blockedSeries} from={d.blockedSeries && d.stepMs ? now - d.blockedSeries.length * d.stepMs : null}
+                at={(v) => ({ a: `${v.toFixed(1)}%`, unit: 'blocked' })}
+                format={(v) => `${v.toFixed(1)}% blocked`} min={null} minSpan={10}
+              />
             {/if}
           </div>
         {/if}
@@ -264,31 +261,9 @@
   .track { height: 6px; border-radius: 4px; background: var(--track); overflow: hidden; }
   .fill { height: 100%; border-radius: 4px; background: var(--fill); transition: width 0.6s cubic-bezier(0.2, 0.8, 0.2, 1); }
 
-  /* network: WAN, LAN and DNS stacked with a rule between them; side by side once the card is wide */
-  .net { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px 24px; }
-  .net > .cell + .cell { padding-top: 14px; border-top: 1px solid var(--track); }
-  .cell { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-  /* always two lines (where it comes from, then the values): one line only fits the shorter sources, so blocks would differ */
-  .net-row { display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
-  .net-src { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
-  .net-src .muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .net-what { font-weight: 600; }
-  .net-vals { white-space: nowrap; }
-  .net-vals > :not(.muted) { font-size: 15px; font-weight: 500; }
-  .netchart { position: relative; height: 40px; }
-  .layer { position: absolute; inset: 0; }
-  .dns { color: inherit; text-decoration: none; gap: 2px; }
+  /* network: WAN, LAN and DNS as tiles like System's, stacked in the sheet, side by side when the card is wide */
+  .net { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: 12px; }
 
-  @container infra (min-width: 520px) {
-    /* WAN and LAN side by side, DNS across below them */
-    .net:has(> .cell:nth-child(2)) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .net > .cell:nth-child(2) { padding-top: 0; border-top: 0; padding-left: 24px; border-left: 1px solid var(--track); }
-    .net > .cell:nth-child(3) { grid-column: 1 / -1; }
-  }
-  @container infra (min-width: 880px) {
-    .net:has(> .cell:nth-child(3)) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-    .net > .cell:nth-child(3) { grid-column: auto; padding-top: 0; border-top: 0; padding-left: 24px; border-left: 1px solid var(--track); }
-  }
   @container infra (max-width: 519.98px) {
     /* phones: four equal segments across the card */
     .tabs { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); flex: 1 1 100%; }

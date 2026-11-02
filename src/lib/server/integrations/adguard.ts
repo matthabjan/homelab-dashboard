@@ -12,6 +12,8 @@ export interface AdguardStats {
   time_units?: 'hours' | 'days';
   /** queries per time unit, oldest first */
   dns_queries?: number[];
+  /** queries blocked by filters per time unit, oldest first */
+  blocked_filtering?: number[];
 }
 
 /** GET /control/status. */
@@ -30,6 +32,8 @@ export async function collect(w: Widget, ctx: Context): Promise<WidgetResult> {
   const avgMs = (stats.avg_processing_time ?? 0) * 1000;
   // one point per hour or day, covering AdGuard's statistics interval
   const series = Array.isArray(stats.dns_queries) ? stats.dns_queries : null;
+  const blockedPer = Array.isArray(stats.blocked_filtering) && stats.blocked_filtering.length === series?.length ? stats.blocked_filtering : null;
+  const blockedSeries = series && blockedPer ? series.map((n, i) => (n ? (blockedPer[i] / n) * 100 : 0)) : null;
   const alerts: Alert[] = [];
   if (status && status.protection_enabled === false) alerts.push({ sev: 'warn', key: 'paused', title: 'DNS protection is paused', detail: 'AdGuard Home filtering is disabled' });
   if (status && status.running === false) alerts.push({ sev: 'crit', key: 'not-running', title: 'AdGuard DNS not running', detail: 'DNS server reports not running' });
@@ -41,6 +45,6 @@ export async function collect(w: Widget, ctx: Context): Promise<WidgetResult> {
     ],
     line: `${fmtNum(q)} queries · ${blockedPct.toFixed(1)}% blocked`,
     alerts,
-    dns: { queries: q, blockedPct, avgMs, series, period: series ? `${series.length} ${stats.time_units === 'days' ? 'd' : 'h'}` : null }
+    dns: { queries: q, blockedPct, avgMs, series, period: series ? `${series.length} ${stats.time_units === 'days' ? 'd' : 'h'}` : null, blockedSeries, stepMs: series ? (stats.time_units === 'days' ? 86_400_000 : 3_600_000) : null }
   };
 }

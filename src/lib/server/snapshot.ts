@@ -326,12 +326,12 @@ function networkPanel(engine: SnapshotInput, widgets: ReturnType<typeof widgetsO
   const traffic = (key: string, reading: NetworkReading, href: string | null): Traffic => {
     const sDown = series24(mem, now, `${key}.down`, 72);
     const sUp = series24(mem, now, `${key}.up`, 72);
-    return { source: reading.source, href, down: reading.down, up: reading.up, seriesDown: sDown.values, seriesUp: sUp.values, spanH: Math.max(1, Math.round((now - sDown.from) / H)) };
+    return { source: reading.source, href, down: reading.down, up: reading.up, seriesDown: sDown.values, seriesUp: sUp.values, spanH: Math.max(1, Math.round((now - sDown.from) / H)), from: sDown.from };
   };
   if (net || dns || lan?.w.lan) {
     const nw = net?.w.network;
     network = {
-      ...(nw ? traffic(nw.fallback ? 'fritz' : 'net', nw, net.s.href) : { source: null, href: null, down: null, up: null, seriesDown: null, seriesUp: null, spanH: null }),
+      ...(nw ? traffic(nw.fallback ? 'fritz' : 'net', nw, net.s.href) : { source: null, href: null, down: null, up: null, seriesDown: null, seriesUp: null, spanH: null, from: null }),
       lan: lan?.w.lan ? traffic('lan', lan.w.lan, lan.s.href) : null,
       dns: dns?.w.dns ? { ...dns.w.dns, href: dns.s.href, name: dns.s.name } : null
     };

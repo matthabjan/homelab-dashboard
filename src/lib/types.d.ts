@@ -367,6 +367,8 @@ export interface Traffic {
   seriesDown: (number | null)[] | null;
   seriesUp: (number | null)[] | null;
   spanH: number | null;
+  /** where the series start (ms); they end at the snapshot's time */
+  from: number | null;
 }
 
 export interface DnsStats {
@@ -377,6 +379,9 @@ export interface DnsStats {
   series: number[] | null;
   /** what the counts cover, e.g. "24 h" (AdGuard's statistics interval) */
   period: string | null;
+  /** % blocked per point of `series`, and how long a point is (ms); null when the server doesn't report them */
+  blockedSeries?: number[] | null;
+  stepMs?: number | null;
 }
 
 export interface BackupStatus {

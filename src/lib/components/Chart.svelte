@@ -2,8 +2,10 @@
   // An interactive 24 h area chart: a smooth line over a fading fill, a dashed line where the value turns amber, and
   // the latest point marked. Hover, touch-drag or the arrow keys scrub through it; the owner shows the point under
   // the pointer in its own headline (`scrub`), so the chart needs no tooltip and stays readable at tile size.
+  // A second series (`values2`: upload next to download) is a plain line on the same scale, in --chart-2.
   interface Props {
     values: (number | null)[];
+    values2?: (number | null)[] | null;
     /** the first bucket's start and the last one's end (ms) */
     from: number;
     to: number;
@@ -18,19 +20,20 @@
     label: string;
     format: (v: number) => string;
     /** the point under the pointer, null when not scrubbing */
-    scrub?: { v: number; ts: number } | null;
+    scrub?: { v: number; v2?: number | null; ts: number } | null;
   }
-  let { values, from, to, min = null, max = null, minSpan = 0, warn = null, height = 56, label, format, scrub = $bindable(null) }: Props = $props();
+  let { values, values2 = null, from, to, min = null, max = null, minSpan = 0, warn = null, height = 56, label, format, scrub = $bindable(null) }: Props = $props();
 
   const W = 300;
   const uid = $props.id();
   const n = $derived(values.length);
   const nums = $derived(values.filter((v): v is number => v != null));
+  const nums2 = $derived((values2 ?? []).filter((v): v is number => v != null));
 
   const scale = $derived.by(() => {
     if (nums.length < 2) return null;
-    let lo = min ?? Math.min(...nums);
-    let hi = max ?? Math.max(...nums);
+    let lo = min ?? Math.min(...nums, ...nums2);
+    let hi = max ?? Math.max(...nums, ...nums2);
     if (min == null && max == null) {
       const pad = (hi - lo) * 0.15;
       lo -= pad;
@@ -67,21 +70,26 @@
     return path;
   }
 
-  const geo = $derived.by(() => {
-    if (!scale) return null;
-    // a gap (nothing recorded) breaks the line instead of bridging it
+  /** a series' runs of recorded points: a gap (nothing recorded) breaks the line instead of bridging it */
+  function runs(vs: (number | null)[]): [number, number][][] {
     const segs: [number, number][][] = [];
     let cur: [number, number][] = [];
-    values.forEach((v, i) => {
+    vs.forEach((v, i) => {
       if (v == null) { if (cur.length) segs.push(cur); cur = []; return; }
       cur.push([x(i), y(v)]);
     });
     if (cur.length) segs.push(cur);
+    return segs;
+  }
+  const geo = $derived.by(() => {
+    if (!scale) return null;
+    const segs = runs(values);
     const line = segs.map(smooth).join('');
+    const line2 = values2 ? runs(values2).map(smooth).join('') : null;
     const fill = segs.filter((s) => s.length > 1).map((s) => `${smooth(s)}L${s[s.length - 1][0].toFixed(1)},${H}L${s[0][0].toFixed(1)},${H}Z`).join('');
     const last = values.findLastIndex((v) => v != null);
     const warnY = warn != null && warn > scale.lo && warn < scale.hi ? y(warn) : null;
-    return { line, fill, last, warnY };
+    return { line, line2, fill, last, warnY };
   });
 
   const tsOf = (i: number) => from + ((i + 0.5) / n) * (to - from);
@@ -96,7 +104,7 @@
   function pick(i: number) {
     at = nearest(Math.max(0, Math.min(n - 1, i)));
     const v = values[at];
-    scrub = at >= 0 && v != null ? { v, ts: tsOf(at) } : null;
+    scrub = at >= 0 && v != null ? { v, v2: values2?.[at] ?? null, ts: tsOf(at) } : null;
   }
   function release() { at = -1; scrub = null; }
   function point(e: PointerEvent) {
@@ -133,10 +141,12 @@
       </defs>
       <path d={geo.fill} fill="url(#fill-{uid})" />
       {#if geo.warnY != null}<line class="warn" x1="0" x2={W} y1={geo.warnY} y2={geo.warnY} />{/if}
+      {#if geo.line2}<path class="line two" d={geo.line2} />{/if}
       <path class="line" d={geo.line} />
     </svg>
     {#if at >= 0}
       <span class="cross" style:left={pos(at).left}></span>
+      {#if values2?.[at] != null}<span class="dot two" style:left={pos(at).left} style:top="{y(values2[at] as number)}px"></span>{/if}
       <span class="dot" style:left={pos(at).left} style:top={pos(at).top}></span>
     {:else if geo.last >= 0}
       <span class="dot now" style:left={pos(geo.last).left} style:top={pos(geo.last).top}></span>
@@ -149,6 +159,8 @@
   .chart:focus-visible { box-shadow: 0 0 0 2px var(--acc); }
   svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
   .line { fill: none; stroke: var(--c); stroke-width: 1.75; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+  .line.two, .dot.two { --c: var(--chart-2, var(--acc-2)); }
+  .line.two { stroke-width: 1.5; }
   .warn { stroke: var(--warn); stroke-width: 1; stroke-dasharray: 3 3; opacity: 0.7; vector-effect: non-scaling-stroke; }
   .cross { position: absolute; top: 0; bottom: 0; width: 1px; transform: translateX(-0.5px); background: color-mix(in srgb, var(--text) 30%, transparent); pointer-events: none; }
   .dot { position: absolute; width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 2px var(--surface-2, var(--surface)); pointer-events: none; }
