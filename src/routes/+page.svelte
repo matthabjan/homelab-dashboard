@@ -76,7 +76,13 @@
   const jobById = $derived(new Map((snap?.jobs ?? []).map((j) => [j.id, j])));
   const nextJob = $derived([...(snap?.jobs ?? [])].sort((a, b) => a.due - b.due)[0] ?? null);
 
-  type Card = { id: 'system' | 'storage' | 'drives' | 'network' | 'backups'; label: string; value: string; unit?: string; sub: string; level: Level | 'none' };
+  /** `stats`: labelled figures shown instead of value and sub, where one figure can't say it; `where`: beside the label */
+  type Card = {
+    id: 'system' | 'storage' | 'drives' | 'network' | 'backups'; label: string; where?: string; value: string; unit?: string; sub: string; sub2?: string;
+    stats?: { k: string; v: string; level: Level | 'none' }[]; level: Level | 'none';
+  };
+  /** a storage row's name for prose: "media · NAS" → "media (NAS)" */
+  const storageName = (name: string) => name.replace(/^(.+?) · (.+)$/, '$1 ($2)');
   const worst = (levels: string[]): Level | 'none' => (levels.includes('crit') ? 'crit' : levels.includes('warn') ? 'warn' : 'none');
   const cards: Card[] = $derived.by(() => {
     if (!snap) return [];
@@ -85,9 +91,13 @@
     if (snap.host) {
       const cpu = g('cpu'), mem = g('mem'), temp = g('temp');
       out.push({
-        id: 'system', label: 'System',
-        value: [cpu && `${cpu.val}%`, mem?.pct != null && `${Math.round(mem.pct)}%`].filter(Boolean).join(' · ') || '—',
-        sub: [cpu && 'CPU', mem && 'memory', temp && `${temp.val} °C`].filter(Boolean).join(' · ') + ` · ${snap.host.name}`,
+        id: 'system', label: 'System', where: snap.host.name,
+        value: '', sub: '',
+        stats: [
+          cpu && { k: 'CPU', v: `${cpu.val}%`, level: cpu.level },
+          mem && { k: 'RAM', v: mem.pct != null ? `${Math.round(mem.pct)}%` : '—', level: mem.level },
+          temp && { k: 'Temp', v: `${temp.val} °C`, level: temp.level }
+        ].filter((x) => !!x),
         level: worst(snap.host.gauges.map((x) => x.level))
       });
     }
@@ -97,7 +107,7 @@
     if (snap.storage.length) {
       const top = [...rows].sort((a, b) => (b.pct ?? 0) - (a.pct ?? 0))[0];
       const off = snap.storage.length - rows.length;
-      out.push({ id: 'storage', label: 'Storage', value: top ? `${Math.round(top.pct ?? 0)}%` : '—', unit: top ? 'fullest' : '', sub: [top?.name, `${snap.storage.length} storages`, off && `${off} offline`].filter(Boolean).join(' · '), level: worst(rows.map((s): string => (s.level === 'crit' ? 'warn' : 'ok'))) });
+      out.push({ id: 'storage', label: 'Storage', value: top ? `${Math.round(top.pct ?? 0)}%` : '—', unit: top ? 'full' : '', sub: top ? `fullest: ${storageName(top.name)}` : 'no usage reported', sub2: [`${snap.storage.length} storage${snap.storage.length === 1 ? '' : 's'}`, off && `${off} offline`].filter(Boolean).join(' · '), level: worst(rows.map((s): string => (s.level === 'crit' ? 'warn' : 'ok'))) });
     }
     if (snap.drives.length) {
       const d = snap.drives;
@@ -367,9 +377,16 @@
       <section class="cards" aria-label="Infrastructure" style="--n: {cards.length}">
         {#each cards as c (c.id)}
           <button class="card vcard lift lv-{c.level}" class:alert={isProblem(c.level)} onclick={() => openCard(c)}>
-            <span class="k">{c.label}</span>
-            <span class="v">{c.value}{#if c.unit}<span class="u">{c.unit}</span>{/if}</span>
-            <span class="s">{c.sub}</span>
+            <span class="k">{c.label}{#if c.where}<span class="kw">· {c.where}</span>{/if}</span>
+            {#if c.stats}
+              <span class="stats">
+                {#each c.stats as st (st.k)}<span class="st"><span class="sk">{st.k}</span><span class="sv" class:hl={isProblem(st.level)} style:--lv={isProblem(st.level) ? `var(--${st.level})` : undefined}>{st.v}</span></span>{/each}
+              </span>
+            {:else}
+              <span class="v">{c.value}{#if c.unit}<span class="u">{c.unit}</span>{/if}</span>
+              <span class="s">{c.sub}</span>
+              {#if c.sub2}<span class="s">{c.sub2}</span>{/if}
+            {/if}
           </button>
         {/each}
       </section>
@@ -620,6 +637,13 @@
   .vcard .u { margin-left: 5px; font-size: 14px; font-weight: 500; color: var(--muted); }
   .vcard .s { font-size: 12.5px; color: var(--muted); max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .vcard.alert .k, .vcard.alert .s, .vcard.alert .u { color: color-mix(in srgb, var(--lv) 75%, var(--text)); }
+  .vcard .kw { margin-left: 0.3em; color: var(--muted); }
+  /* labelled figures: a small label over each value, side by side */
+  .stats { display: flex; gap: 6px 22px; flex-wrap: wrap; margin-top: 2px; }
+  .st { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+  .sk { font-size: 12px; color: var(--muted); }
+  .sv { font-size: 20px; font-weight: 600; letter-spacing: -0.02em; white-space: nowrap; }
+  .sv.hl { color: var(--lv); }
 
   /* services and activity */
   .lower { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 14px; align-items: start; }
@@ -736,6 +760,8 @@
     .lgroup h3 { display: none; }
     .vcard { padding: 14px 16px; }
     .vcard .v { font-size: 19px; }
+    .stats { gap: 6px 14px; }
+    .sv { font-size: 18px; }
     .sec { padding: 16px; border-radius: 20px; }
     .sbeats, .up { display: none; }
     .seg button { min-height: 36px; }
