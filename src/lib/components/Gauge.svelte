@@ -12,7 +12,7 @@
   let { g, now }: Props = $props();
   let scrub = $state<{ v: number; ts: number } | null>(null);
   const pct = $derived(Math.max(0, Math.min(100, g.pct ?? 0)));
-  // the history is a percentage (or °C), while memory's headline is GiB: a scrubbed point says it in the series' unit
+  // the history is in the headline's unit (% or °C), so a scrubbed point takes the headline's place
   const unitOf = $derived(g.key === 'temp' ? '°C' : '%');
   const format = (v: number) => `${Math.round(v)} ${unitOf}`;
   const hours = $derived(g.from ? Math.max(1, Math.round((now - g.from) / 3_600_000)) : 24);

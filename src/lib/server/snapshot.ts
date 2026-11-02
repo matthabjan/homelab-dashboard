@@ -230,7 +230,8 @@ function hostPanel(engine: SnapshotInput, now: number, mem: Memory, round: Round
     const gauges: Gauge[] = [];
     if (hw) {
       gauges.push({ key: 'cpu', label: 'CPU', val: hw.cpu == null ? '—' : Math.round(hw.cpu), unit: '%', pct: hw.cpu, level: level(hw.cpu, 75, 90), sub: `${hw.cpus} threads`, ...hist('host.cpu'), max: 100, warn: 75 });
-      gauges.push({ key: 'mem', label: 'Memory', val: (hw.mem / 1024 ** 3).toFixed(1), unit: `of ${Math.round(hw.maxmem / 1024 ** 3)} GiB`, pct: hw.memPct, level: level(hw.memPct, 80, 92), sub: `${Math.round(hw.memPct)}% used`, ...hist('host.mem'), max: 100, warn: 80 });
+      // a percentage like the other gauges and its history; the amounts are the detail
+      gauges.push({ key: 'mem', label: 'Memory', val: Math.round(hw.memPct), unit: '%', pct: hw.memPct, level: level(hw.memPct, 80, 92), sub: `${(hw.mem / 1024 ** 3).toFixed(1)} of ${Math.round(hw.maxmem / 1024 ** 3)} GiB`, ...hist('host.mem'), max: 100, warn: 80 });
       gauges.push({ key: 'disk', label: 'Disk', val: hw.disk.pct == null ? '—' : Math.round(hw.disk.pct), unit: '%', pct: hw.disk.pct, level: level(hw.disk.pct, th.storageAmberPct, th.storageWarnPct), sub: hw.disk.name, ...hist(hostSvc ? hw.disk.metric : 'host.disk'), max: 100, warn: th.storageAmberPct });
       // a Proxmox node's disk is also a storage row, which raises this itself; the local host has no other place for it
       if (!hostSvc && hw.disk.pct != null && hw.disk.pct >= th.storageWarnPct) {

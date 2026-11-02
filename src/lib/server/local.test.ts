@@ -82,7 +82,7 @@ test('the System panel shows local vitals without a Guests fact', async () => {
   assert.equal(snap.host?.name, 'this host');
   assert.equal(snap.host?.href, null);
   assert.deepEqual(snap.host?.facts, [{ label: 'Uptime', value: '26 h' }]);
-  assert.deepEqual(snap.host?.gauges.map((g) => [g.key, g.val]), [['cpu', 10], ['mem', '11.7'], ['disk', Math.round((local?.disk.pct as number))]]);
+  assert.deepEqual(snap.host?.gauges.map((g) => [g.key, g.val]), [['cpu', 10], ['mem', Math.round(local?.memPct as number)], ['disk', Math.round((local?.disk.pct as number))]]);
 });
 
 test('a nearly full local disk raises the storage warning', async () => {
