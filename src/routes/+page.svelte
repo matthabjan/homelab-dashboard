@@ -520,7 +520,6 @@
         <span><span class="t">Setup</span><span class="d muted">{snap.configProblems ? `${snap.configProblems} problem${snap.configProblems === 1 ? '' : 's'} in your config` : 'What loaded, which widgets connect'}</span></span>
       </a>
       <span class="muted small ver">
-        <span class="only-phone"><ThemeToggle /></span>
         <a href="https://github.com/matthabjan/homelab-dashboard/tree/main/docs" target="_blank" rel="noopener">Documentation</a>
         {#if snap.version}<span class="mono">v{snap.version}</span>{/if}
       </span>
@@ -792,7 +791,7 @@
     .lower { grid-template-columns: minmax(0, 1fr); }
     .sbeats { width: 110px; }
   }
-  /* phones: the same order, tighter; search and setup in the header, the theme in the footer */
+  /* phones: the same order, tighter; search and setup in the header; the theme follows the system (the Setup page still has the switch) */
   @media (max-width: 760px) {
     .page { gap: 14px; }
     .search, .deep, .live :global(.demo) { display: none; }
