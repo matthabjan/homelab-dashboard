@@ -867,9 +867,12 @@
        context line: the figure says what is wrong and a tap opens the rest */
     .irows { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; }
     .irow:first-child:nth-last-child(odd) { grid-column: 1 / -1; }
-    .irow { grid-template-columns: 26px minmax(0, 1fr); grid-template-areas: 'ic k' 'fig fig'; align-content: start; gap: 8px 10px; padding: 12px; background: var(--surface-2); }
+    .irow { grid-template-columns: 26px minmax(0, 1fr); grid-template-areas: 'ic k' 'fig fig'; align-content: start; gap: 8px 10px; padding: 12px; }
+    /* a healthy tile is the card's colour, as on desktop, outlined where desktop has its rules; grey while pressed */
+    .irow:not(.alert) { box-shadow: inset 0 0 0 1px var(--line); }
+    .irow:not(.alert):active { background: var(--surface-2); }
     .irow + .irow::before, .irow .s, .chev { display: none; }
-    .iico { align-self: center; width: 26px; height: 26px; border-radius: 8px; background: var(--surface); }
+    .iico { align-self: center; width: 26px; height: 26px; border-radius: 8px; }
     .iico :global(svg) { width: 14px; height: 14px; }
     .sec { padding: 16px; border-radius: 20px; }
     .sbeats, .up { display: none; }
