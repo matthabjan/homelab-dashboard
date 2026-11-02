@@ -6,7 +6,7 @@ import { fmtDuration as fmtAge, fmtHours, fmtSize } from './format.ts';
 import { hostService, hostSource } from './local.ts';
 import { kindOf, status as checkStatus } from './check.ts';
 import { createAttention, type Raised } from './attention.ts';
-import type { BackupStatus, ConfigProblem, ContainerCounts, Drive, HeartbeatState, Fact, Gauge, Job, Level, NetworkReading, Settings, Severity, Snapshot, Tile, Traffic } from '$lib/types';
+import type { BackupStatus, ConfigProblem, ContainerCounts, Drive, HeartbeatState, Fact, Gauge, Job, Level, NetworkReading, Settings, Severity, Snapshot, Tile, Traffic, Trend } from '$lib/types';
 import type { Engine } from './engine.ts';
 
 const RANK: Record<Severity | Level, number> = { crit: 3, warn: 2, info: 1, ok: 0 };
@@ -51,6 +51,15 @@ function stats(mem: Memory, sid: string, now: number): ProbeSummary {
 
 /** A metric's 24 h series in `points` buckets. */
 const series24 = (mem: Memory, now: number, key: string, points: number) => perMinute(mem, now, `series ${key} ${points}`, () => series(key, now - 24 * H, now, points));
+
+/** A metric's 24 h trend, or null while it has fewer than two samples (nothing to draw). */
+const trend24 = (mem: Memory, now: number, key: string | undefined, points: number): Trend | null => {
+  if (!key) return null;
+  const s = series24(mem, now, key, points);
+  return s.values.filter((v) => v != null).length > 1 ? s : null;
+};
+/** Where a drive's temperature is recorded (the engine writes it, the Drives panel reads it). */
+export const driveTempKey = (d: Pick<Drive, 'serial' | 'model'>) => `drive.${d.serial ?? d.model}.temp`;
 
 const level = (v: number | null | undefined, warn: number, crit: number): Level | 'none' => (v == null ? 'none' : v >= crit ? 'crit' : v >= warn ? 'warn' : 'ok');
 
@@ -212,15 +221,19 @@ function hostPanel(engine: SnapshotInput, now: number, mem: Memory, round: Round
   const th = settings.thresholds;
   const hostSvc = hostSource(engine.cfg) === 'proxmox' ? hostService(engine.cfg) : undefined;
   const hw = hostSvc ? engine.state(hostSvc.id).widget?.host : engine.local;
-  const spark = (key: string) => series24(mem, now, key, 48).values;
+  // 15-minute buckets: fine enough to scrub through, coarse enough to stay smooth
+  const hist = (key: string | undefined) => {
+    const t = trend24(mem, now, key, 96);
+    return t ? { series: t.values, from: t.from } : { series: null };
+  };
   let host = null;
   if (hw || engine.temps) {
     const temps = engine.temps;
     const gauges: Gauge[] = [];
     if (hw) {
-      gauges.push({ key: 'cpu', label: 'CPU', val: hw.cpu == null ? '—' : Math.round(hw.cpu), unit: '%', pct: hw.cpu, level: level(hw.cpu, 75, 90), sub: `${hw.cpus} threads`, series: spark('host.cpu'), max: 100 });
-      gauges.push({ key: 'mem', label: 'Memory', val: (hw.mem / 1024 ** 3).toFixed(1), unit: `of ${Math.round(hw.maxmem / 1024 ** 3)} GiB`, pct: hw.memPct, level: level(hw.memPct, 80, 92), sub: `${Math.round(hw.memPct)}% used`, series: spark('host.mem'), max: 100 });
-      gauges.push({ key: 'disk', label: 'Disk', val: hw.disk.pct == null ? '—' : Math.round(hw.disk.pct), unit: '%', pct: hw.disk.pct, level: level(hw.disk.pct, th.storageAmberPct, th.storageWarnPct), sub: hw.disk.name, series: null });
+      gauges.push({ key: 'cpu', label: 'CPU', val: hw.cpu == null ? '—' : Math.round(hw.cpu), unit: '%', pct: hw.cpu, level: level(hw.cpu, 75, 90), sub: `${hw.cpus} threads`, ...hist('host.cpu'), max: 100, warn: 75 });
+      gauges.push({ key: 'mem', label: 'Memory', val: (hw.mem / 1024 ** 3).toFixed(1), unit: `of ${Math.round(hw.maxmem / 1024 ** 3)} GiB`, pct: hw.memPct, level: level(hw.memPct, 80, 92), sub: `${Math.round(hw.memPct)}% used`, ...hist('host.mem'), max: 100, warn: 80 });
+      gauges.push({ key: 'disk', label: 'Disk', val: hw.disk.pct == null ? '—' : Math.round(hw.disk.pct), unit: '%', pct: hw.disk.pct, level: level(hw.disk.pct, th.storageAmberPct, th.storageWarnPct), sub: hw.disk.name, ...hist(hostSvc ? hw.disk.metric : 'host.disk'), max: 100, warn: th.storageAmberPct });
       // a Proxmox node's disk is also a storage row, which raises this itself; the local host has no other place for it
       if (!hostSvc && hw.disk.pct != null && hw.disk.pct >= th.storageWarnPct) {
         round.raise({ sev: 'warn', source: 'host', key: 'local-disk', title: `Disk ${hw.disk.name} is ${Math.round(hw.disk.pct)}% full`, detail: `${hw.node} · ${hw.disk.sub}` });
@@ -229,7 +242,7 @@ function hostPanel(engine: SnapshotInput, now: number, mem: Memory, round: Round
     if (temps?.cpu != null) {
       const span = th.tempWarnC + 15 - th.tempMinC;
       const tp = Math.max(0, Math.min(100, ((temps.cpu - th.tempMinC) / span) * 100));
-      gauges.push({ key: 'temp', label: 'CPU temp', val: Math.round(temps.cpu), unit: '°C', pct: tp, level: level(temps.cpu, th.tempWarnC, th.tempWarnC + 10), sub: `warn at ${th.tempWarnC} °C`, series: spark('host.temp'), max: null });
+      gauges.push({ key: 'temp', label: 'CPU temp', val: Math.round(temps.cpu), unit: '°C', pct: tp, level: level(temps.cpu, th.tempWarnC, th.tempWarnC + 10), sub: `warn ${th.tempWarnC} °C`, ...hist('host.temp'), max: null, warn: th.tempWarnC });
       // the kernel's sensors are the Proxmox node's (the dashboard shares its kernel), so its tile carries them
       const whose = hostSvc ? { service: hostSvc } : { source: 'host' };
       if (temps.cpu >= th.tempWarnC) round.raise({ ...whose, key: 'cpu-temp', sev: temps.cpu >= th.tempWarnC + 10 ? 'crit' : 'warn', title: `CPU at ${Math.round(temps.cpu)} °C`, detail: `limit ${th.tempWarnC} °C` });
@@ -249,7 +262,7 @@ function hostPanel(engine: SnapshotInput, now: number, mem: Memory, round: Round
 }
 
 /** Storage rows from every widget that reports them; a row over `storageWarnPct` is raised for its service. */
-function storagePanel(engine: SnapshotInput, th: Th, round: Round): Snapshot['storage'] {
+function storagePanel(engine: SnapshotInput, th: Th, round: Round, now: number, mem: Memory): Snapshot['storage'] {
   const storage: Snapshot['storage'] = [];
   for (const s of engine.cfg.services) {
     const w = engine.state(s.id).widget;
@@ -257,9 +270,9 @@ function storagePanel(engine: SnapshotInput, th: Th, round: Round): Snapshot['st
     // and an offline row keeps its place instead of jumping to the end
     for (const x of [...(w?.storage || [])].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))) {
       // unavailable, detached or of unknown size: a grey bar (last known fill, if any), the widget raises any alert itself
-      if (x.offline || x.pct == null) { storage.push({ name: x.name, pct: x.pct ?? null, level: 'off', sub: x.sub }); continue; }
+      if (x.offline || x.pct == null) { storage.push({ name: x.name, pct: x.pct ?? null, level: 'off', sub: x.sub, trend: trend24(mem, now, x.metric, 48) }); continue; }
       const lv: Level = x.pct >= th.storageWarnPct ? 'crit' : x.pct >= th.storageAmberPct ? 'warn' : 'ok';
-      storage.push({ name: x.name, pct: x.pct, level: lv, sub: x.sub });
+      storage.push({ name: x.name, pct: x.pct, level: lv, sub: x.sub, trend: trend24(mem, now, x.metric, 48) });
       if (x.pct >= th.storageWarnPct) round.raise({ sev: 'warn', service: s, key: `storage-${x.name}`, title: `${x.name} is ${Math.round(x.pct)}% full`, detail: x.sub });
     }
   }
@@ -267,7 +280,7 @@ function storagePanel(engine: SnapshotInput, th: Th, round: Round): Snapshot['st
 }
 
 /** The Drives panel: one row per disk (a disk passed through whole is listed once), its problems raised. */
-function drivesPanel(engine: SnapshotInput, th: Th, round: Round): Snapshot['drives'] {
+function drivesPanel(engine: SnapshotInput, th: Th, round: Round, now: number, mem: Memory): Snapshot['drives'] {
   const drives: Snapshot['drives'] = [];
   const seenSerials = new Set();
   for (const s of engine.cfg.services) {
@@ -278,7 +291,7 @@ function drivesPanel(engine: SnapshotInput, th: Th, round: Round): Snapshot['dri
       if (d.serial) seenSerials.add(d.serial);
       const { row, problems } = driveStatus(d, d.where ?? s.name, th);
       for (const [sev, text, key] of problems) round.raise({ sev, service: s, key: `drive-${d.serial ?? d.model}-${key}`, title: `${d.model} ${text}`, detail: row.meta });
-      drives.push(row);
+      drives.push({ ...row, temps: d.tempC != null ? trend24(mem, now, driveTempKey(d), 48) : null });
     }
   }
   return drives;
@@ -438,8 +451,8 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
   configAlerts(engine, round);
   const tiles = serviceTiles(engine, now, mem, round);
   const host = hostPanel(engine, now, mem, round);
-  const storage = storagePanel(engine, th, round);
-  const drives = drivesPanel(engine, th, round);
+  const storage = storagePanel(engine, th, round, now, mem);
+  const drives = drivesPanel(engine, th, round, now, mem);
 
   const events = recentEvents(now - 24 * H, 20).map((e) => ({ ...e, href: (e.sid && engine.cfg.services.find((s) => s.id === e.sid)?.href) ?? null }));
   const att = round.close(events);

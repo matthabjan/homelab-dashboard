@@ -183,10 +183,10 @@ export async function collect(w: Widget, ctx: Context): Promise<WidgetResult> {
       const used = Number.isFinite(avail) ? total - avail : Number(f.used);
       const dev = f.canonicaldevicefile || f.devicefile;
       const label = f.label || (dev ? dev.replace(/^\/dev\//, '') : f.mountpoint);
-      return { label, row: { name: `${label} · NAS`, used, total, pct: pct(used, total), sub: fmtPair(used, total), source: 'omv' } satisfies UsageRow };
+      return { label, row: { name: `${label} · NAS`, used, total, pct: pct(used, total), sub: fmtPair(used, total), source: 'omv', metric: `storage.omv.${label} · NAS` } satisfies UsageRow };
     });
   const storage: UsageRow[] = volumes.map((v) => v.row);
-  for (const s of storage) ctx.metric(`storage.omv.${s.name}`, s.pct);
+  for (const s of storage) if (s.metric) ctx.metric(s.metric, s.pct);
   // the root file system is left out above, so this is the fullest data disk
   const fullest = [...volumes].sort((a, b) => (b.row.pct ?? 0) - (a.row.pct ?? 0))[0];
   const full = fullest?.row.pct ?? 0, th = ctx.settings.thresholds;

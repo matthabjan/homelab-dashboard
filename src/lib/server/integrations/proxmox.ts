@@ -104,7 +104,7 @@ function nodeStorages(res: PveResource[], nodeName: string, { storages: wanted, 
   const chosen = pinned ? up.find((r) => r.storage === pinned) : null;
   const guestDisks = up.filter((r) => !r.shared && /\b(images|rootdir)\b/.test(r.content ?? '')).sort((a, b) => b.maxdisk - a.maxdisk)[0];
   return {
-    storages: up.filter(shown).map((s): UsageRow => ({ name: s.storage, used: s.disk, total: s.maxdisk, pct: pct(s.disk, s.maxdisk), sub: fmtPair(s.disk, s.maxdisk), source: 'pve' })),
+    storages: up.filter(shown).map((s): UsageRow => ({ name: s.storage, used: s.disk, total: s.maxdisk, pct: pct(s.disk, s.maxdisk), sub: fmtPair(s.disk, s.maxdisk), source: 'pve', metric: `storage.pve.${s.storage}` })),
     // e.g. a mount that is gone: keep it visible, a backup target that silently disappears is worse
     down: onNode.filter((r) => r.status !== 'available' && shown(r)),
     main: chosen ?? guestDisks,
@@ -163,7 +163,7 @@ export async function collect(w: Widget, ctx: Context): Promise<WidgetResult> {
   ctx.metric('host.mem', memPct);
   const rootPct = pct(node.disk, node.maxdisk);
   ctx.metric('host.root', rootPct);
-  for (const s of storages) ctx.metric(`storage.pve.${s.name}`, s.pct);
+  for (const s of storages) if (s.metric) ctx.metric(s.metric, s.pct);
   (ctx.shared.guests ??= {})[`${base} ${node.node}`] = Object.fromEntries(guests.map((g) => [String(g.id), g.name]));
 
   const alerts: Alert[] = [];
@@ -180,7 +180,7 @@ export async function collect(w: Widget, ctx: Context): Promise<WidgetResult> {
     ],
     line: `CPU ${Math.round(cpu)}% · RAM ${fmtPair(node.mem, node.maxmem)}`,
     alerts,
-    storage: [...storages, ...down.map((s): OfflineRow => ({ name: s.storage, offline: true, sub: 'unavailable', source: 'pve' }))],
+    storage: [...storages, ...down.map((s): OfflineRow => ({ name: s.storage, offline: true, sub: 'unavailable', source: 'pve', metric: `storage.pve.${s.storage}` }))],
     lan,
     drives,
     host: {
@@ -191,8 +191,8 @@ export async function collect(w: Widget, ctx: Context): Promise<WidgetResult> {
       maxmem: node.maxmem,
       memPct,
       disk: main
-        ? { name: main.storage, pct: pct(main.disk, main.maxdisk), sub: fmtPair(main.disk, main.maxdisk) }
-        : { name: 'root', pct: rootPct, sub: fmtPair(node.disk, node.maxdisk) },
+        ? { name: main.storage, pct: pct(main.disk, main.maxdisk), sub: fmtPair(main.disk, main.maxdisk), metric: `storage.pve.${main.storage}` }
+        : { name: 'root', pct: rootPct, sub: fmtPair(node.disk, node.maxdisk), metric: 'host.root' },
       uptime: node.uptime ? fmtDuration(node.uptime * 1000) : null,
       guestsRunning: running,
       guestsTotal: guests.length,

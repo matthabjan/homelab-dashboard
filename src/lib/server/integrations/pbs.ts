@@ -64,7 +64,7 @@ interface Attached {
 type Mounted = PbsDatastoreUsage & { total: number; used: number };
 const mounted = (s: PbsDatastoreUsage): s is Mounted => (s.total ?? 0) > 0;
 
-const usageRow = (name: string, s: Mounted): UsageRow => ({ name, used: s.used, total: s.total, pct: pct(s.used, s.total), sub: fmtPair(s.used, s.total), source: 'pbs' });
+const usageRow = (name: string, s: Mounted): UsageRow => ({ name, used: s.used, total: s.total, pct: pct(s.used, s.total), sub: fmtPair(s.used, s.total), source: 'pbs', metric: `storage.pbs.${s.store}` });
 const removable = (s: PbsDatastoreUsage) => s['mount-status'] != null && s['mount-status'] !== 'nonremovable';
 
 /**
@@ -82,7 +82,7 @@ function removableStatus(s: PbsDatastoreUsage, now: number, maxDays: number, kv:
   const age = now - (seen.last ?? seen.first);
   return {
     // short enough to share the line with the name; the bar keeps how full the disk was when last attached
-    row: { name: `${s.store} · removable`, offline: true, sub: seen.last ? `detached ${fmtDuration(age)}` : 'never attached', pct: seen.pct ?? null, source: 'pbs' },
+    row: { name: `${s.store} · removable`, offline: true, sub: seen.last ? `detached ${fmtDuration(age)}` : 'never attached', pct: seen.pct ?? null, source: 'pbs', metric: `storage.pbs.${s.store}` },
     alert: age > maxDays * 86_400_000 ? { sev: 'info', key: `detached-${s.store}`, title: `${s.store} detached for ${fmtDuration(age)}`, detail: 'Plug in the offsite disk to refresh its copy' } : null
   };
 }

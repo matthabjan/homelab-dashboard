@@ -9,7 +9,7 @@ import { hostSource, type LocalState } from './local.ts';
 import { checkIn, createLimiter, heartbeatState, record as heartbeatRecord } from './heartbeat.ts';
 import { DEMO, demoSources } from './demo.ts';
 import { liveSources } from './sources.ts';
-import { createSnapshot } from './snapshot.ts';
+import { createSnapshot, driveTempKey } from './snapshot.ts';
 import { blankCheck, kindOf, record } from './check.ts';
 import { createIconFinder, iconCandidates } from './icons.ts';
 import { INTEGRATIONS, ORDER, createContext } from './integrations/index.ts';
@@ -176,6 +176,7 @@ export class Engine extends EventEmitter {
       try {
         const res = await withTimeout(INTEGRATIONS[s.widget.type].collect(s.widget, ctx), 25_000, s.widget.type);
         for (const e of res.events || []) insertEvent(e.ts ?? now, e.sev, s.id, e.title, e.detail);
+        for (const d of res.drives || []) if (d.tempC != null) insertMetric(driveTempKey(d), now, d.tempC);
         st.widget = { ok: true, ts: now, lastOk: now, ...res };
       } catch (caught) {
         // undici's "fetch failed" carries the reason in cause; getJson attaches the upstream body for the log
@@ -193,7 +194,11 @@ export class Engine extends EventEmitter {
     if (hostSource(this.cfg) === 'local') {
       this.local = await this.sources.local(settings.host, this.localState);
       // the same keys the Proxmox widget records, so the gauges' sparklines don't care where they came from
-      if (this.local) { insertMetric('host.cpu', now, this.local.cpu); insertMetric('host.mem', now, this.local.memPct); }
+      if (this.local) {
+        insertMetric('host.cpu', now, this.local.cpu);
+        insertMetric('host.mem', now, this.local.memPct);
+        if (this.local.disk.pct != null) insertMetric('host.disk', now, this.local.disk.pct);
+      }
     } else this.local = null;
 
     if (settings.host.temperature) {

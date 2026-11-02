@@ -1,83 +1,58 @@
 <script lang="ts">
   import type { Gauge } from '$lib/types';
-  import Sparkline from './Sparkline.svelte';
+  import Chart from './Chart.svelte';
 
+  // One System reading: its value, then its last 24 h as a chart. Scrubbing the chart puts the reading at that
+  // time in the headline (the time where the subtitle was), the way stock and health apps do it.
   interface Props {
     g: Gauge;
+    /** when the snapshot was made: the chart's right edge */
+    now: number;
   }
-  let { g }: Props = $props();
-  const R = 34;
-  const C = 2 * Math.PI * R;
+  let { g, now }: Props = $props();
+  let scrub = $state<{ v: number; ts: number } | null>(null);
   const pct = $derived(Math.max(0, Math.min(100, g.pct ?? 0)));
-  const dash = $derived(`${((pct / 100) * C).toFixed(1)} ${C.toFixed(1)}`);
+  // the history is a percentage (or °C), while memory's headline is GiB: a scrubbed point says it in the series' unit
+  const unitOf = $derived(g.key === 'temp' ? '°C' : '%');
+  const format = (v: number) => `${Math.round(v)} ${unitOf}`;
+  const hours = $derived(g.from ? Math.max(1, Math.round((now - g.from) / 3_600_000)) : 24);
+  const hhmm = (ts: number) => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 </script>
 
-<div class="gauge lv-{g.level}">
-  <div class="ring">
-    <svg width="84" height="84" viewBox="0 0 84 84" role="img" aria-label="{g.label} {g.val} {g.unit}">
-      <circle cx="42" cy="42" r={R} fill="none" stroke="var(--track)" stroke-width="7" />
-      <circle class="arc" cx="42" cy="42" r={R} fill="none" stroke-width="7" stroke-linecap="round" stroke-dasharray={dash} transform="rotate(-90 42 42)" />
-    </svg>
-    <div class="val">
-      <span class="mono num">{g.val}</span>
-      <span class="mono unit">{g.unit}</span>
-    </div>
+<div class="tile lv-{g.level}">
+  <div class="head">
+    <span class="label">{g.label}</span>
+    <span class="mono sub" class:at={scrub}>{scrub ? hhmm(scrub.ts) : g.sub ?? ''}</span>
   </div>
-  <span class="label">{g.label}</span>
-  <span class="mono sub">{g.sub ?? ''}</span>
-  <div class="spark">
-    {#if g.series}<Sparkline values={g.series} min={null} minSpan={g.max ? 10 : 4} color="var(--arc)" label="{g.label}, recent history" />{/if}
+  <div class="val" aria-live="off">
+    {#if scrub}<span class="mono num">{Math.round(scrub.v)}</span><span class="mono unit">{unitOf}</span>
+    {:else}<span class="mono num">{g.val}</span><span class="mono unit">{g.unit}</span>{/if}
   </div>
-</div>
-
-<!-- a narrow card: compact tile (no ring, no sparkline); the two variants switch by the infrastructure card's width -->
-<div class="mini lv-{g.level}" role="img" aria-label="{g.label} {g.val} {g.unit}{g.sub ? ', ' + g.sub : ''}">
-  <div class="mini-head"><span class="label">{g.label}</span><span class="mono sub">{g.sub ?? ''}</span></div>
-  <div class="mini-val"><span class="mono">{g.val}</span><span class="mono unit">{g.unit}</span></div>
-  <div class="bar"><div style:width="{pct}%"></div></div>
+  {#if g.series && g.from}
+    <Chart values={g.series} from={g.from} to={now} min={g.max === 100 ? 0 : null} max={g.max === 100 ? 100 : null} minSpan={8} warn={g.warn} height={52} label={g.label} {format} bind:scrub />
+    <div class="axis mono" aria-hidden="true"><span>−{hours} h</span><span>now</span></div>
+  {:else}
+    <!-- no history yet (a fresh install): the current fill as a bar -->
+    <div class="bar"><div style:width="{pct}%"></div></div>
+  {/if}
 </div>
 
 <style>
-  .gauge {
-    --arc: var(--acc);
-    display: flex; flex-direction: column; align-items: center; gap: 6px;
-    padding: 14px 10px 10px; border-radius: 16px; background: var(--surface-2); min-width: 0;
+  .tile {
+    --chart: var(--acc);
+    display: flex; flex-direction: column; gap: 6px; min-width: 0;
+    padding: 12px 14px 10px; border-radius: 14px; background: var(--surface-2);
   }
-  .gauge.lv-warn, .gauge.lv-crit { --arc: var(--lv); }
-  .arc { stroke: var(--arc); transition: stroke-dasharray 0.6s cubic-bezier(0.2, 0.8, 0.2, 1); }
-  .ring { position: relative; width: 84px; height: 84px; }
-  .val { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-  .num { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; }
-  .unit { font-size: 10px; color: var(--muted); max-width: 64px; text-align: center; line-height: 1.1; }
-  .label { font-size: 12px; font-weight: 500; }
-  .sub { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
-  .spark { width: 100%; height: 24px; }
-
-  .mini { display: none; }
-  /* a wide card: ring on the left, label and trend beside it, so the row stays low */
-  @container infra (min-width: 880px) {
-    .gauge { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto auto 1fr; column-gap: 16px; row-gap: 2px; align-items: start; padding: 12px 16px 12px 12px; }
-    .ring { grid-row: 1 / 4; align-self: center; width: 76px; height: 76px; }
-    .ring svg { width: 100%; height: 100%; }
-    .label { font-size: 13px; margin-top: 4px; }
-    .spark { align-self: end; height: 28px; }
-  }
-  /* a narrow card (phones): compact tile, no ring, no sparkline */
-  @container infra (max-width: 519.98px) {
-    .gauge { display: none; }
-    .mini {
-      --arc: var(--acc);
-      display: flex; flex-direction: column; gap: 6px; min-width: 0;
-      padding: 12px 14px; border-radius: 14px; background: var(--surface-2);
-    }
-    .mini.lv-warn, .mini.lv-crit { --arc: var(--lv); }
-    .mini-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-    .mini .label { font-size: 13px; flex: none; }
-    .mini .sub { min-width: 0; }
-    .mini-val { display: flex; align-items: baseline; gap: 5px; min-width: 0; white-space: nowrap; }
-    .mini-val > :first-child { font-size: 24px; font-weight: 500; letter-spacing: -0.02em; line-height: 1.15; }
-    .mini-val .unit { font-size: 12px; max-width: none; overflow: hidden; text-overflow: ellipsis; }
-    .bar { height: 6px; border-radius: 4px; background: var(--track); overflow: hidden; margin-top: 2px; }
-    .bar > div { height: 100%; border-radius: 4px; background: var(--arc); transition: width 0.6s cubic-bezier(0.2, 0.8, 0.2, 1); }
-  }
+  .tile.lv-warn, .tile.lv-crit { --chart: var(--lv); }
+  .head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .label { font-size: 13px; font-weight: 500; flex: none; }
+  .sub { font-size: 11px; color: var(--muted); min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sub.at { color: var(--text); }
+  .val { display: flex; align-items: baseline; gap: 5px; min-width: 0; white-space: nowrap; }
+  .num { font-size: 24px; font-weight: 500; letter-spacing: -0.02em; line-height: 1.15; font-variant-numeric: tabular-nums; }
+  .unit { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+  .tile.lv-warn .num, .tile.lv-crit .num { color: var(--lv); }
+  .axis { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); margin-top: -2px; }
+  .bar { height: 6px; border-radius: 4px; background: var(--track); overflow: hidden; margin-top: 2px; }
+  .bar > div { height: 100%; border-radius: 4px; background: var(--chart); transition: width 0.6s cubic-bezier(0.2, 0.8, 0.2, 1); }
 </style>

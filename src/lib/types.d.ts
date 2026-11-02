@@ -293,6 +293,8 @@ export interface UsageRow {
   /** null when the total is 0 (size unknown) */
   pct: number | null;
   offline?: false;
+  /** the metric its fill is recorded under, for the 24 h trend */
+  metric?: string;
 }
 
 export interface OfflineRow {
@@ -302,6 +304,7 @@ export interface OfflineRow {
   offline: true;
   /** how full it was when last seen, drawn as a grey bar */
   pct?: number | null;
+  metric?: string;
 }
 
 /** The machine shown as "host": the Proxmox node, or the one the dashboard runs on (local.ts, no guests). */
@@ -313,7 +316,8 @@ export interface HostVitals {
   mem: number;
   maxmem: number;
   memPct: number;
-  disk: { name: string; pct: number | null; sub: string };
+  /** `metric`: where its fill is recorded; unset for the local host, whose disk the engine records as host.disk */
+  disk: { name: string; pct: number | null; sub: string; metric?: string };
   uptime: string | null;
   guestsRunning: number | null;
   guestsTotal: number | null;
@@ -634,6 +638,12 @@ export interface Job {
   backup: boolean;
 }
 
+/** A metric's recent history: equal buckets from `from` to the snapshot's time, null where nothing was recorded. */
+export interface Trend {
+  values: (number | null)[];
+  from: number;
+}
+
 export interface Gauge {
   key: string;
   label: string;
@@ -642,8 +652,12 @@ export interface Gauge {
   pct: number | null;
   level: Level | 'none';
   sub: string | null;
+  /** 24 h history in equal buckets from `from` to the snapshot's time; null without two samples yet */
   series: (number | null)[] | null;
+  from?: number;
   max?: number | null;
+  /** where it turns amber, drawn as a line on the chart */
+  warn?: number | null;
 }
 
 export interface Snapshot {
@@ -679,7 +693,7 @@ export interface Snapshot {
   /** `name` is the Proxmox node; `facts` are labelled pairs shown beside it (uptime, guests) */
   host: { name: string; href: string | null; facts: { label: string; value: string }[]; gauges: Gauge[] } | null;
   /** `off` rows (unavailable, detached, size unknown) draw `pct` as a grey bar: the last known fill, or empty */
-  storage: { name: string; pct: number | null; level: Level | 'off'; sub: string }[];
+  storage: { name: string; pct: number | null; level: Level | 'off'; sub: string; trend: Trend | null }[];
   /** the infrastructure sheet's Drives panel; empty when no widget reports drives */
   drives: {
     name: string;
@@ -692,6 +706,8 @@ export interface Snapshot {
     life: number | null;
     lifeLevel: Level;
     facts: Fact[];
+    /** temperature, last 24 h */
+    temps: Trend | null;
   }[];
   network: (Traffic & {
     /** the Proxmox host NIC, shown under WAN on its own scale */

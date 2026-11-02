@@ -506,7 +506,7 @@
         {/if}
       </div>
     {:else if sheet?.kind === 'infra'}
-      <Infrastructure host={snap.host} storage={snap.storage} drives={snap.drives} network={snap.network} {target} initial={sheet.tab} />
+      <Infrastructure host={snap.host} storage={snap.storage} drives={snap.drives} network={snap.network} {target} now={snap.generatedAt} initial={sheet.tab} />
     {:else if sheet?.kind === 'backups'}
       {#if snap.backups?.known && snap.backups.oldestAge != null}
         <div class="facts">

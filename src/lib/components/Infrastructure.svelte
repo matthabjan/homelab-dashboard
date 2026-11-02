@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { Level, Snapshot, Traffic } from '$lib/types';
+  import type { Level, Snapshot, Traffic, Trend } from '$lib/types';
   import Gauge from './Gauge.svelte';
   import Sparkline from './Sparkline.svelte';
 
@@ -10,10 +10,12 @@
     drives: Snapshot['drives'];
     network: Snapshot['network'];
     target: string;
+    /** when the snapshot was made: the right edge of every history */
+    now: number;
     /** the panel to open with (a sheet opened from its card); without it, the one this browser last chose */
     initial?: 'system' | 'storage' | 'drives' | 'network';
   }
-  let { host, storage, drives, network, target, initial }: Props = $props();
+  let { host, storage, drives, network, target, now, initial }: Props = $props();
 
   /** a tab of the card: its panel id, its name and the dot it shows */
   interface Panel {
@@ -77,6 +79,14 @@
   }
   const tabbed = $derived(panels.length > 1);
 
+  /** How a trend moved: first and last reading, and the change, e.g. "24 h: 61% → 62% (+1.2)". */
+  function moved(t: Trend | null, unit: string): { text: string; delta: number } | null {
+    const vs = t?.values.filter((v): v is number => v != null) ?? [];
+    if (!t || vs.length < 2) return null;
+    const a = vs[0], b = vs[vs.length - 1], h = Math.max(1, Math.round((now - t.from) / 3_600_000));
+    const d = b - a;
+    return { delta: d, text: `${h} h: ${a.toFixed(1)}${unit} → ${b.toFixed(1)}${unit} (${d >= 0 ? '+' : '−'}${Math.abs(d).toFixed(1)})` };
+  }
   const fmtRate = (v: number | null) => (v == null ? '—' : v >= 100 ? Math.round(v) : v.toFixed(1));
   const fmtNum = (n: number | null) => (n == null ? '—' : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(n >= 1e4 ? 0 : 1) + 'k' : String(n));
 </script>
@@ -130,14 +140,20 @@
       <div class="panel {p.id}" class:off={view !== p.id} id="vp-{p.id}" role={tabbed ? 'tabpanel' : undefined} aria-labelledby={tabbed ? `vt-${p.id}` : undefined}>
         {#if p.id === 'system' && host}
           <div class="gauges">
-            {#each host.gauges as g (g.key)}<Gauge {g} />{/each}
+            {#each host.gauges as g (g.key)}<Gauge {g} {now} />{/each}
           </div>
         {:else if p.id === 'storage'}
           <div class="rows">
             {#each storage as s}
-              <!-- an off row (unavailable, detached) is grey: its reason in the sub column, the bar at the last known fill -->
-              <div class="bar lv-{s.level}" title="{s.name} · {s.sub}">
-                <div class="bar-head"><span class="name">{s.name}</span><span class="mono muted sub">{s.sub}</span><span class="mono pct">{s.pct != null ? `${Math.round(s.pct)}%` : '—'}</span></div>
+              {@const m = moved(s.trend, '%')}
+              <!-- an off row (unavailable, detached) is grey: its reason in the sub column, the bar at the last known fill;
+                   the trend beside the figure shows how it filled over the day (a flat line is the usual answer) -->
+              <div class="bar lv-{s.level}" title="{s.name} · {s.sub}{m ? ` · ${m.text}` : ''}">
+                <div class="bar-head">
+                  <span class="name">{s.name}</span><span class="mono muted sub">{s.sub}</span>
+                  {#if s.trend && m}<span class="trend" role="img" aria-label="{s.name}, {m.text}"><Sparkline values={s.trend.values} min={null} minSpan={4} color="var(--fill)" area height={16} /></span>{/if}
+                  <span class="mono pct">{s.pct != null ? `${Math.round(s.pct)}%` : '—'}</span>
+                </div>
                 <div class="track"><div class="fill" style:width="{Math.min(100, s.pct ?? 0)}%"></div></div>
               </div>
             {/each}
@@ -149,6 +165,10 @@
               <div class="bar drive lv-{d.lifeLevel}" title="{d.name} · {d.meta} · {d.detail}">
                 <div class="bar-head">
                   <span class="name">{d.name}</span>
+                  {#if d.temps}
+                    {@const m = moved(d.temps, ' °C')}
+                    <span class="trend temp" role="img" aria-label="{d.name} temperature, {m?.text ?? ''}" title="Temperature, {m?.text ?? ''}"><Sparkline values={d.temps.values} min={null} minSpan={8} color="var(--muted)" height={14} /></span>
+                  {/if}
                   {#each d.facts as f}<span class="dfact mono" class:lv-warn={f.level === 'warn'}>{f.v}{f.k ? ` ${f.k}` : ''}</span>{/each}
                   <span class="dstatus lv-{d.level}">{d.status}</span>
                 </div>
@@ -214,7 +234,7 @@
   .panel.off { visibility: hidden; }
 
   /* system: one slot per gauge kind, so a missing one leaves the others their usual size */
-  .gauges { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+  .gauges { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr)); gap: 12px; }
 
   /* storage and drives: rows flow into as many columns as fit */
   .rows { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 12px 32px; align-content: start; }
@@ -226,6 +246,10 @@
   .bar-head .name { flex: 0 1 auto; max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .bar-head .sub { flex: 1 1 auto; min-width: 0; text-align: right; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .pct { flex: none; font-size: 14px; font-weight: 500; }
+  /* a small trend beside the figure: shape only, the numbers are in its tooltip and label */
+  .trend { flex: none; width: 56px; align-self: center; }
+  .trend.temp { width: 40px; }
+  .bar.lv-off .trend { opacity: 0.5; }
   .bar.lv-warn .pct, .bar.lv-crit .pct { color: var(--lv); }
   .bar.lv-off { --fill: color-mix(in srgb, var(--muted) 50%, transparent); }
   .bar.lv-off .name, .bar.lv-off .pct { color: var(--muted); }
@@ -274,7 +298,6 @@
     /* phones: four equal segments across the card */
     .tabs { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); flex: 1 1 100%; }
     .tabs button { padding: 8px 2px; gap: 4px; }
-    .gauges { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   }
   /* the smallest phones: a label and its dot must still fit a quarter of the card */
   @container infra (max-width: 299.98px) { .tabs button { font-size: 13px; padding-inline: 0; gap: 3px; } }
