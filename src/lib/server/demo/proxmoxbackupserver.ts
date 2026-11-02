@@ -1,4 +1,5 @@
 // Proxmox Backup Server: datastore "main" plus a removable "offsite" disk.
+// Guests are backed up nightly, the PVE host itself (proxmox-backup-client, a "host" group) every 30 minutes.
 // "issues": guest 103 missed its last backup and the offsite disk is unplugged; "calm": it is plugged in.
 import { TiB } from '../format.ts';
 import type { Fixtures } from '$lib/types';
@@ -16,12 +17,15 @@ export default {
     ]
   }),
   'GET /api2/json/admin/datastore/:store/groups': ({ now, scenario, params }): PbsResponse<PbsBackupGroup[]> => ({
-    data: params.store !== 'main' ? [] : ['100', '101', '102', '103', '104', '105'].map((id): PbsBackupGroup => ({
-      'backup-type': id === '105' ? 'ct' : 'vm',
-      'backup-id': id,
-      'last-backup': Math.floor((now - (scenario === 'issues' && id === '103' ? 30 : 6) * H) / 1000),
-      comment: ''
-    }))
+    data: params.store !== 'main' ? [] : [
+      ...['100', '101', '102', '103', '104', '105'].map((id): PbsBackupGroup => ({
+        'backup-type': id === '105' ? 'ct' : 'vm',
+        'backup-id': id,
+        'last-backup': Math.floor((now - (scenario === 'issues' && id === '103' ? 30 : 6) * H) / 1000),
+        comment: ''
+      })),
+      { 'backup-type': 'host', 'backup-id': 'pve', 'last-backup': Math.floor((now - 12 * 60_000) / 1000), comment: '' }
+    ]
   }),
   // the VM's own disks are virtual and skipped; the offsite USB disk only exists while it is plugged in
   'GET /api2/json/nodes/localhost/disks/list': ({ scenario }): PbsResponse<PbsDisk[]> => ({

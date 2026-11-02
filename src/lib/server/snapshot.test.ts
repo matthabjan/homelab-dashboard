@@ -180,7 +180,7 @@ test('checks other than probes: a stopped container is down, a heartbeat that mi
   // the job with its schedule: next run expected `every` after the last one
   const [job] = snap.jobs;
   assert.deepEqual([job.name, job.state, job.lastOk, job.due, job.every, job.backup], ['Restic', 'down', lastOk, lastOk + 24 * 60 * MIN, hb.every, true]);
-  assert.deepEqual(snap.backups, { overdue: 1, oldestAge: 26 * 60 * MIN, known: true });
+  assert.deepEqual(snap.backups, { overdue: 1, oldestAge: 26 * 60 * MIN, oldestName: 'Restic', known: true });
 });
 
 test('healthy: services and jobs are counted apart', () => {

@@ -387,26 +387,38 @@ export interface DnsStats {
 export interface BackupStatus {
   overdue: number;
   oldestAge: number | null;
+  /** what the oldest backup is: a guest or host on PBS, or a backup job */
+  oldestName?: string | null;
   known: boolean;
-  /** PBS: guests judged, the newest backup (ms), the datastores read */
+  /** PBS: guests (VMs, containers) judged, their newest backup (ms), the datastores read */
   guests?: number;
   last?: number | null;
   stores?: string[];
+  /** PBS host backups (proxmox-backup-client): hostnames, the newest (ms), how many of them are overdue */
+  hosts?: string[];
+  hostLast?: number | null;
+  hostOverdue?: number;
 }
 
 /** What a sheet shows: one level of the sheet stack (the page keeps it in history state). */
 export type SheetRef = { kind: 'service'; id: string } | { kind: 'infra'; tab: 'system' | 'storage' | 'drives' | 'network' } | { kind: 'backups' } | { kind: 'activity' };
 
-/** One PBS server's guest backups, as a row among the jobs in the Backups sheet. */
+/** One PBS server's guest backups, as a row among the jobs in the Backups sheet, and its host backups as another. */
 export interface GuestBackups {
   /** the PBS service */
   id: string;
   name: string;
   stores: string[];
   guests: number;
-  /** newest backup (ms) */
+  /** newest guest backup (ms) */
   last: number | null;
+  /** overdue guest backups */
   overdue: number;
+  /** hostnames with host backups; empty when there are none */
+  hosts: string[];
+  /** newest host backup (ms) */
+  hostLast: number | null;
+  hostOverdue: number;
 }
 
 export interface ContainerCounts {

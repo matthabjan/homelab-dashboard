@@ -61,18 +61,26 @@ const trend24 = (mem: Memory, now: number, key: string | undefined, points: numb
 
 const level = (v: number | null | undefined, warn: number, crit: number): Level | 'none' => (v == null ? 'none' : v >= crit ? 'crit' : v >= warn ? 'warn' : 'ok');
 
+/** A heartbeat marked `backup: true`, with its service's name. */
+export interface BackupBeat {
+  name: string;
+  hb: HeartbeatState | null;
+}
+
 /**
  * PBS backups plus heartbeats marked `backup: true` (restic, borg, Kopia …): overdue counts added up, the oldest age
- * the larger one; a heartbeat that never ran has no age yet.
+ * the larger one, named after what it is; a heartbeat that never ran has no age yet.
  */
-export function mergeBackups(pbs: BackupStatus | undefined, beats: (HeartbeatState | null)[], now: number): BackupStatus | undefined {
-  const known = beats.filter((b) => b && b.state !== 'pending');
+export function mergeBackups(pbs: BackupStatus | undefined, beats: BackupBeat[], now: number): BackupStatus | undefined {
+  const known = beats.filter((b) => b.hb && b.hb.state !== 'pending');
   if (!known.length) return pbs;
-  const ages = known.flatMap((b) => (b?.lastOk != null ? [now - b.lastOk] : []));
-  const oldest = [pbs?.oldestAge, ...ages].filter((a) => a != null);
+  const ages = known.flatMap((b) => (b.hb?.lastOk != null ? [{ age: now - b.hb.lastOk, name: b.name }] : []));
+  if (pbs?.oldestAge != null) ages.push({ age: pbs.oldestAge, name: pbs.oldestName ?? '' });
+  const oldest = ages.reduce<{ age: number; name: string } | null>((o, a) => (!o || a.age > o.age ? a : o), null);
   return {
-    overdue: (pbs?.overdue ?? 0) + known.filter((b) => b?.state === 'down').length,
-    oldestAge: oldest.length ? Math.max(...(oldest as number[])) : null,
+    overdue: (pbs?.overdue ?? 0) + known.filter((b) => b.hb?.state === 'down').length,
+    oldestAge: oldest?.age ?? null,
+    oldestName: oldest?.name || null,
     known: true
   };
 }
@@ -397,7 +405,7 @@ function verdictFacts(engine: SnapshotInput, widgets: ReturnType<typeof widgetsO
   const up = probed.filter((t) => t.status !== 'Down').length;
   const services = probed.filter((t) => t.check !== 'heartbeat');
   const servicesUp = services.filter((t) => t.status !== 'Down').length;
-  const backups = mergeBackups(widgets.find((x) => x.w.backups)?.w.backups, engine.cfg.services.flatMap((s) => (s.heartbeat?.backup ? [engine.state(s.id).heartbeat ?? null] : [])), now);
+  const backups = mergeBackups(widgets.find((x) => x.w.backups)?.w.backups, engine.cfg.services.flatMap((s) => (s.heartbeat?.backup ? [{ name: s.name, hb: engine.state(s.id).heartbeat ?? null }] : [])), now);
   const certWarn = all.filter((t) => t.cert && t.cert.days < th.certWarnDays).length;
   const onSchedule = jobs.filter((j) => j.state !== 'down').length;
   const jobWord = jobs.every((j) => j.backup) ? 'backup job' : 'job';
@@ -484,7 +492,12 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
     lastChange: events[0]?.ts ?? null,
     events,
     jobs,
-    guestBackups: widgets.flatMap(({ s, w }) => (w.backups?.known ? [{ id: s.id, name: s.name, stores: w.backups.stores ?? [], guests: w.backups.guests ?? 0, last: w.backups.last ?? null, overdue: w.backups.overdue }] : [])),
+    guestBackups: widgets.flatMap(({ s, w }) => {
+      const b = w.backups;
+      if (!b?.known) return [];
+      const hostOverdue = b.hostOverdue ?? 0;
+      return [{ id: s.id, name: s.name, stores: b.stores ?? [], guests: b.guests ?? 0, last: b.last ?? null, overdue: b.overdue - hostOverdue, hosts: b.hosts ?? [], hostLast: b.hostLast ?? null, hostOverdue }];
+    }),
     backups,
     facts,
     attention: att.items,

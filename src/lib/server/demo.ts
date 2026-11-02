@@ -101,8 +101,9 @@ export function seedHistory(services: Service[]) {
     // a few opens so the "Most used" row has something to show
     const used: Record<string, number> = { portainer: 9, 'proxmox ve': 7, 'adguard home': 5, opnsense: 4 };
     for (const s of services) for (let i = 0; i < (used[s.name.toLowerCase()] ?? 0); i++) recordOpen(s.id, now, DEFAULT_SETTINGS.mostUsed.halfLifeDays);
-    // last night's guest backups, from the PBS service, as the integration reports them
+    // last night's guest backups and the latest host backup, from the PBS service, as the integration reports them
     const pbs = services.find((s) => s.widget?.type === 'proxmoxbackupserver')?.id ?? null;
+    insertEvent(now - 42 * 60_000, 'ok', pbs, 'Host backups completed', 'pve · main');
     if (calm()) {
       insertEvent(now - 13 * 3600_000, 'ok', pbs, 'Backups completed', 'adguard, docker-apps, homeassistant and 3 more · main');
       insertEvent(now - 5 * 3600_000, 'info', null, '12 updates available on pve', 'apt packages pending');

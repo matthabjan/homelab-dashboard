@@ -97,13 +97,15 @@ proxmox-backup-manager acl update /system/disks Audit --auth-id 'dashboard@pbs!d
 
 **Which backups are checked.** If a Proxmox VE widget is configured, the guests that currently exist in PVE are checked, along with every `host` backup. Without PVE, any backup group that had a backup in the last 14 days is checked. Deleted guests therefore don't cause permanent alerts.
 
+**Guest and host backups.** Guests (VMs and containers, backed up by vzdump) and hosts (`host` groups, backed up with `proxmox-backup-client`) usually run on different schedules, so they are reported apart. The *last backup* stat and the Backups sheet's *Guest backups* row cover guests only, *host backup* and a *Host backups* row cover hosts. Activity gets a *Backups completed* event once a run's backups stop landing for 15 minutes, and a separate *Host backups completed* for host backups. Each backup group is compared with the last backup seen for it, so a backup that started before another but finished after it is still reported. A datastore that is read for the first time (just added to the widget) is a baseline: its existing backups aren't reported as new.
+
 **Removable datastores** (PBS 3.3 and later, such as an offsite USB disk) are expected to be detached most of the time. They show greyed out as *detached …* (time since last attached), with the bar at how full the disk was then, are left out of the backup-age checks, and raise an info reminder after `thresholds.offsiteMaxDetachedDays`. The last time the disk was attached is stored in the database, so it survives restarts.
 
 **Alerts**
 
 | Severity | When |
 |---|---|
-| warning | A guest's latest backup is older than `backupMaxAgeHours`. |
+| warning | A guest's or host's latest backup is older than `backupMaxAgeHours`. |
 | info | A removable datastore has been detached longer than `offsiteMaxDetachedDays`. |
 | info | Backup age is unavailable (missing permission or an API error). |
 

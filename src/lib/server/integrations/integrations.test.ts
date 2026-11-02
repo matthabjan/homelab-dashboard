@@ -102,6 +102,62 @@ test('PBS: one job run is one event naming its guests, timed at its last backup'
   assert.equal((await poll(140))?.[0]?.detail, 'mail · main');
 });
 
+/** A PBS whose datastores hold these groups: [store, type, id, last-backup (ms)], as `at(now)` lists them. */
+const pbsWith = (at: (now: number) => [string, string, string, number][], stores = ['main']) => (now: number): Transport => async (url) => {
+  const path = new URL(url).pathname;
+  if (path.endsWith('/status/datastore-usage')) return Response.json({ data: stores.map((store) => ({ store, total: 100, used: 10 })) });
+  const store = path.match(/datastore\/([^/]+)\/groups$/)?.[1];
+  if (store) return Response.json({ data: at(now).filter(([s]) => s === store).map(([, type, id, ms]) => ({ 'backup-type': type, 'backup-id': id, 'last-backup': Math.floor(ms / 1000) })) });
+  return new Response('', { status: 404 });
+};
+
+test('PBS: host backups are counted apart from guests; the oldest backup is named', async () => {
+  const now = Date.now();
+  const H = 3600_000;
+  const transport = pbsWith(() => [['main', 'vm', '100', now - 15 * H], ['main', 'vm', '101', now - 16 * H], ['main', 'host', 'pve', now - 12 * 60_000], ['main', 'host', 'nas', now - 30 * H]])(now);
+  const shared: Shared = { guests: { 'https://pve.test pve': { 100: 'web', 101: 'db' } } };
+  const res = await INTEGRATIONS.proxmoxbackupserver.collect({ type: 'proxmoxbackupserver', ...WIDGETS.proxmoxbackupserver },
+    createContext({ transport, kv: memoryKv(), settings: DEFAULT_SETTINGS, now, shared }));
+  const { guests, last, hosts, hostLast, hostOverdue, overdue, oldestName } = res.backups ?? {};
+  // the guest row says when the guests last ran, not the half-hourly host backup
+  assert.deepEqual({ guests, last, hosts, hostLast, hostOverdue, overdue, oldestName },
+    { guests: 2, last: Math.floor((now - 15 * H) / 1000) * 1000, hosts: ['nas', 'pve'], hostLast: Math.floor((now - 12 * 60_000) / 1000) * 1000, hostOverdue: 1, overdue: 1, oldestName: 'nas' });
+  assert.deepEqual(res.alerts.map((a) => [a.key, a.detail]), [['backup-nas', 'host nas · last success 30 h ago']]);
+  assert.deepEqual(res.stats.map((s) => [s.k, s.v]), [['overdue', '1'], ['last backup', '15 h'], ['datastore', '10%'], ['host backup', '12 m'], ['groups', '4']]);
+});
+
+test('PBS: a backup that started before another but finished after it is still reported; hosts and guests apart', async () => {
+  const t0 = Date.now();
+  const MIN = 60_000;
+  // PBS dates a backup by its start: the guest starts at +5 and lands at +20, the host backup starts at +10 and lands at +12
+  const transport = pbsWith((now) => [
+    ['main', 'vm', '100', now >= t0 + 20 * MIN ? t0 + 5 * MIN : t0 - 1440 * MIN],
+    ['main', 'host', 'pve', now >= t0 + 12 * MIN ? t0 + 10 * MIN : t0 - 20 * MIN]
+  ]);
+  const kv = memoryKv();
+  const shared: Shared = { guests: { 'https://pve.test pve': { 100: 'web' } } };
+  const poll = async (m: number) => (await INTEGRATIONS.proxmoxbackupserver.collect({ type: 'proxmoxbackupserver', ...WIDGETS.proxmoxbackupserver },
+    createContext({ transport: transport(t0 + m * MIN), kv, settings: DEFAULT_SETTINGS, now: t0 + m * MIN, shared }))).events ?? [];
+  const events = [];
+  for (const m of [0, 13, 21, 26, 40]) events.push(...await poll(m));
+  const ts = (m: number) => Math.floor((t0 + m * MIN) / 1000) * 1000;
+  assert.deepEqual(events, [
+    { sev: 'ok', title: 'Backups completed', detail: 'web · main', ts: ts(5) },
+    { sev: 'ok', title: 'Host backups completed', detail: 'pve · main', ts: ts(10) }
+  ]);
+});
+
+test('PBS: a datastore read for the first time is a baseline, not a batch of new backups', async () => {
+  const t0 = Date.now();
+  const H = 3600_000;
+  const groups: [string, string, string, number][] = [['main', 'vm', '100', t0 - 6 * H], ['offsite', 'vm', '100', t0 - 48 * H]];
+  const kv = memoryKv();
+  const poll = async (stores: string[]) => (await INTEGRATIONS.proxmoxbackupserver.collect({ type: 'proxmoxbackupserver', ...WIDGETS.proxmoxbackupserver },
+    createContext({ transport: pbsWith(() => groups, stores)(t0), kv, settings: DEFAULT_SETTINGS, now: t0 }))).events;
+  assert.deepEqual(await poll(['main']), []);
+  assert.deepEqual(await poll(['main', 'offsite']), [], 'offsite was added to the widget');
+});
+
 test('Portainer: a stopped container is a failure, a finished one-shot job is not', async () => {
   const run = async (scenario: string) => {
     const ctx = createContext({ transport: fixtureTransport(FIXTURES.portainer, { scenario }), kv: memoryKv(), settings: DEFAULT_SETTINGS, now: Date.now() });
@@ -343,6 +399,7 @@ const card = async (type: string, scenario: string, table: Fixtures = FIXTURES[t
 };
 
 test('cards: PBS shows the last backup and the datastore; overdue backups lead', async () => {
+  // the host backup (every 30 minutes) comes after the store: the line is about the guests
   assert.deepEqual(await card('proxmoxbackupserver', 'calm'), { line: 'Last backup 6 h ago · store 62%', stats: [['last backup', '6 h', null], ['datastore', '62%', null]] });
   assert.deepEqual(await card('proxmoxbackupserver', 'issues'), { line: '1 backup overdue · last backup 6 h ago', stats: [['overdue', '1', 'warn'], ['last backup', '6 h', null]] });
 });
