@@ -6,14 +6,14 @@ All configuration lives in one folder: `CONFIG_DIR`, which is `/config` in the c
 config/
 ├── settings.yaml     # title, theme, thresholds, intervals …
 ├── services.yaml     # your services, in groups (gethomepage format)
-├── bookmarks.yaml    # links in the footer and the command palette
+├── bookmarks.yaml    # the Links card and the command palette
 ├── icons/            # your own service icons (optional)
 └── images/           # app icon, logo, favicon
 ```
 
 **Reloading.** Saving any `*.yaml` file reloads the config within a second, without a restart and keeping history. Files in `icons/` and `images/` are read on request (browsers cache them for up to 5 minutes).
 
-**Mistakes.** A file with a YAML syntax error or the wrong structure keeps its last version that loaded, and *Needs attention* shows `services.yaml has an error` with the line and reason (the full error is in the container log). A malformed group or entry is skipped and reported the same way; the rest of the file loads. Several problems in one file are one alert (`services.yaml has 3 problems`), listed on **Setup**. Fixing the file clears the alert on save.
+**Mistakes.** A file with a YAML syntax error or the wrong structure keeps its last version that loaded, and the dashboard raises `services.yaml has an error` with the line and reason (the full error is in the container log). A malformed group or entry is skipped and reported the same way; the rest of the file loads. Several problems in one file are one alert (`services.yaml has 3 problems`), listed on **Setup**. Fixing the file clears the alert on save.
 
 **Checking what loaded.** **Setup** (`/config`, from the sliders button in the header, the footer, the command palette or any config alert) shows whether your configuration is right, read-only. How the services are doing stays on the dashboard.
 
@@ -35,7 +35,7 @@ Every key is optional. Anything you leave out keeps its default, and nested obje
 | Key | Default | Description |
 |---|---|---|
 | `title` | `Homelab` | Page title and the default name of the installed app. |
-| `theme` | `system` | Default theme for new visitors: `system`, `light` or `dark`. Each viewer can switch in the header, and the choice is remembered per device. |
+| `theme` | `system` | Default theme for new visitors: `system`, `light` or `dark`. Each viewer can switch it (in the header on desktop, on Setup on phones), and the choice is remembered per device. |
 | `accent` | `#4F8DF7` | Accent colour as a hex value (`#rgb` to `#rrggbbaa`). An invalid value falls back to the default. |
 | `linkTarget` | `_blank` | Where service links open: `_blank` (a new tab) or `_self`. |
 | `tlsVerify` | `true` | Verify TLS certificates when calling widget APIs. You can override it per service. See [TLS for widget APIs](deployment.md#tls-for-widget-apis). |
@@ -97,11 +97,11 @@ CPU usage is measured between two polls, so the CPU gauge shows `—` for the fi
 
 ### `mostUsed`
 
-The *Most used* row, next to the overall state, fills itself from how often you open each service from the dashboard or the command palette. Each open loses half its weight every `halfLifeDays`, so services you stopped using drop out over time.
+The *Most used* row, under the overall state, fills itself from how often you open each service from the dashboard or the command palette. Each open loses half its weight every `halfLifeDays`, so services you stopped using drop out over time.
 
 | Key | Default | Description |
 |---|---|---|
-| `count` | `4` | Number of tiles in the row. `0` hides it. |
+| `count` | `4` | Number of services in the row. `0` hides it. |
 | `halfLifeDays` | `14` | Days after which an open counts half as much. |
 
 ### `intervals` (seconds)
@@ -139,7 +139,7 @@ A list of groups. Each group is a list of services. This is the [gethomepage for
 
 ```yaml
 - Infrastructure:            # group
-    - Proxmox VE:            # service name (shown on the tile)
+    - Proxmox VE:            # service name
         icon: proxmox
         href: https://pve.home.arpa:8006
         description: Virtualization
@@ -153,8 +153,8 @@ A list of groups. Each group is a list of services. This is the [gethomepage for
 
 | Key | Description |
 |---|---|
-| `href` | Where the tile links to. |
-| `description` | Second line of the tile when the widget has nothing more specific to show. |
+| `href` | Where the service opens. Only services with `href` appear in the launcher. |
+| `description` | The status line when the widget has nothing more specific to show, and *About* in the service's sheet. |
 | `icon` | See [Icons](#icons). Without one, an icon is [picked automatically](#automatic-icons). |
 | `iconDark` | Icon used in dark mode. |
 | `siteMonitor` | URL checked every `intervals.probe` seconds, which gives up/down status, uptime and latency. Any response below 500 counts as up, including the 401 a login page returns. Two failures in a row mark the service down. `https://` URLs also get certificate-expiry checks. `tcp://host:port` only checks that the port accepts a connection, for services without HTTP (SSH, SMB, MQTT, databases); the latency is the time to connect. `probe` is accepted as an alias. |
@@ -165,7 +165,7 @@ A list of groups. Each group is a list of services. This is the [gethomepage for
 
 Service names should be unique within a group. A service's id is derived from its group and name, and the id is what uptime history and open counts are stored under, so **renaming a service or its group starts its history from scratch**.
 
-Widgets of a type this dashboard doesn't implement are ignored, and the tile still works.
+Widgets of a type this dashboard doesn't implement are ignored, and the service still works.
 
 There is no ICMP ping: it needs extra privileges in the container. Check a port instead, such as `tcp://nas.home.arpa:445` (SMB), `:22` (SSH) or `:80`.
 
@@ -219,7 +219,7 @@ Behind a reverse proxy with basic auth, exempt `/api/heartbeat/` from the login,
 
 ## `bookmarks.yaml`
 
-Links at the bottom of the page. They can also be found in the command palette. This is the gethomepage format:
+Shown in the **Links** card below the services, and in the command palette. This is the gethomepage format:
 
 ```yaml
 - Links:
@@ -283,7 +283,7 @@ Prefer files (option 3) over environment variables: environment variables are vi
 
 ## Services from container labels
 
-The dashboard can create tiles from `dashboard.*` labels on Docker containers (gethomepage's `homepage.*` labels are not read; rename them to `dashboard.*`). It reads them through a [`portainer`](integrations.md#portainer) or [`docker`](integrations.md#docker) widget, so one of those must be configured.
+The dashboard can create services from `dashboard.*` labels on Docker containers (gethomepage's `homepage.*` labels are not read; rename them to `dashboard.*`). It reads them through a [`portainer`](integrations.md#portainer) or [`docker`](integrations.md#docker) widget, so one of those must be configured.
 
 ```yaml
 labels:

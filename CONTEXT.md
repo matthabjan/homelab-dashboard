@@ -8,9 +8,9 @@ Terms used in the code and in design discussions.
 
 **Integration** — the code for one widget type (`src/lib/server/integrations/<type>.ts`). Exports `collect(widget, ctx)` and returns a widget result. Talks to the outside only through `ctx`.
 
-**Widget result** — what `collect` returns: `stats`, `line`, `alerts`, optional `events`, and type-specific parts the page reads (`storage`, `host`, `network`, `dns`, `backups`, `containers`, `discovered`).
+**Widget result** — what `collect` returns: `stats`, `line`, `alerts`, optional `events`, and type-specific parts the page reads (`storage`, `drives`, `host`, `network`, `dns`, `backups`, `containers`, `discovered`).
 
-**Context (`ctx`)** — everything an integration may use: `request` / `getJson` (the transport), `kv` (durable), `state` (per service, in memory), `shared` (hand-offs between integrations, e.g. Proxmox guest ids for PBS freshness), `settings`, `now`, `metric`. Built by `createContext` in `integrations/index.ts`.
+**Context (`ctx`)** — everything an integration may use: `request` / `getJson` (the transport), `kv` (durable), `state` (per service, in memory), `shared` (hand-offs between integrations, e.g. Proxmox guest ids for PBS freshness), `settings`, `now`, `metric`, `insecure`. Built by `createContext` in `integrations/index.ts`.
 
 **Transport** — a function `(url, opts) → Response`; the seam between integrations and the network. Production: undici (`http.ts`). Demo and tests: a fixture transport.
 
@@ -20,15 +20,15 @@ Terms used in the code and in design discussions.
 
 **Scenario** — which story the fixtures tell: `issues` (default; things to look at) or `calm` (all fine). Set with `DEMO_SCENARIO`.
 
-**Snapshot** — the one JSON document the page renders: tiles, attention, verdict, infrastructure panels, jobs, recent events, fleet strip. Built from engine state and history by the snapshot module (`createSnapshot` in `snapshot.ts`) and pushed over SSE on every change.
+**Snapshot** — the one JSON document the page renders: tiles, attention, verdict, infrastructure panels, jobs, recent events, fleet strip, Most used. Built from engine state and history by the snapshot module (`createSnapshot` in `snapshot.ts`) and pushed over SSE on every change.
 
 **Attention** — the list of alerts that need looking at, most severe first. Checks, widgets, the infrastructure panels and the config raise them, each with a key that is unique within its service (or source, such as `host` or `config`); the attention module (`attention.ts`) names each after its service, keeps the time it first appeared by that key, and gives each tile its worst alert: a tile is as bad as what is raised for it.
 
-**Feed** — what the attention section lists: the attention list while anything needs attention, else every alert and the last day's events, newest first, without an event that repeats what an alert or a newer event says. Built on the server.
+**Feed** — the attention list while anything needs attention, else every alert and the last day's events, newest first, without an event that repeats what an alert or a newer event says. Built on the server; the page's **Activity** card shows the notes (info alerts) and events from it.
 
-**Verdict** — the headline of the status card: "All systems normal", or the top attention item and how many need attention.
+**Verdict** — the hero's sentence: "All 15 services up" (with jobs, backups and expiring certificates as context), or the top attention item with an Open action for its service.
 
-**Infrastructure** — the summary card under the status overview: a row each for System, Storage, Drives and Network, one figure and a line of context, then Backups (side by side when the page is wide); a row opens the Infrastructure sheet with the full panels behind tabs: System (the host's gauges), Storage, Drives and Network, one tab per row (Backups opens its own sheet). A tab is marked with the worst level in its panel; only panels with data get a tab.
+**Infrastructure** — the card under the hero: a row each for System, Storage, Drives, Network and Backups, with an icon, one figure and a line of context (side by side when the page is wide). A row opens the Infrastructure sheet at its tab: System (the host's gauges and 24 h charts), Storage and Drives (grouped by the host or service that reports them) and Network; Backups opens its own sheet. A tab is marked with the worst level in its panel; only panels with data get a tab.
 
 **Sheet** — a panel over the page with the details of one thing (a service with its own activity, infrastructure, backups, activity): a side panel on desktop, a bottom sheet on phones that a pull down from its top closes (the close button stays as the tap alternative). Sheets stack: one opened from inside another (Backups → a job) is a level deeper, with a back button; each level is a history entry, so back (browser, Android, Esc) goes up one level, and closing closes all. The page itself stays short.
 

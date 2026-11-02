@@ -1,16 +1,16 @@
 # Integrations
 
-A widget adds live data to a service: its status line and stats, the infrastructure card and its panels, and alerts. Configure it under the service's `widget:` key in `services.yaml`. The fields match [gethomepage](https://gethomepage.dev/widgets/), so existing widget blocks work as they are.
+A widget adds live data to a service: its status line and stats, rows of the infrastructure card, and alerts. Configure it under the service's `widget:` key in `services.yaml`. The fields match [gethomepage](https://gethomepage.dev/widgets/), so existing widget blocks work as they are.
 
 **General rules**
 
 - **Use a dedicated read-only account** wherever the product supports one. Don't reuse an admin login.
 - **Use `https://` URLs.** Over `http://`, credentials cross the network in plain text.
 - **Pass credentials as secrets** (`${NAME}`). See [Configuration → Secrets](configuration.md#secrets-and-variables).
-- In the attention list, an alert starts with its service's name ("Pi-hole: Blocking is disabled") unless it already names it; on the service's own tile it doesn't.
-- A tile is as bad as the worst alert raised for its service: from its widget, a certificate, a full storage or a drive it reports. With a Proxmox host, CPU and NVMe temperatures count against the Proxmox tile.
-- The service card and the Most used card show the same facts (the service card as one line); a problem the widget sees, such as overdue backups or a stopped container, comes first in both.
-- Each widget has 25 s per poll. If it fails, the tile shows *Stats unavailable* with a short reason and keeps its last stats; the full error goes to the container log.
+- A widget's facts appear twice: the first two as the service's **status line** (the Status view, attention items, the service sheet's header) and all of them as **stats** in its sheet. A problem the widget sees, such as overdue backups or a stopped container, comes first.
+- In the attention list, an alert starts with its service's name ("Pi-hole: Blocking is disabled") unless it already names it; on the service itself it doesn't.
+- A service is as bad as the worst alert raised for it: from its widget, a certificate, a full storage or a drive it reports. With a Proxmox host, CPU and NVMe temperatures count against the Proxmox service.
+- Each widget has 25 s per poll. If it fails, the status line shows *Stats unavailable*, the sheet keeps the last stats, the reason is a note in Activity, and the full error goes to the container log.
 
 | Type | Product | Auth | Read-only possible |
 |---|---|---|---|
@@ -49,7 +49,7 @@ pveum user token add dashboard@pve dashboard --privsep 1     # prints the secret
 pveum acl modify / --tokens 'dashboard@pve!dashboard' --roles PVEAuditor
 ```
 
-**Shows:** CPU, RAM and running/total guests on the tile. In a cluster, set `node` to count only that node's guests.
+**Shows:** CPU, RAM and running/total guests. In a cluster, set `node` to count only that node's guests.
 
 **Alerts**
 
@@ -66,7 +66,7 @@ PBS storages attached to PVE are left out here; the PBS widget reports them.
 
 ## Proxmox Backup Server
 
-Provides the PBS rows in **Storage**, **backup age** for each guest (a *Guest backups* row among the jobs in the **Backups** sheet: guests, last run, overdue), a *Backups completed* event per job run (once no new backup has landed for 15 minutes, naming the guests by their Proxmox name), and disks passed into the PBS VM (such as a removable offsite disk while it's plugged in) in [**Drives**](#drives). The tile shows how long ago the **last backup** finished and how full the first **datastore** is; while backups are overdue, how many comes first.
+Provides the PBS rows in **Storage**, **backup age** for each guest (a *Guest backups* row among the jobs in the **Backups** sheet: guests, last run, overdue), a *Backups completed* event per job run (once no new backup has landed for 15 minutes, naming the guests by their Proxmox name), and disks passed into the PBS VM (such as a removable offsite disk while it's plugged in) in [**Drives**](#drives). The status line shows how long ago the **last backup** finished and how full the first **datastore** is; while backups are overdue, how many comes first.
 
 ```yaml
 widget:
@@ -111,7 +111,7 @@ proxmox-backup-manager acl update /system/disks Audit --auth-id 'dashboard@pbs!d
 
 ## OPNsense
 
-Provides **WAN traffic** for the Network panel, and firewall CPU on the tile.
+Provides **WAN traffic** for the Network panel, and firewall CPU in its status line.
 
 ```yaml
 widget:
@@ -132,7 +132,7 @@ Traffic rates come from the difference between two polls, so the first value app
 
 ## OpenMediaVault
 
-Provides the NAS rows in **Storage** (with each disk's SMART result) and the disks with SMART monitoring in [**Drives**](#drives). The tile shows how **full** the fullest data file system is (the system disk is left out; amber and red at the `storageAmberPct` / `storageWarnPct` thresholds) and the pending package **updates** (only an admin login sees them), the same in the service card and the Most used card. While an enabled service is stopped, **services** (running / enabled) comes first.
+Provides the NAS rows in **Storage** (with each disk's SMART result) and the disks with SMART monitoring in [**Drives**](#drives). The status line shows how **full** the fullest data file system is (the system disk is left out; amber and red at the `storageAmberPct` / `storageWarnPct` thresholds) and the pending package **updates** (only an admin login sees them). While an enabled service is stopped, **services** (running / enabled) comes first.
 
 ```yaml
 widget:
@@ -180,7 +180,7 @@ widget:
 
 ## Pi-hole
 
-Provides the **DNS** part of the Network panel (queries and block rate over 24 hours) when it is the first DNS widget, or when `network.dns` names it. With AdGuard Home and Pi-hole both configured, each tile shows its own numbers.
+Provides the **DNS** part of the Network panel (queries and block rate over 24 hours) when it is the first DNS widget, or when `network.dns` names it. With AdGuard Home and Pi-hole both configured, each service shows its own numbers.
 
 ```yaml
 widget:
@@ -204,7 +204,7 @@ widget:
 
 ## Portainer
 
-Provides **container counts**, alerts for failed and unhealthy containers, and the container labels used for [label discovery](configuration.md#services-from-container-labels). The tile shows running / total containers, then how many failed (red) or are unhealthy (amber), if any.
+Provides **container counts**, alerts for failed and unhealthy containers, and the container labels used for [label discovery](configuration.md#services-from-container-labels). The status line shows running / total containers, then how many failed (red) or are unhealthy (amber), if any.
 
 ```yaml
 widget:
@@ -226,7 +226,7 @@ widget:
 | warning | A container stopped: it is dead, it exited with a non-zero code, or it exited with code 0 although its restart policy is `always` or `unless-stopped` (a `docker stop`). The alert includes the restart count. |
 | warning | A container's health check reports `unhealthy`. |
 
-Containers that exited with code 0 under restart policy `no` or `on-failure` count as finished jobs, not failures. A container that is its own tile through [label discovery](configuration.md#services-from-container-labels) without `siteMonitor` gets no alert here: its tile reports it. Add the label `dashboard.ignore=true` to hide a container entirely.
+Containers that exited with code 0 under restart policy `no` or `on-failure` count as finished jobs, not failures. A container that is its own service through [label discovery](configuration.md#services-from-container-labels) without `siteMonitor` gets no alert here: its own status reports it. Add the label `dashboard.ignore=true` to hide a container entirely.
 
 ---
 
@@ -250,7 +250,7 @@ widget:
 
 ## FRITZ!Box
 
-The tile shows the line's sync rates (↓ / ↑ Mbit/s) and how long the connection has been up; while the internet is offline, that comes first. It also provides **WAN traffic** when no OPNsense widget is configured, or when `network.service` selects it.
+The status line shows the line's sync rates (↓ / ↑ Mbit/s) and how long the connection has been up; while the internet is offline, that comes first. It also provides **WAN traffic** when no OPNsense widget is configured, or when `network.service` selects it.
 
 ```yaml
 widget:
@@ -272,7 +272,7 @@ The widget talks TR-064 to port **49000**, or **49443** if `url` is `https://`, 
 
 ## Custom API
 
-Shows values from any HTTP endpoint that answers JSON, as tile stats, with optional thresholds that raise alerts. The fields are [gethomepage's `customapi`](https://gethomepage.dev/widgets/services/customapi/), so existing blocks work as they are.
+Shows values from any HTTP endpoint that answers JSON, as stats, with optional thresholds that raise alerts. The fields are [gethomepage's `customapi`](https://gethomepage.dev/widgets/services/customapi/), so existing blocks work as they are.
 
 ```yaml
 widget:
@@ -309,7 +309,7 @@ widget:
 | `remap` | Replace values: `[{ value: 1, to: up }, { any: true, to: down }]`. The first match wins. |
 | `warn`, `crit` | Thresholds: `{ above: n }`, `{ below: n }`, `{ equals: v }` or `{ not: v }`. They are compared with the value after `scale` and before `remap`. A boolean counts as 0 or 1. |
 
-The tile shows the first two mappings, in mapping order (any more are read for their thresholds). `display` is accepted and ignored. A widget with thresholds only raises alerts: the service's status (Up, Down) stays its reachability check.
+The status line shows the first two mappings, the sheet all of them, in mapping order. `display` is accepted and ignored. A widget with thresholds only raises alerts: the service's status (Up, Down) stays its reachability check.
 
 **Account.** Whatever the API needs. Prefer a read-only token in `headers`, passed as a secret.
 
@@ -320,13 +320,13 @@ The tile shows the first two mappings, in mapping order (any more are read for t
 | critical / warning | A mapping crosses its `crit` / `warn` threshold: "Media server: Health is Degraded", with the threshold in the detail. |
 | warning | A mapping's `field` isn't in the response. The stat shows `—`. |
 
-If the response isn't JSON (a login page, for example), the tile shows *Stats unavailable · Response is not JSON*, and the start of the response goes to the container log.
+If the response isn't JSON (a login page, for example), the status line shows *Stats unavailable · Response is not JSON*, and the start of the response goes to the container log.
 
 ---
 
 ## Drives
 
-The **Drives** card and the Infrastructure sheet's **Drives** tab sit next to **Storage**: Storage shows how full each storage is, Drives how healthy the physical disks are. Both appear as soon as a widget reports drives, and a drive to check turns the Drives card amber.
+The **Drives** row of the infrastructure card, and the **Drives** tab of its sheet, sit next to **Storage**: Storage shows how full each storage is, Drives how healthy the physical disks are. Both appear as soon as a widget reports drives, grouped by the host or service that reports them; a drive to check turns the row amber.
 
 | Source | Drives |
 |---|---|
@@ -336,7 +336,7 @@ The **Drives** card and the Infrastructure sheet's **Drives** tab sit next to **
 
 Virtual disks (QEMU, virtio) are skipped, since the host reports the real drive. A disk seen by two sources (passed through whole) is shown once. Each row shows model, type (NVMe, SSD, HDD, USB), size and where it sits, then life left, temperature, power-on time and data written as far as the drive reports them. SATA SSDs that PVE lists as `hdd` with `rpm 0` are shown as SSD. SMART details are read every 10 minutes, since they change slowly and reading them wakes the disks.
 
-**Alerts** count against the service that reported the drive, so its tile turns amber or red too. They read as the drive's model and the problem ("NAS: WD Red has 8% life left").
+**Alerts** count against the service that reported the drive, so it turns amber or red too. They read as the drive's model and the problem ("NAS: WD Red has 8% life left").
 
 | Severity | When |
 |---|---|
