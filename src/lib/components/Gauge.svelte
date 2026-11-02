@@ -49,7 +49,7 @@
   .sub { font-size: 11px; color: var(--muted); min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .sub.at { color: var(--text); }
   .val { display: flex; align-items: baseline; gap: 5px; min-width: 0; white-space: nowrap; }
-  .num { font-size: 24px; font-weight: 500; letter-spacing: -0.02em; line-height: 1.15; font-variant-numeric: tabular-nums; }
+  .num { font-size: 20px; font-weight: 500; letter-spacing: -0.02em; line-height: 1.15; font-variant-numeric: tabular-nums; }
   .unit { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
   .tile.lv-warn .num, .tile.lv-crit .num { color: var(--lv); }
   .axis { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); margin-top: -2px; }

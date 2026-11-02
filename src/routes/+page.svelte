@@ -87,7 +87,7 @@
   const jobById = $derived(new Map((snap?.jobs ?? []).map((j) => [j.id, j])));
   const nextJob = $derived([...(snap?.jobs ?? [])].sort((a, b) => a.due - b.due)[0] ?? null);
 
-  /** `stats`: labelled figures shown instead of value and sub, where one figure can't say it; `where`: beside the label */
+  /** `stats`: figures shown instead of value, where one figure can't say it, each with its label unless the unit says it (°C); `where`: beside the label */
   type Card = {
     id: 'system' | 'storage' | 'drives' | 'network' | 'backups'; label: string; where?: string; value: string; unit?: string; sub: string;
     stats?: { k: string; v: string; level: Level | 'none' }[]; level: Level | 'none';
@@ -103,11 +103,11 @@
       const cpu = g('cpu'), mem = g('mem'), temp = g('temp');
       out.push({
         id: 'system', label: 'System', where: snap.host.name,
-        value: '', sub: '',
+        value: '', sub: snap.host.facts.map((f) => `${f.label} ${f.value}`).join(' · '),
         stats: [
           cpu && { k: 'CPU', v: `${cpu.val}%`, level: cpu.level },
           mem && { k: 'RAM', v: mem.pct != null ? `${Math.round(mem.pct)}%` : '—', level: mem.level },
-          temp && { k: 'Temp', v: `${temp.val} °C`, level: temp.level }
+          temp && { k: '', v: `${temp.val} °C`, level: temp.level }
         ].filter((x) => !!x),
         level: worst(snap.host.gauges.map((x) => x.level))
       });
@@ -411,20 +411,24 @@
     </section>
 
     {#if cards.length}
-      <section class="cards" aria-label="Infrastructure" style="--n: {cards.length}">
+      <!-- infrastructure and backups in one card: a row per area on phones, side by side when wide; a row opens its sheet -->
+      <section class="card infra" aria-label="Infrastructure" style="--n: {cards.length}">
+        <div class="irows">
         {#each cards as c (c.id)}
-          <button class="card vcard lift lv-{c.level}" class:alert={isProblem(c.level)} onclick={() => openCard(c)}>
-            <span class="k">{c.label}{#if c.where}<span class="kw">· {c.where}</span>{/if}</span>
-            {#if c.stats}
-              <span class="stats">
-                {#each c.stats as st (st.k)}<span class="st"><span class="sk">{st.k}</span><span class="sv" class:hl={isProblem(st.level)} style:--lv={isProblem(st.level) ? `var(--${st.level})` : undefined}>{st.v}</span></span>{/each}
-              </span>
-            {:else}
-              <span class="v">{c.value}{#if c.unit}<span class="u">{c.unit}</span>{/if}</span>
-              <span class="s">{c.sub}</span>
-            {/if}
+          <button class="irow lv-{c.level}" class:alert={isProblem(c.level)} onclick={() => openCard(c)}>
+            <span class="k">{c.label}{#if c.where}<span class="kw">{c.where}</span>{/if}</span>
+            <span class="fig">
+              {#if c.stats}
+                {#each c.stats as st, i (i)}<span class="ist"><span class="isv" class:hl={isProblem(st.level)} style:--lv={isProblem(st.level) ? `var(--${st.level})` : undefined}>{st.v}</span>{#if st.k}<span class="isk">{st.k}</span>{/if}</span>{/each}
+              {:else}
+                <span class="v">{c.value}</span>{#if c.unit}<span class="u">{c.unit}</span>{/if}
+              {/if}
+            </span>
+            {#if c.sub}<span class="s">{c.sub}</span>{/if}
+            <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
           </button>
         {/each}
+        </div>
       </section>
     {/if}
 
@@ -694,21 +698,43 @@
   /* a service with a problem: one small marker, its colour from the level; the launcher shows nothing else */
   .pmark { position: absolute; top: -3px; right: -3px; width: 12px; height: 12px; border-radius: 50%; background: var(--lv); box-shadow: 0 0 0 2px var(--surface); }
 
-  /* infrastructure and backups: one figure each; the card opens its sheet */
-  .cards { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 14px; }
-  .vcard { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 16px 18px; border: 0; border-radius: 18px; color: var(--text); font: inherit; text-align: left; cursor: pointer; min-width: 0; }
-  .vcard.alert { background: var(--lv-soft); box-shadow: inset 0 0 0 1.5px var(--lv); }
-  .vcard .v { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; white-space: nowrap; }
-  .vcard .u { margin-left: 5px; font-size: 14px; font-weight: 500; color: var(--muted); }
-  .vcard .s { font-size: 12.5px; color: var(--muted); max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .vcard.alert .k, .vcard.alert .s, .vcard.alert .u { color: color-mix(in srgb, var(--lv) 75%, var(--text)); }
-  .vcard .kw { margin-left: 0.3em; color: var(--muted); }
-  /* labelled figures: a small label over each value, side by side */
-  .stats { display: flex; gap: 6px 22px; flex-wrap: wrap; margin-top: 2px; }
-  .st { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-  .sk { font-size: 12px; color: var(--muted); }
-  .sv { font-size: 20px; font-weight: 600; letter-spacing: -0.02em; white-space: nowrap; }
-  .sv.hl { color: var(--lv); }
+  /* infrastructure and backups: one card, a row per area (label, figure, context); side by side when the card is wide */
+  .infra { container: infra-sum / inline-size; padding: 6px; }
+  .irows { display: flex; flex-direction: column; gap: 2px; }
+  .irow {
+    display: grid; grid-template-columns: 5.5em minmax(0, 1fr) auto; grid-template-areas: 'k fig chev' 'k s chev'; align-items: baseline; gap: 2px 12px;
+    padding: 12px 12px 12px 14px; border: 0; border-radius: 14px; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; min-width: 0;
+    position: relative; transition: background-color 0.15s;
+  }
+  .irow:hover { background: var(--surface-2); }
+  .irow:focus-visible { outline: 2px solid var(--acc); outline-offset: -2px; }
+  /* a rule between rows, left out next to a tinted one */
+  .irow + .irow::before { content: ''; position: absolute; left: 14px; right: 12px; top: 0; border-top: 1px solid var(--line); }
+  .irow.alert::before, .irow.alert + .irow::before, .irow:hover::before, .irow:hover + .irow::before { display: none; }
+  .irow.alert { background: var(--lv-soft); }
+  .irow .k { grid-area: k; font-size: 14px; font-weight: 500; min-width: 0; }
+  .irow .kw { display: block; font-size: 12px; font-weight: 400; color: var(--muted); }
+  .fig { grid-area: fig; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; min-width: 0; }
+  .fig .v, .fig .isv { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .fig .u { margin-left: -9px; font-size: 13px; color: var(--muted); white-space: nowrap; }
+  .ist { display: inline-flex; align-items: baseline; gap: 4px; white-space: nowrap; }
+  .isk { font-size: 12px; color: var(--muted); }
+  .isv.hl { color: var(--lv); }
+  .irow .s { grid-area: s; font-size: 12.5px; color: var(--muted); min-width: 0; overflow-wrap: anywhere; }
+  .irow.alert .fig .v, .irow.alert .k { color: color-mix(in srgb, var(--lv) 80%, var(--text)); }
+  .irow.alert .s, .irow.alert .u { color: color-mix(in srgb, var(--lv) 60%, var(--text)); }
+  .chev { grid-area: chev; align-self: center; color: var(--muted); }
+  /* wide: the areas side by side, a vertical rule between them, the label above its figure */
+  @container infra-sum (min-width: 860px) {
+    .irows { flex-direction: row; }
+    .irow { flex: 1 1 0; grid-template-columns: minmax(0, 1fr); grid-template-areas: 'k' 'fig' 's'; align-content: start; gap: 4px; padding: 14px 16px; }
+    .irow + .irow::before { left: 0; right: auto; top: 14px; bottom: 14px; border-top: 0; border-left: 1px solid var(--line); }
+    .irow .kw { display: inline; }
+    .irow .kw::before { content: ' · '; }
+    .irow .k { color: var(--muted); font-weight: 400; font-size: 13px; }
+    .fig .v, .fig .isv { font-size: 20px; }
+    .chev { display: none; }
+  }
 
   /* services and activity */
   .lower { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 14px; align-items: start; }
@@ -778,7 +804,7 @@
   .banner .t { font-weight: 600; }
   .banner .d { font-size: 12px; color: var(--muted); }
   .banner button { min-height: 36px; padding: 0 14px; border: 0; border-radius: 10px; background: var(--surface); box-shadow: var(--shadow); font-weight: 500; cursor: pointer; }
-  .page:has(.banner) :is(.hero, .cards, .lower) { filter: grayscale(0.7); opacity: 0.8; transition: filter 0.3s, opacity 0.3s; }
+  .page:has(.banner) :is(.hero, .infra, .lower) { filter: grayscale(0.7); opacity: 0.8; transition: filter 0.3s, opacity 0.3s; }
   @keyframes drop { from { opacity: 0; transform: translateY(-6px); } }
   /* a status that just changed: one soft ring in its new colour */
   .flash { animation: flash 2.4s ease-out; }
@@ -786,9 +812,6 @@
 
   @media (max-width: 1000px) {
     .hero { grid-template-columns: minmax(0, 1fr); }
-    .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    /* an odd count: the last card takes the whole row */
-    .vcard:last-child:nth-child(odd) { grid-column: 1 / -1; }
     .lower { grid-template-columns: minmax(0, 1fr); }
     .sbeats { width: 110px; }
   }
@@ -823,10 +846,7 @@
     .launch { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
     .lgroup, .lgroup .apps { display: contents; }
     .lgroup h3 { display: none; }
-    .vcard { padding: 14px 16px; }
-    .vcard .v { font-size: 19px; }
-    .stats { gap: 6px 14px; }
-    .sv { font-size: 18px; }
+    .infra { border-radius: 22px; }
     .sec { padding: 16px; border-radius: 20px; }
     .sbeats, .up { display: none; }
     .seg button { min-height: 36px; }

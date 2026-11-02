@@ -68,7 +68,7 @@
   .src { color: var(--muted); text-decoration: none; font-size: 12px; }
   .src:hover { color: var(--acc); }
   .val { display: flex; align-items: baseline; gap: 8px; min-width: 0; white-space: nowrap; }
-  .num { font-size: 24px; font-weight: 500; letter-spacing: -0.02em; line-height: 1.15; font-variant-numeric: tabular-nums; }
+  .num { font-size: 20px; font-weight: 500; letter-spacing: -0.02em; line-height: 1.15; font-variant-numeric: tabular-nums; }
   .a { color: var(--chart); }
   .b { color: var(--chart-2); }
   .unit { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; margin-left: -3px; }
