@@ -107,7 +107,7 @@
         stats: [
           cpu && { k: 'CPU', v: `${cpu.val}%`, level: cpu.level },
           mem && { k: 'RAM', v: mem.pct != null ? `${Math.round(mem.pct)}%` : '—', level: mem.level },
-          temp && { k: '', v: `${temp.val} °C`, level: temp.level }
+          temp && { k: 'TEMP', v: `${temp.val}°C`, level: temp.level }
         ].filter((x) => !!x),
         level: worst(snap.host.gauges.map((x) => x.level))
       });
@@ -130,7 +130,7 @@
       out.push({
         id: 'drives', label: 'Drives',
         value: failing ? `${failing} failing` : check ? `${check} to check` : d.every((x) => x.status === 'ok') ? 'All healthy' : 'No problems',
-        sub: [`${d.length} drive${d.length === 1 ? '' : 's'}`, temps.length && `max ${Math.max(...temps)} °C`, lives.length && `${Math.min(...lives)}% life left`].filter(Boolean).join(' · '),
+        sub: [`${d.length} drive${d.length === 1 ? '' : 's'}`, temps.length && `max ${Math.max(...temps)}°C`, lives.length && `${Math.min(...lives)}% life left`].filter(Boolean).join(' · '),
         level: worst(d.flatMap((x) => [x.level, x.lifeLevel]))
       });
     }
@@ -421,7 +421,7 @@
     </section>
 
     {#if cards.length}
-      <!-- infrastructure and backups in one card: a row per area on phones, side by side when wide; a row opens its sheet -->
+      <!-- infrastructure and backups in one card: a row per area, side by side when wide, two tiles a row on phones; each opens its sheet -->
       <section class="card infra" aria-label="Infrastructure" style="--n: {cards.length}">
         <div class="irows">
         {#each cards as c (c.id)}
@@ -710,8 +710,8 @@
   /* a service with a problem: one small marker, its colour from the level; the launcher shows nothing else */
   .pmark { position: absolute; top: -3px; right: -3px; width: 12px; height: 12px; border-radius: 50%; background: var(--lv); box-shadow: 0 0 0 2px var(--surface); }
 
-  /* infrastructure and backups: one card, a row per area: its icon, then label, figure and context stacked, in every
-     layout; a column each when the card is wide */
+  /* infrastructure and backups: one card, a row per area: its icon, then label, figure and context stacked; a column
+     each when the card is wide, two tiles a row on phones */
   .infra { container: infra-sum / inline-size; padding: 6px; }
   .irows { display: flex; flex-direction: column; gap: 2px; }
   .irow {
@@ -863,6 +863,14 @@
     .lgroup, .lgroup .apps { display: contents; }
     .lgroup h3 { display: none; }
     .infra { border-radius: 22px; }
+    /* phones: the wide layout's columns as tiles, two a row (the first full width when the count is odd), without the
+       context line: the figure says what is wrong and a tap opens the rest */
+    .irows { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; }
+    .irow:first-child:nth-last-child(odd) { grid-column: 1 / -1; }
+    .irow { grid-template-columns: 26px minmax(0, 1fr); grid-template-areas: 'ic k' 'fig fig'; align-content: start; gap: 8px 10px; padding: 12px; background: var(--surface-2); }
+    .irow + .irow::before, .irow .s, .chev { display: none; }
+    .iico { align-self: center; width: 26px; height: 26px; border-radius: 8px; background: var(--surface); }
+    .iico :global(svg) { width: 14px; height: 14px; }
     .sec { padding: 16px; border-radius: 20px; }
     .sbeats, .up { display: none; }
     .seg button { min-height: 36px; }
