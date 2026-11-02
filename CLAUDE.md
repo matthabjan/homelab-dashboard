@@ -16,7 +16,7 @@ npm run build && DEMO=1 CONFIG_DIR=config.example npm start   # production build
 docker build -t homelab-dashboard:local .
 ```
 
-CI (`.github/workflows/ci.yml`) runs `check` and `test`, then builds the image and smoke-tests it in demo mode (`/api/health`, `/api/state`, `/`) on every push and PR; PRs from `development` to `main` are skipped, since the push run covered that tree. All must pass.
+CI (`.github/workflows/ci.yml`) runs `check` and `test`, then builds the image and smoke-tests it in demo mode (`/api/health`, `/api/state`, `/`) on every push and PR; PRs from `development` to `main` are skipped, since the push run covered that tree. All must pass. Images are built once: on `main` and tags the `plan` job checks whether `:dev` was built from the same tree (its revision label) and, if so, `promote` adds the tags to that digest instead of checking and building again.
 
 ## Architecture
 
@@ -59,4 +59,4 @@ One Node process, no worker or external DB. `src/hooks.server.ts` starts a singl
 
 ## Branches and releases
 
-Work on `development` (image `:dev`), PR to `main` (`:edge`). To release: bump `version` in `package.json`, merge to `main`, push tag `vX.Y.Z`. The workflow checks the tag against `package.json`, publishes `X.Y.Z`/`X.Y`/`X`/`latest` to Docker Hub (`matthabjan/homelab-dashboard`), and creates the GitHub Release. Dependabot targets `development`; majors are upgraded deliberately.
+Work on `development` (image `:dev`), PR to `main` (`:edge`). To release: bump `version` in `package.json`, merge to `main`, push tag `vX.Y.Z`. The workflow checks the tag against `package.json`, promotes the `:dev` image (or builds, if `development` has moved on), publishes `X.Y.Z`/`X.Y`/`X`/`latest` to Docker Hub (`matthabjan/homelab-dashboard`), and creates the GitHub Release. Dependabot targets `development`; majors are upgraded deliberately.
