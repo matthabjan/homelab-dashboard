@@ -339,8 +339,8 @@
           {@render sliders()}
           {#if snap.configProblems}<span class="cfg-badge mono" aria-hidden="true">{snap.configProblems}</span>{/if}
         </a>
-        <!-- the three-way switch on desktop, one cycling button on phones -->
-        <ThemeToggle />
+        <!-- phones: the theme is on the Setup page, so the header keeps room for the title -->
+        <span class="only-desktop"><ThemeToggle /></span>
       </div>
     </header>
 
@@ -792,13 +792,13 @@
     .lower { grid-template-columns: minmax(0, 1fr); }
     .sbeats { width: 110px; }
   }
-  /* phones: the same order, tighter; search, setup and the theme in the header */
+  /* phones: the same order, tighter; search and setup in the header (the theme switch is on the Setup page) */
   @media (max-width: 760px) {
     .page { gap: 14px; }
     .search, .deep, .live :global(.demo) { display: none; }
-    .top { flex-wrap: nowrap; gap: 10px; }
-    .brand { flex: 1 1 auto; }
-    .right { margin-left: auto; }
+    .top { flex-wrap: nowrap; gap: 8px; }
+    .brand { flex: 1 1 auto; gap: 10px; }
+    .right { margin-left: auto; gap: 6px; }
     .live { min-width: 28px; min-height: 28px; justify-content: center; }
     .live-word { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
     .hbtn { width: 44px; height: 44px; border-radius: 14px; }
@@ -831,13 +831,5 @@
     .sbeats, .up { display: none; }
     .seg button { min-height: 36px; }
     .banner button { min-height: 44px; min-width: 64px; }
-  }
-  /* the narrowest phones: three header buttons and the title must share 375 px */
-  @media (max-width: 400px) {
-    .top { gap: 8px; }
-    .brand { gap: 8px; }
-    .brand img { width: 34px; height: 34px; border-radius: 10px; }
-    .right { gap: 6px; }
-    .hbtn { width: 40px; height: 40px; border-radius: 12px; }
   }
 </style>
