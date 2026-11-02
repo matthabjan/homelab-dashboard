@@ -481,6 +481,7 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
     lastChange: events[0]?.ts ?? null,
     events,
     jobs,
+    guestBackups: widgets.flatMap(({ s, w }) => (w.backups?.known ? [{ id: s.id, name: s.name, stores: w.backups.stores ?? [], guests: w.backups.guests ?? 0, last: w.backups.last ?? null, overdue: w.backups.overdue }] : [])),
     backups,
     facts,
     attention: att.items,

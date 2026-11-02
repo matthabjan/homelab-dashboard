@@ -167,6 +167,18 @@
       .catch(() => {});
     return () => ctl.abort();
   });
+  // the Backups sheet's recent list: the last 7 days of PBS and backup-job events, refreshed when something changes
+  let backupEvents = $state<FeedItem[]>([]);
+  $effect(() => {
+    void snap?.lastChange;
+    if (sheet?.kind !== 'backups' || !sheetOpen) return;
+    const ctl = new AbortController();
+    fetch('/api/events?backups', { signal: ctl.signal })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((items: FeedItem[]) => (backupEvents = items))
+      .catch(() => {});
+    return () => ctl.abort();
+  });
   const sheetActivity = $derived.by(() => {
     if (!snap || !sheetId) return [];
     const raised = snap.attention.filter((a) => a.sid === sheetId);
@@ -531,8 +543,17 @@
           <div class="fact lv-{snap.backups.overdue ? 'crit' : 'none'}"><span class="muted k">Overdue</span><span class="fv" class:hl={!!snap.backups.overdue}>{snap.backups.overdue}</span></div>
         </div>
       {/if}
-      {#if snap.jobs.length}
+      {#if snap.jobs.length || snap.guestBackups.length}
         <ul class="jobs">
+          <!-- PBS guest backups first: they run daily, so they are the ones that change most -->
+          {#each snap.guestBackups as gb (gb.id)}
+            <li>
+              <button class="job" onclick={() => show({ kind: 'service', id: gb.id })}>
+                <span class="txt"><span class="t">Guest backups{gb.stores.length ? ` · ${gb.stores.join(', ')}` : ''}</span><span class="d muted">{gb.guests} guest{gb.guests === 1 ? '' : 's'} · last run {since(gb.last)}</span></span>
+                <span class="jr"><span class="state-w lv-{gb.overdue ? 'crit' : 'ok'}"><span class="dot lv-{gb.overdue ? 'crit' : 'ok'}" aria-hidden="true"></span>{gb.overdue ? `${gb.overdue} overdue` : 'on schedule'}</span><span class="muted small">{gb.name}</span></span>
+              </button>
+            </li>
+          {/each}
           {#each [...snap.jobs].sort((a, b) => a.due - b.due) as j (j.id)}
             <li>
               <button class="job" onclick={() => show({ kind: 'service', id: j.id })}>
@@ -543,6 +564,14 @@
           {/each}
         </ul>
       {/if}
+      <div class="sh-block">
+        <div class="sh-row"><span class="st">Recent</span><span class="muted small">Last 7 days</span></div>
+        {#if backupEvents.length}
+          <ul class="evs">{#each backupEvents as a (a.ts + a.title)}{@render event(a)}{/each}</ul>
+        {:else}
+          <p class="muted small">No backup events in the last 7 days.</p>
+        {/if}
+      </div>
     {:else if sheet?.kind === 'activity'}
       <div class="sh-block">
         <div class="sh-row"><span class="st">All services</span><span class="muted small">{pctTxt(snap.fleetAvail)} uptime</span></div>

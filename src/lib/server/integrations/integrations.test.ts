@@ -71,6 +71,8 @@ test('PBS: a guest is as fresh as its latest backup in any store; guests of ever
   assert.deepEqual(res.alerts.filter((a) => a.title === 'Backup overdue'), []);
   assert.equal(res.stats.find((s) => s.k === 'groups')?.v, '2');
   assert.equal(res.backups?.overdue, 0);
+  // the Backups sheet's row: guests judged, the newest backup, the stores read
+  assert.deepEqual([res.backups?.guests, res.backups?.last, res.backups?.stores], [2, sec(2) * 1000, ['main', 'offsite']]);
 });
 
 test('PBS: one job run is one event naming its guests, timed at its last backup', async () => {

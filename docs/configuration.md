@@ -190,7 +190,7 @@ For jobs that run on a schedule (backups, cron jobs, scripts), the job reports t
 | `every` | Expected time between runs: a number with `s`, `m`, `h`, `d` or `w`, or a number of seconds. |
 | `grace` | How long after `every` a run may arrive before it counts as missed. Default: 10% of `every`, at least 5 minutes. |
 | `token` | Required. The job sends it with each call. Generate one with `openssl rand -hex 24`. |
-| `backup` | `true` adds the job to the backup figures next to Proxmox Backup Server's: *oldest backup* and *backups overdue*. That covers restic, borg, Kopia or anything else that can call a URL. |
+| `backup` | `true` adds the job to the backup figures next to Proxmox Backup Server's (*oldest backup* and *backups overdue*), and its events to the Backups sheet's *Recent* list. That covers restic, borg, Kopia or anything else that can call a URL. |
 | `id` | The id in the URL. Default: the service id, made from the group and name. Each id may be used once. |
 
 The job calls `/api/heartbeat/<id>` (GET or POST) when it succeeded, and `/api/heartbeat/<id>/fail` when it failed. The token goes in `Authorization: Bearer <token>` or `?token=<token>`. The answer is `ok` (200). An unknown id and a wrong token both get 404, and more than one call per second for the same id gets 429.

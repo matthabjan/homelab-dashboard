@@ -223,6 +223,6 @@ export async function collect(w: Widget, ctx: Context): Promise<WidgetResult> {
     events,
     storage,
     drives: (await slowly(ctx, 'drives', () => pbsDrives(ctx, base, opts))) ?? [],
-    backups: { overdue, oldestAge: oldest?.age ?? null, known: relevant.length > 0 }
+    backups: { overdue, oldestAge: oldest?.age ?? null, known: relevant.length > 0, guests: relevant.length, last: latest ? latest * 1000 : null, stores: stores.map((s) => s.store) }
   };
 }

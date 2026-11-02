@@ -66,7 +66,7 @@ PBS storages attached to PVE are left out here; the PBS widget reports them.
 
 ## Proxmox Backup Server
 
-Provides the PBS rows in **Storage**, **backup age** for each guest, a *Backups completed* event per job run (once no new backup has landed for 15 minutes, naming the guests by their Proxmox name), and disks passed into the PBS VM (such as a removable offsite disk while it's plugged in) in [**Drives**](#drives). The tile shows how long ago the **last backup** finished and how full the first **datastore** is; while backups are overdue, how many comes first.
+Provides the PBS rows in **Storage**, **backup age** for each guest (a *Guest backups* row among the jobs in the **Backups** sheet: guests, last run, overdue), a *Backups completed* event per job run (once no new backup has landed for 15 minutes, naming the guests by their Proxmox name), and disks passed into the PBS VM (such as a removable offsite disk while it's plugged in) in [**Drives**](#drives). The tile shows how long ago the **last backup** finished and how full the first **datastore** is; while backups are overdue, how many comes first.
 
 ```yaml
 widget:

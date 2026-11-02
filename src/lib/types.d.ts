@@ -383,6 +383,22 @@ export interface BackupStatus {
   overdue: number;
   oldestAge: number | null;
   known: boolean;
+  /** PBS: guests judged, the newest backup (ms), the datastores read */
+  guests?: number;
+  last?: number | null;
+  stores?: string[];
+}
+
+/** One PBS server's guest backups, as a row among the jobs in the Backups sheet. */
+export interface GuestBackups {
+  /** the PBS service */
+  id: string;
+  name: string;
+  stores: string[];
+  guests: number;
+  /** newest backup (ms) */
+  last: number | null;
+  overdue: number;
 }
 
 export interface ContainerCounts {
@@ -680,6 +696,8 @@ export interface Snapshot {
   events: FeedItem[];
   /** heartbeat services: jobs that report when they ran, with their schedule */
   jobs: Job[];
+  /** guest backups per PBS server, shown with the jobs */
+  guestBackups: GuestBackups[];
   /** PBS backups and backup heartbeats together; null when there are none */
   backups: BackupStatus | null;
   facts: Fact[];
