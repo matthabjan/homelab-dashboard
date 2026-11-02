@@ -791,11 +791,14 @@
     .hbtn { width: 44px; height: 44px; border-radius: 14px; }
     .bname { font-size: 19px; }
     .hero { padding: 20px; border-radius: 22px; gap: 18px; }
-    .state { flex-wrap: wrap; gap: 12px; }
-    .mark { width: 44px; height: 44px; }
-    .mark svg { width: 22px; height: 22px; }
-    .say { flex-basis: 100%; }
-    h1 { font-size: 28px; }
+    /* phones: the mark sits beside the headline like a status icon; the detail and the action go full width below */
+    .state { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px 12px; }
+    .say { display: contents; }
+    .tag { grid-column: 1 / -1; order: -1; }
+    .say p, .state .primary { grid-column: 1 / -1; }
+    .mark { width: 36px; height: 36px; }
+    .mark svg { width: 19px; height: 19px; }
+    h1 { font-size: 26px; }
     .say p { font-size: 14px; }
     .primary { width: 100%; min-height: 48px; font-size: 15px; }
     .probs { grid-template-columns: minmax(0, 1fr); }
