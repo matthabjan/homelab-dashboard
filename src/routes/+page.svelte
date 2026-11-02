@@ -543,10 +543,6 @@
           {/each}
         </ul>
       {/if}
-      {#if snap.storage.some((s) => s.level === 'off')}
-        <p class="muted small">A detached removable datastore (an offsite disk) is expected: it raises a reminder only after <code>offsiteMaxDetachedDays</code>.</p>
-      {/if}
-      {#if snap.storage.length}<button class="link-btn" onclick={() => show({ kind: 'infra', tab: 'storage' })}>Storage and drives</button>{/if}
     {:else if sheet?.kind === 'activity'}
       <div class="sh-block">
         <div class="sh-row"><span class="st">All services</span><span class="muted small">{pctTxt(snap.fleetAvail)} uptime</span></div>
