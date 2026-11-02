@@ -326,7 +326,7 @@ If the response isn't JSON (a login page, for example), the status line shows *S
 
 ## Drives
 
-The **Drives** row of the infrastructure card, and the **Drives** tab of its sheet, sit next to **Storage**: Storage shows how full each storage is, Drives how healthy the physical disks are. Both appear as soon as a widget reports drives, grouped by the host or service that reports them; a drive to check turns the row amber.
+The **Drives** row of the infrastructure card, and the **Drives** tab of its sheet, sit next to **Storage**: Storage shows how full each storage is, Drives how healthy the physical disks are. Both appear as soon as a widget reports drives, grouped by the host or service that reports them; a drive to check turns it amber.
 
 | Source | Drives |
 |---|---|
