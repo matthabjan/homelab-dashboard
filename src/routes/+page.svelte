@@ -185,6 +185,10 @@
   });
   // the Backups sheet's recent list: the last 7 days of PBS and backup-job events, refreshed when something changes
   let backupEvents = $state<FeedItem[]>([]);
+  // the latest few, the rest of the week on request; each time the sheet opens it starts short
+  const RECENT = 5;
+  let recentAll = $state(false);
+  $effect(() => { if (sheet?.kind !== 'backups') recentAll = false; });
   $effect(() => {
     void snap?.lastChange;
     if (sheet?.kind !== 'backups' || !sheetOpen) return;
@@ -594,7 +598,10 @@
       <div class="sh-block">
         <div class="sh-row"><span class="st">Recent</span><span class="muted small">Last 7 days</span></div>
         {#if backupEvents.length}
-          <ul class="evs">{#each backupEvents as a (a.ts + a.title)}{@render event(a)}{/each}</ul>
+          <ul class="evs" id="backup-recent">{#each recentAll ? backupEvents : backupEvents.slice(0, RECENT) as a (a.ts + a.title)}{@render event(a)}{/each}</ul>
+          {#if backupEvents.length > RECENT}
+            <button class="link-btn" aria-expanded={recentAll} aria-controls="backup-recent" onclick={() => (recentAll = !recentAll)}>{recentAll ? 'Show fewer' : `Show all ${backupEvents.length}`}</button>
+          {/if}
         {:else}
           <p class="muted small">No backup events in the last 7 days.</p>
         {/if}
