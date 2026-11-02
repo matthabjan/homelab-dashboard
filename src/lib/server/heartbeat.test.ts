@@ -6,6 +6,7 @@ import type net from 'node:net';
 import { checkIn, createLimiter, heartbeatState, kvKey, response, tokenMatches, tokenOf } from './heartbeat.ts';
 import { tcpProbe } from './http.ts';
 import { mergeBackups } from './snapshot.ts';
+import type { BackupBeat } from './snapshot.ts';
 import { memoryKv } from './test-helpers.ts';
 import type { HeartbeatRecord, HeartbeatState, Kv, Service } from '$lib/types';
 
@@ -89,12 +90,13 @@ test('TCP probe: connected is up with the connect time, refused and timeouts are
   assert.deepEqual(slow, { ok: false, ms: null, code: 'ETIMEDOUT' });
 });
 
-test('backups: heartbeats marked backup add to PBS (overdue summed, oldest age the larger)', () => {
+test('backups: heartbeats marked backup add to PBS (overdue summed, oldest age the larger, named)', () => {
   const now = 100 * H;
-  const beat = (state: HeartbeatState['state'], lastOk: number | null): HeartbeatState => ({ state, lastOk, lastFail: null, since: 0, failed: false, overdueSince: null });
-  const pbs = { overdue: 1, oldestAge: 30 * H, known: true };
-  assert.deepEqual(mergeBackups(pbs, [beat('down', now - 31 * H), beat('up', now - 6 * H)], now), { overdue: 2, oldestAge: 31 * H, known: true });
-  assert.deepEqual(mergeBackups(undefined, [beat('up', now - 6 * H)], now), { overdue: 0, oldestAge: 6 * H, known: true });
-  assert.equal(mergeBackups(pbs, [beat('pending', null)], now), pbs, 'a heartbeat that never ran adds nothing yet');
+  const beat = (name: string, state: HeartbeatState['state'], lastOk: number | null): BackupBeat => ({ name, hb: { state, lastOk, lastFail: null, since: 0, failed: false, overdueSince: null } });
+  const pbs = { overdue: 1, oldestAge: 30 * H, oldestName: 'web', known: true };
+  assert.deepEqual(mergeBackups(pbs, [beat('Restic', 'down', now - 31 * H), beat('Borg', 'up', now - 6 * H)], now), { overdue: 2, oldestAge: 31 * H, oldestName: 'Restic', known: true });
+  assert.deepEqual(mergeBackups(pbs, [beat('Borg', 'up', now - 6 * H)], now), { overdue: 1, oldestAge: 30 * H, oldestName: 'web', known: true }, 'PBS keeps the name of its oldest');
+  assert.deepEqual(mergeBackups(undefined, [beat('Borg', 'up', now - 6 * H)], now), { overdue: 0, oldestAge: 6 * H, oldestName: 'Borg', known: true });
+  assert.equal(mergeBackups(pbs, [beat('Borg', 'pending', null)], now), pbs, 'a heartbeat that never ran adds nothing yet');
   assert.equal(mergeBackups(undefined, [], now), undefined);
 });

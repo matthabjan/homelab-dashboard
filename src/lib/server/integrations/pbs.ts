@@ -101,7 +101,7 @@ async function pbsDrives(ctx: Context, base: string, opts: object): Promise<Driv
   }));
 }
 
-/** Backups that landed since the last reported event: guest key → label, the stores they went to, the newest (PBS seconds). */
+/** Backups that landed since the last reported event: group key → label, the stores they went to, the newest (PBS seconds). */
 interface BackupBatch {
   guests: Record<string, string>;
   stores: string[];
@@ -111,11 +111,16 @@ interface BackupBatch {
 /** A job run's backups land minutes apart; this long without a new one ends the run. */
 const BATCH_QUIET_MS = 15 * 60_000;
 
+type Group = PbsBackupGroup & { store: string };
+
+/** A host backup (proxmox-backup-client on a machine), as opposed to a guest's (vzdump of a VM or container). */
+const isHost = (g: PbsBackupGroup) => g['backup-type'] === 'host';
+
 /** The guest's Proxmox name, else the group's comment, else "VM 101" / "CT 105" (a host backup's id is its hostname). */
 function guestLabel(g: PbsBackupGroup, guests: Record<string, string> | null): string {
   const id = String(g['backup-id']);
   const name = (guests && Object.hasOwn(guests, id) ? guests[id] : '') || g.comment || '';
-  return name || (g['backup-type'] === 'host' ? id : `${g['backup-type'].toUpperCase()} ${id}`);
+  return name || (isHost(g) ? id : `${g['backup-type'].toUpperCase()} ${id}`);
 }
 
 /** "web, db, dns and 3 more · main"; a single store, or several joined. */
@@ -123,6 +128,50 @@ function batchDetail(b: BackupBatch): string {
   const names = Object.values(b.guests).sort((x, y) => x.localeCompare(y));
   const shown = names.length > 4 ? `${names.slice(0, 3).join(', ')} and ${names.length - 3} more` : names.join(', ');
   return `${shown} · ${b.stores.sort().join(', ')}`;
+}
+
+/**
+ * New backups since the last poll, as at most one event per kind (guests, hosts): a batch collects them (durably, so
+ * backups made during a restart count) and is reported once none has landed for BATCH_QUIET_MS, at its last backup's time.
+ * Each group is compared with its own last seen backup, not with the newest of all: PBS dates a backup by its start, so
+ * a long guest backup that started before a host backup but finished after it would otherwise never be reported.
+ * Groups that weren't read (missing permission, API error) keep their last seen backup.
+ */
+function backupEvents(ctx: Context, base: string, groups: Group[], guests: Record<string, string> | null, complete: boolean): WidgetEvent[] {
+  const seenKey = `pbs.seen.${base}`;
+  const stored = ctx.kv.get<Record<string, number>>(seenKey);
+  // before the first poll (or an upgrade from the single high-water mark): what is there now is the baseline
+  const legacy = stored ? null : ctx.kv.get<number>(`pbs.latest.${base}`);
+  const keyOf = (g: Group) => `${g.store}/${g['backup-type']}/${g['backup-id']}`;
+  // a store read for the first time (just added to the widget) is a baseline too; a new group in a known store is new
+  const known = new Set(Object.keys(stored ?? {}).map((k) => k.split('/')[0]));
+  const prevOf = (g: Group) => (stored ? (known.has(g.store) ? (stored[keyOf(g)] ?? 0) : g['last-backup']) : (legacy ?? g['last-backup']));
+  const fresh = groups.filter((g) => g['last-backup'] > prevOf(g));
+
+  const events: WidgetEvent[] = [];
+  for (const [kind, title] of [['guest', 'Backups completed'], ['host', 'Host backups completed']] as const) {
+    const batchKey = kind === 'guest' ? `pbs.batch.${base}` : `pbs.batch.host.${base}`;
+    const batch = ctx.kv.get<BackupBatch>(batchKey) ?? { guests: {}, stores: [], last: 0 };
+    const mine = fresh.filter((g) => isHost(g) === (kind === 'host'));
+    for (const g of mine) {
+      batch.guests[`${g['backup-type']}/${g['backup-id']}`] = guestLabel(g, guests);
+      if (!batch.stores.includes(g.store)) batch.stores.push(g.store);
+      batch.last = Math.max(batch.last, g['last-backup']);
+    }
+    if (batch.last && ctx.now - batch.last * 1000 >= BATCH_QUIET_MS) {
+      events.push({ sev: 'ok', title, detail: batchDetail(batch), ts: batch.last * 1000 });
+      ctx.kv.set(batchKey, null);
+    } else if (mine.length) ctx.kv.set(batchKey, batch);
+  }
+
+  if (groups.length) {
+    // every store read: forget deleted groups; otherwise keep what the unread stores had
+    const seen: Record<string, number> = complete ? {} : { ...stored };
+    for (const g of groups) seen[keyOf(g)] = g['last-backup'];
+    ctx.kv.set(seenKey, seen);
+    if (legacy != null) ctx.kv.set(`pbs.latest.${base}`, null);
+  }
+  return events;
 }
 
 export async function collect(w: Widget, ctx: Context): Promise<WidgetResult> {
@@ -145,8 +194,7 @@ export async function collect(w: Widget, ctx: Context): Promise<WidgetResult> {
   for (const s of selected.filter(mounted)) ctx.metric(`storage.pbs.${s.store}`, pct(s.used, s.total));
 
   const maxAge = ctx.settings.thresholds.backupMaxAgeHours * 3600_000;
-  const events: WidgetEvent[] = [];
-  const groups: (PbsBackupGroup & { store: string })[] = [];
+  const groups: Group[] = [];
   let freshnessError: string | null = null;
   for (const s of stores) {
     try {
@@ -160,7 +208,7 @@ export async function collect(w: Widget, ctx: Context): Promise<WidgetResult> {
   }
 
   // A guest backed up to several stores is as fresh as its latest backup in any of them.
-  const latestOf = new Map<string, PbsBackupGroup & { store: string }>();
+  const latestOf = new Map<string, Group>();
   for (const g of groups) {
     const k = `${g['backup-type']}/${g['backup-id']}`;
     if (!latestOf.has(k) || g['last-backup'] > (latestOf.get(k) as PbsBackupGroup)['last-backup']) latestOf.set(k, g);
@@ -168,40 +216,30 @@ export async function collect(w: Widget, ctx: Context): Promise<WidgetResult> {
   // Only judge groups that still matter: guests that exist in PVE, or (without PVE data) backed up in the last 14 days.
   const guests = ctx.shared.guests ? Object.assign({}, ...Object.values(ctx.shared.guests)) as Record<string, string> : null;
   const relevant = [...latestOf.values()].filter((g) =>
-    guests ? g['backup-type'] === 'host' || Object.hasOwn(guests, String(g['backup-id'])) : now - g['last-backup'] * 1000 < 14 * 86_400_000
+    guests ? isHost(g) || Object.hasOwn(guests, String(g['backup-id'])) : now - g['last-backup'] * 1000 < 14 * 86_400_000
   );
-  let oldest: { age: number; id: string; name: string } | null = null;
+  let oldest: { age: number; name: string } | null = null;
+  let hostOverdue = 0;
   for (const g of relevant) {
     const age = now - g['last-backup'] * 1000;
-    const name = (guests && Object.hasOwn(guests, g['backup-id']) ? guests[g['backup-id']] : '') || g.comment || '';
-    if (!oldest || age > oldest.age) oldest = { age, id: g['backup-id'], name };
+    const label = guestLabel(g, guests);
+    if (!oldest || age > oldest.age) oldest = { age, name: label };
     if (age > maxAge) {
-      alerts.push({ sev: 'warn', key: `backup-${g['backup-id']}`, title: 'Backup overdue', detail: `${g['backup-id']} ${name} · last success ${fmtDuration(age)} ago` });
+      if (isHost(g)) hostOverdue++;
+      const what = isHost(g) ? `host ${label}` : /^(VM|CT) /.test(label) ? label : `${g['backup-id']} ${label}`;
+      alerts.push({ sev: 'warn', key: `backup-${g['backup-id']}`, title: 'Backup overdue', detail: `${what} · last success ${fmtDuration(age)} ago` });
     }
   }
 
-  // New backups since the last poll are collected (durably, so backups made during a restart count) and reported as one
-  // event once none has landed for BATCH_QUIET_MS: a job run is one event, naming its guests, at its last backup's time.
-  // No groups (missing permission, API error) leaves the baseline alone, so the next good poll doesn't report every backup as new.
-  const latest = Math.max(0, ...groups.map((g) => g['last-backup']));
-  if (latest) {
-    const key = `pbs.latest.${base}`;
-    const stored = ctx.kv.get<number>(key);
-    const prevLatest = stored ?? latest;
-    const batchKey = `pbs.batch.${base}`;
-    const batch = ctx.kv.get<BackupBatch>(batchKey) ?? { guests: {}, stores: [], last: 0 };
-    const fresh = groups.filter((g) => g['last-backup'] > prevLatest);
-    for (const g of fresh) {
-      batch.guests[`${g['backup-type']}/${g['backup-id']}`] = guestLabel(g, guests);
-      if (!batch.stores.includes(g.store)) batch.stores.push(g.store);
-      batch.last = Math.max(batch.last, g['last-backup']);
-    }
-    if (batch.last && now - batch.last * 1000 >= BATCH_QUIET_MS) {
-      events.push({ sev: 'ok', title: 'Backups completed', detail: batchDetail(batch), ts: batch.last * 1000 });
-      ctx.kv.set(batchKey, null);
-    } else if (fresh.length) ctx.kv.set(batchKey, batch);
-    if (latest !== stored) ctx.kv.set(key, latest);
-  }
+  const events = backupEvents(ctx, base, groups, guests, !freshnessError);
+
+  // guests (vzdump) and hosts (proxmox-backup-client) run on their own schedules, so they are reported apart
+  const newest = (gs: PbsBackupGroup[]) => Math.max(0, ...gs.map((g) => g['last-backup']));
+  const guestLatest = newest(groups.filter((g) => !isHost(g)));
+  const hostLatest = newest(groups.filter(isHost));
+  const hostGroups = relevant.filter(isHost);
+  const hostNames = (hostGroups.length ? hostGroups : [...latestOf.values()].filter(isHost)).map((g) => guestLabel(g, guests)).sort();
+  const guestCount = relevant.filter((g) => !isHost(g)).length;
 
   const store = regular[0] ?? null;
   if (freshnessError) alerts.push({ sev: 'info', key: 'pbs-perm', title: 'Backup freshness unavailable', detail: freshnessError });
@@ -209,20 +247,30 @@ export async function collect(w: Widget, ctx: Context): Promise<WidgetResult> {
   const overdue = alerts.filter((a) => a.title === 'Backup overdue').length;
   // overdue backups only when there are any; the line starts with a capital
   const facts: [Stat, string][] = [];
+  const cap = (t: string) => (facts.length ? t : t[0].toUpperCase() + t.slice(1));
   if (overdue) facts.push([{ k: 'overdue', v: String(overdue), level: 'warn' }, `${overdue} backup${overdue > 1 ? 's' : ''} overdue`]);
-  if (latest) {
-    const ago = fmtDuration(now - latest * 1000);
-    facts.push([{ k: 'last backup', v: ago }, `${facts.length ? 'last' : 'Last'} backup ${ago} ago`]);
+  if (guestLatest) {
+    const ago = fmtDuration(now - guestLatest * 1000);
+    facts.push([{ k: 'last backup', v: ago }, cap(`last backup ${ago} ago`)]);
   }
-  if (store) facts.push([{ k: 'datastore', v: fmtPct(store.pct) }, `${facts.length ? 'store' : 'Store'} ${fmtPct(store.pct)}`]);
+  if (store) facts.push([{ k: 'datastore', v: fmtPct(store.pct) }, cap(`store ${fmtPct(store.pct)}`)]);
+  // after the store: the card's line is about the guests, the sheet shows all stats
+  if (hostLatest) {
+    const ago = fmtDuration(now - hostLatest * 1000);
+    facts.push([{ k: 'host backup', v: ago }, cap(`host backup ${ago} ago`)]);
+  }
   const groupCount = relevant.length || latestOf.size;
-  if (groupCount) facts.push([{ k: 'groups', v: String(groupCount) }, `${groupCount} group${groupCount > 1 ? 's' : ''}`]);
+  if (groupCount) facts.push([{ k: 'groups', v: String(groupCount) }, cap(`${groupCount} group${groupCount > 1 ? 's' : ''}`)]);
   return {
     ...card(facts),
     alerts,
     events,
     storage,
     drives: (await slowly(ctx, 'drives', () => pbsDrives(ctx, base, opts))) ?? [],
-    backups: { overdue, oldestAge: oldest?.age ?? null, known: relevant.length > 0, guests: relevant.length, last: latest ? latest * 1000 : null, stores: stores.map((s) => s.store) }
+    backups: {
+      overdue, oldestAge: oldest?.age ?? null, oldestName: oldest?.name ?? null, known: relevant.length > 0,
+      guests: guestCount, last: guestLatest ? guestLatest * 1000 : null, stores: stores.map((s) => s.store),
+      hosts: hostNames, hostLast: hostLatest ? hostLatest * 1000 : null, hostOverdue
+    }
   };
 }

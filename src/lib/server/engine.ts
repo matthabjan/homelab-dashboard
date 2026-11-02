@@ -12,6 +12,7 @@ import { liveSources } from './sources.ts';
 import { createSnapshot } from './snapshot.ts';
 import { blankCheck, kindOf, record } from './check.ts';
 import { createIconFinder, iconCandidates } from './icons.ts';
+import { validFor } from '../ago.ts';
 import { INTEGRATIONS, ORDER, createContext } from './integrations/index.ts';
 import type { Config, ContainerState, Discovered, HostVitals, Service, ServiceState, Shared, Snapshot, Sources, Temps, Widget } from '$lib/types';
 
@@ -290,7 +291,7 @@ export class Engine extends EventEmitter {
         const key = `cert.validTo.${s.id}`;
         const prev = st.cert?.validTo ?? kvGet(key);
         if (prev != null && c.validTo > prev + 86_400_000) {
-          insertEvent(Date.now(), 'ok', s.id, 'Certificate renewed', `${s.name} · valid ${Math.round((c.validTo - Date.now()) / 86_400_000)} d`);
+          insertEvent(Date.now(), 'ok', s.id, 'Certificate renewed', `${s.name} · ${validFor(Math.round((c.validTo - Date.now()) / 86_400_000))}`);
         }
         if (c.validTo !== prev) kvSet(key, c.validTo);
         st.cert = c;

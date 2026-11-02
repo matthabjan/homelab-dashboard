@@ -9,3 +9,12 @@ export function ago(ts: number, now: number) {
   if (h < 24) return `${h} h${h < 10 && m % 60 ? ' ' + String(m % 60).padStart(2, '0') + ' m' : ''}`;
   return `${Math.floor(h / 24)} d`;
 }
+
+/**
+ * How long a certificate stays valid: "valid 74 d", "expired"; beyond 10 years "valid > 10 y", since appliance
+ * self-signed certificates (PBS, PVE) run for centuries and a six-digit day count says nothing.
+ */
+export function validFor(days: number) {
+  if (days < 0) return 'expired';
+  return days > 3650 ? 'valid > 10 y' : `valid ${days} d`;
+}

@@ -10,7 +10,7 @@
   import Palette from '$lib/components/Palette.svelte';
   import Beats from '$lib/components/Beats.svelte';
   import Sheet from '$lib/components/Sheet.svelte';
-  import { ago } from '$lib/ago.ts';
+  import { ago, validFor } from '$lib/ago.ts';
 
   // The page answers "is everything fine?" at a glance and gets you to a service in one tap. Everything else (strips,
   // charts, readings) is one tap deeper, in a sheet.
@@ -148,7 +148,7 @@
       out.push({
         id: 'backups', label: 'Backups',
         value: overdue ? `${overdue} overdue` : 'All current',
-        sub: overdue ? [...late.map((j) => j.name), pbsLate && `${pbsLate} PBS backup${pbsLate === 1 ? '' : 's'}`].filter(Boolean).join(', ') : nextJob ? `next: ${nextJob.name} ${until(nextJob.due)}` : snap.backups?.oldestAge != null ? `oldest backup ${ago(now - snap.backups.oldestAge, now)}` : '',
+        sub: overdue ? [...late.map((j) => j.name), pbsLate && `${pbsLate} PBS backup${pbsLate === 1 ? '' : 's'}`].filter(Boolean).join(', ') : nextJob ? `next: ${nextJob.name} ${until(nextJob.due)}` : snap.backups?.oldestAge != null ? `oldest backup ${ago(now - snap.backups.oldestAge, now)}${snap.backups.oldestName ? ` · ${snap.backups.oldestName}` : ''}` : '',
         level: overdue || late.length ? 'crit' : 'none'
       });
     }
@@ -591,7 +591,7 @@
           <div><dt>Check</dt><dd>{KIND[t.check] ?? t.check}</dd></div>
         {/if}
         {#if t.uptime7 != null}<div><dt>Uptime 7 d</dt><dd>{pctTxt(t.uptime7)}</dd></div>{/if}
-        {#if t.cert}<div><dt>Certificate</dt><dd>{t.cert.days < 0 ? 'expired' : `valid ${t.cert.days} d`}{t.cert.selfSigned ? ' · self-signed' : ''}</dd></div>{/if}
+        {#if t.cert}<div><dt>Certificate</dt><dd>{validFor(t.cert.days)}{t.cert.selfSigned ? ' · self-signed' : ''}</dd></div>{/if}
         {#if t.description}<div><dt>About</dt><dd>{t.description}</dd></div>{/if}
       </dl>
       <div class="sh-block">
@@ -610,7 +610,7 @@
     {:else if sheet?.kind === 'backups'}
       {#if snap.backups?.known && snap.backups.oldestAge != null}
         <div class="facts">
-          <div class="fact"><span class="muted k">Oldest backup</span><span class="fv">{ago(now - snap.backups.oldestAge, now)}</span></div>
+          <div class="fact"><span class="muted k">Oldest backup</span><span class="fv">{ago(now - snap.backups.oldestAge, now)}</span>{#if snap.backups.oldestName}<span class="muted small">{snap.backups.oldestName}</span>{/if}</div>
           <div class="fact lv-{snap.backups.overdue ? 'crit' : 'none'}"><span class="muted k">Overdue</span><span class="fv" class:hl={!!snap.backups.overdue}>{snap.backups.overdue}</span></div>
         </div>
       {/if}
@@ -618,12 +618,22 @@
         <ul class="jobs">
           <!-- PBS guest backups first: they run daily, so they are the ones that change most -->
           {#each snap.guestBackups as gb (gb.id)}
-            <li>
-              <button class="job" onclick={() => show({ kind: 'service', id: gb.id })}>
-                <span class="txt"><span class="t">Guest backups{gb.stores.length ? ` · ${gb.stores.join(', ')}` : ''}</span><span class="d muted">{gb.guests} guest{gb.guests === 1 ? '' : 's'} · last run {since(gb.last)}</span></span>
-                <span class="jr"><span class="state-w lv-{gb.overdue ? 'crit' : 'ok'}"><span class="dot lv-{gb.overdue ? 'crit' : 'ok'}" aria-hidden="true"></span>{gb.overdue ? `${gb.overdue} overdue` : 'on schedule'}</span><span class="muted small">{gb.name}</span></span>
-              </button>
-            </li>
+            {#if gb.guests || !gb.hosts.length}
+              <li>
+                <button class="job" onclick={() => show({ kind: 'service', id: gb.id })}>
+                  <span class="txt"><span class="t">Guest backups{gb.stores.length ? ` · ${gb.stores.join(', ')}` : ''}</span><span class="d muted">{gb.guests} guest{gb.guests === 1 ? '' : 's'} · last run {since(gb.last)}</span></span>
+                  <span class="jr"><span class="state-w lv-{gb.overdue ? 'crit' : 'ok'}"><span class="dot lv-{gb.overdue ? 'crit' : 'ok'}" aria-hidden="true"></span>{gb.overdue ? `${gb.overdue} overdue` : 'on schedule'}</span><span class="muted small">{gb.name}</span></span>
+                </button>
+              </li>
+            {/if}
+            {#if gb.hosts.length}
+              <li>
+                <button class="job" onclick={() => show({ kind: 'service', id: gb.id })}>
+                  <span class="txt"><span class="t">Host backups{gb.stores.length ? ` · ${gb.stores.join(', ')}` : ''}</span><span class="d muted">{gb.hosts.length > 3 ? `${gb.hosts.slice(0, 2).join(', ')} and ${gb.hosts.length - 2} more` : gb.hosts.join(', ')} · last run {since(gb.hostLast)}</span></span>
+                  <span class="jr"><span class="state-w lv-{gb.hostOverdue ? 'crit' : 'ok'}"><span class="dot lv-{gb.hostOverdue ? 'crit' : 'ok'}" aria-hidden="true"></span>{gb.hostOverdue ? `${gb.hostOverdue} overdue` : 'on schedule'}</span><span class="muted small">{gb.name}</span></span>
+                </button>
+              </li>
+            {/if}
           {/each}
           {#each [...snap.jobs].sort((a, b) => a.due - b.due) as j (j.id)}
             <li>
