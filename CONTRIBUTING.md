@@ -67,7 +67,7 @@ Guidelines: match gethomepage's widget fields where an equivalent exists. Never 
 - `npm run check` and `npm test` must pass. CI runs them, then builds the image and smoke-tests it in demo mode.
 - Update the docs when behaviour or configuration changes.
 - Screenshots help for UI changes. Take them in demo mode, never from a real setup.
-- The README screenshots are in `docs/screenshots/`. When the UI changes visibly, retake them in demo mode: desktop at 1440×1080, phones at 390×844 with 2× pixel density (`issues` scenario in dark mode, `calm` in light mode).
+- The README screenshots are in `docs/screenshots/`. When the UI changes visibly, retake them in demo mode: desktop at 1440×1080, phones at 390×844 with 2× pixel density, side by side in `phones.png` (`issues` scenario in dark mode, `calm` in light mode with the Backups sheet open).
 
 ## Releases (maintainers)
 

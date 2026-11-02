@@ -8,12 +8,12 @@ A self-hosted launcher and status page for a homelab on **any Docker host**: it 
 
 It is made for your **LAN or VPN** (WireGuard, Tailscale, …): it has no login of its own and must not be reachable from the internet.
 
-![Dashboard in dark mode: the overall status, the problems that need attention, host vitals and the most used services](docs/screenshots/desktop-dark.png)
+![Dashboard in dark mode with problems: the top problem with its Open button, the others that need attention, the most used services, the four vitals cards, the launcher and recent activity](docs/screenshots/desktop-dark.png)
 
 - **One glance.** One sentence gives the state ("All 15 services up · 3 jobs on schedule", or the most important problem with a button to open that service), then whatever else needs attention, most severe first. When all is well, the page is short and quiet.
 - **Vitals at a glance, details on demand.** Four cards with one figure each: **System** (CPU, memory, temperature of the Proxmox node or the machine the dashboard runs on), **Storage** (the fullest, and any drive to check), **Network** (WAN traffic, DNS block rate) and **Backups** (PBS and backup jobs, the next one due). A card opens a sheet with the full detail: 24-hour trends, every storage and drive with SMART health, traffic charts, each job's schedule.
 - **Launcher.** The services you open most, picked automatically, then every service with a link, grouped as in `services.yaml`, with nothing on an icon but a small marker when it has a problem. Press `/` or `⌘K` / `Ctrl+K` for the command palette.
-- **Checks.** Every service is checked every 30 s, which gives uptime (24 h and 7 d), p95 latency and a 24-hour health strip; the **Status** view of the services, and each service's sheet, show them. The dashboard also tracks certificate expiry, backup age per guest, failed or unhealthy containers, SMART status and pending Proxmox updates.
+- **Checks.** Every service is checked every 30 s, which gives uptime (24 h and 7 d), p95 latency and a 24-hour health strip; the **Status** view of the services, and each service's sheet, show them, and the sheet lists the service's events of the last 7 days. The dashboard also tracks certificate expiry, backup age per guest, failed or unhealthy containers, SMART status and pending Proxmox updates.
 - **Live and installable.** Updates are pushed to the browser as they happen, and a service whose status changes is briefly highlighted. If updates stop, the page says so and greys out instead of showing old data as current. It installs as an app (PWA) on phones and desktops, with the number of open problems on its icon, in light and dark themes.
 - **Works without Proxmox.** On a plain Docker host you still get the machine's vitals, your containers (through a read-only socket proxy), values from any JSON API with alert thresholds, `tcp://` checks for services without a web page, and heartbeats: backup and cron jobs report when they ran, and a missed or failed run becomes an alert.
 - **Works with gethomepage configs.** [gethomepage](https://gethomepage.dev)'s `services.yaml`, `bookmarks.yaml` and icon names work as they are; its `homepage.*` container labels work once renamed to `dashboard.*`. Services without an icon get one automatically.
@@ -24,9 +24,9 @@ It is made for your **LAN or VPN** (WireGuard, Tailscale, …): it has no login 
 
 ## Screenshots
 
-![Light mode: the vitals card on its Network tab, the most used services, and service tiles with their 24-hour health strips](docs/screenshots/desktop-light.png)
+![Light mode with everything healthy: "All 15 services up", the most used services, the four vitals cards, the launcher and recent activity](docs/screenshots/desktop-light.png)
 
-![On a phone: the status card and the attention list in dark mode, and the Storage tab of the vitals card in light mode](docs/screenshots/phones.png)
+![On a phone: the top problem and the attention list in dark mode, and the Backups sheet with each job's schedule in light mode](docs/screenshots/phones.png)
 
 Every screenshot shows the built-in demo data (`DEMO=1`), not a real homelab.
 

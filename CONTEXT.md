@@ -30,7 +30,7 @@ Terms used in the code and in design discussions.
 
 **Vitals** — four summary cards under the status overview (System, Storage, Network, Backups), one figure each; a card opens a sheet with the full panels behind tabs: System (the host's gauges), Storage, Drives and Network. A tab is marked with the worst level in its panel; only panels with data get a tab.
 
-**Sheet** — a panel over the page with the details of one thing (a service, the vitals, backups, activity): a side panel on desktop, a bottom sheet on phones. The page itself stays short.
+**Sheet** — a panel over the page with the details of one thing (a service with its own activity, the vitals, backups, activity): a side panel on desktop, a bottom sheet on phones. The page itself stays short.
 
 **Job** — a heartbeat service: something that reports when it ran (a backup, a sync, a verify) rather than being opened. Jobs are counted apart from services, listed in the Backups sheet and the Status view, never in the launcher.
 

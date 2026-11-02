@@ -12,7 +12,7 @@ process.env.CONFIG_DIR = tmp;
 delete process.env.DEMO;
 const { kindOf, record, status } = await import('./check.ts');
 const { heartbeatState } = await import('./heartbeat.ts');
-const { lastProbes, recentEvents } = await import('./db.ts');
+const { lastProbes, serviceEvents } = await import('./db.ts');
 const { reasonText } = await import('./http.ts');
 const { fmtClock, fmtDuration } = await import('./format.ts');
 const { snapshotInput } = await import('./test-helpers.ts');
@@ -31,7 +31,7 @@ function one(def: TestService) {
   const s = input.cfg.services[0];
   return { s, st: input.state(s.id) };
 }
-const events = (sid: string) => recentEvents(0, 100).filter((e) => e.sid === sid).reverse().map((e) => [e.sev, e.title, e.detail]);
+const events = (sid: string) => serviceEvents(sid, 0, 100).reverse().map((e) => [e.sev, e.title, e.detail]);
 /** History rows, oldest first. */
 const history = (sid: string) => lastProbes(sid, 100).reverse().map((r) => r.ok);
 

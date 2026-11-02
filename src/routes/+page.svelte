@@ -130,6 +130,26 @@
   const sheetId = $derived(sheet?.kind === 'service' ? sheet.id : null);
   const sheetTile = $derived(sheetId ? allServices.find((t) => t.id === sheetId) ?? null : null);
   const sheetJob = $derived(sheetId ? jobById.get(sheetId) ?? null : null);
+  // the service sheet's activity: what is raised about it now, then its events of the last 7 days (fetched, since the
+  // snapshot only carries the latest events of all services), refreshed when something changes
+  let svcEvents = $state<{ sid: string; items: FeedItem[] } | null>(null);
+  $effect(() => {
+    const sid = sheetId;
+    void snap?.lastChange;
+    if (!sid || !sheetOpen) return;
+    const ctl = new AbortController();
+    fetch(`/api/events?sid=${encodeURIComponent(sid)}`, { signal: ctl.signal })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((items: FeedItem[]) => (svcEvents = { sid, items }))
+      .catch(() => {});
+    return () => ctl.abort();
+  });
+  const sheetActivity = $derived.by(() => {
+    if (!snap || !sheetId) return [];
+    const raised = snap.attention.filter((a) => a.sid === sheetId);
+    const past = svcEvents?.sid === sheetId ? svcEvents.items : snap.events.filter((e) => e.sid === sheetId);
+    return [...raised, ...past.filter((e) => !raised.some((a) => a.title.endsWith(e.title)))];
+  });
   const sheetTitle = $derived(
     sheet?.kind === 'service' ? sheetTile?.name ?? '' : sheet?.kind === 'vitals' ? 'Vitals' : sheet?.kind === 'backups' ? 'Backups' : 'Activity'
   );
@@ -464,6 +484,14 @@
         {#if t.cert}<div><dt>Certificate</dt><dd>{t.cert.days < 0 ? 'expired' : `valid ${t.cert.days} d`}{t.cert.selfSigned ? ' · self-signed' : ''}</dd></div>{/if}
         {#if t.description}<div><dt>About</dt><dd>{t.description}</dd></div>{/if}
       </dl>
+      <div class="sh-block">
+        <div class="sh-row"><span class="st">Activity</span><span class="muted small">Last 7 days</span></div>
+        {#if sheetActivity.length}
+          <ul class="evs">{#each sheetActivity as a (a.ts + a.title)}{@render event(a)}{/each}</ul>
+        {:else}
+          <p class="muted small">No events in the last 7 days.</p>
+        {/if}
+      </div>
     {:else if sheet?.kind === 'vitals'}
       <Vitals host={snap.host} storage={snap.storage} drives={snap.drives} network={snap.network} {target} initial={sheet.tab} />
     {:else if sheet?.kind === 'backups'}
