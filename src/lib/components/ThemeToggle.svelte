@@ -53,5 +53,7 @@
   }
   button:hover { color: var(--text); }
   .cycle { width: 44px; height: 44px; border-radius: 14px; background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+  /* the same size as the page's header buttons on the narrowest phones */
+  @media (max-width: 400px) { .cycle { width: 40px; height: 40px; border-radius: 12px; } }
   button.on { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
 </style>
