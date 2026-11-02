@@ -28,7 +28,7 @@ Terms used in the code and in design discussions.
 
 **Verdict** — the headline of the status card: "All systems normal", or the top attention item and how many need attention.
 
-**Infrastructure** — the summary cards under the status overview (System, Storage, Drives, Network), one figure each, followed by Backups; a card opens the Infrastructure sheet with the full panels behind tabs: System (the host's gauges), Storage, Drives and Network, one tab per card. A tab is marked with the worst level in its panel; only panels with data get a tab.
+**Infrastructure** — the summary card under the status overview: a row each for System, Storage, Drives and Network, one figure and a line of context, then Backups (side by side when the page is wide); a row opens the Infrastructure sheet with the full panels behind tabs: System (the host's gauges), Storage, Drives and Network, one tab per row (Backups opens its own sheet). A tab is marked with the worst level in its panel; only panels with data get a tab.
 
 **Sheet** — a panel over the page with the details of one thing (a service with its own activity, infrastructure, backups, activity): a side panel on desktop, a bottom sheet on phones that a pull down from its top closes (the close button stays as the tap alternative). Sheets stack: one opened from inside another (Backups → a job) is a level deeper, with a back button; each level is a history entry, so back (browser, Android, Esc) goes up one level, and closing closes all. The page itself stays short.
 

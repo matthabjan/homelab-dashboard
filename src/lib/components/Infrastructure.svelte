@@ -2,7 +2,6 @@
   import { onMount } from 'svelte';
   import type { Level, Snapshot, Traffic, Trend } from '$lib/types';
   import Gauge from './Gauge.svelte';
-  import Sparkline from './Sparkline.svelte';
   import Reading from './Reading.svelte';
 
   interface Props {
@@ -35,7 +34,8 @@
     if (host) list.push({ id: 'system', name: 'System', level: worst(host.gauges.map((g) => g.level)) });
     if (storage.length) {
       const off = storage.filter((s) => s.level === 'off').length;
-      list.push({ id: 'storage', name: 'Storage', level: worst(storage.map((s) => s.level)), meta: count(storage.length, 'storage') + (off ? ` · ${off} offline` : '') });
+      // a red bar raises a warning, not a critical alert: the tab shows that, like the row on the main page
+      list.push({ id: 'storage', name: 'Storage', level: worst(storage.map((s) => (s.level === 'crit' ? 'warn' : s.level))), meta: count(storage.length, 'storage') + (off ? ` · ${off} offline` : '') });
     }
     if (drives.length) {
       const failing = drives.filter((d) => d.status === 'failing').length;
@@ -85,6 +85,21 @@
     const d = b - a;
     return { delta: d, text: `${h} h: ${a.toFixed(1)}${unit} → ${b.toFixed(1)}${unit} (${d >= 0 ? '+' : '−'}${Math.abs(d).toFixed(1)})` };
   }
+  /** rows grouped by `group`, in the order they come (services.yaml order, then by name) */
+  function grouped<T extends { group: string }>(rows: T[]): { name: string; rows: T[] }[] {
+    const out: { name: string; rows: T[] }[] = [];
+    for (const r of rows) {
+      const g = out.find((x) => x.name === r.group);
+      if (g) g.rows.push(r); else out.push({ name: r.group, rows: [r] });
+    }
+    return out;
+  }
+  const storageGroups = $derived(grouped(storage));
+  const driveGroups = $derived(grouped(drives));
+  /** the drive's meta without its place, which its group already says ("NVMe · 1 TB · pve" under "pve") */
+  const driveMeta = (d: Snapshot['drives'][number]) => (d.meta.endsWith(` · ${d.group}`) ? d.meta.slice(0, -(d.group.length + 3)) : d.meta);
+  /** how far back the charts go, said once above them instead of under each */
+  const span = (from: number | null | undefined) => `Last ${from ? Math.max(1, Math.round((now - from) / 3_600_000)) : 24} h`;
   const fmtRate = (v: number | null) => (v == null ? '—' : v >= 100 ? Math.round(v) : v.toFixed(1));
   const fmtNum = (n: number | null) => (n == null ? '—' : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(n >= 1e4 ? 0 : 1) + 'k' : String(n));
 </script>
@@ -100,7 +115,7 @@
   />
 {/snippet}
 
-<div class="card infra-card">
+<div class="infra-card">
   <div class="head">
     {#if tabbed}
       <div class="tabs" role="tablist" aria-label="Infrastructure" style:--n={panels.length}>
@@ -130,45 +145,66 @@
     {#each panels as p (p.id)}
       <div class="panel {p.id}" class:off={view !== p.id} id="vp-{p.id}" role={tabbed ? 'tabpanel' : undefined} aria-labelledby={tabbed ? `vt-${p.id}` : undefined}>
         {#if p.id === 'system' && host}
+          <p class="span">{span(host.gauges.find((g) => g.from)?.from)}</p>
           <div class="gauges">
             {#each host.gauges as g (g.key)}<Gauge {g} {now} />{/each}
           </div>
         {:else if p.id === 'storage'}
-          <div class="rows">
-            {#each storage as s}
-              {@const m = moved(s.trend, '%')}
-              <!-- an off row (unavailable, detached) is grey: its reason in the sub column, the bar at the last known fill;
-                   the trend beside the figure shows how it filled over the day (a flat line is the usual answer) -->
-              <div class="bar lv-{s.level}" title="{s.name} · {s.sub}{m ? ` · ${m.text}` : ''}">
-                <div class="bar-head">
-                  <span class="name">{s.name}</span><span class="mono muted sub">{s.sub}</span>
-                  {#if s.trend && m}<span class="trend" role="img" aria-label="{s.name}, {m.text}"><Sparkline values={s.trend.values} min={null} minSpan={4} color="var(--fill)" area height={16} /></span>{/if}
-                  <span class="mono pct">{s.pct != null ? `${Math.round(s.pct)}%` : '—'}</span>
+          <!-- grouped by the service that reports them, each group a box like the chart tiles; the order inside stays stable -->
+          <div class="groups">
+            {#each storageGroups as g (g.name)}
+              <section class="group" aria-label={g.name}>
+                <h3 class="ghead">{g.name}</h3>
+                <div class="rows">
+                  {#each g.rows as s (s.name)}
+                    {@const m = moved(s.trend, '%')}
+                    <!-- a storage in two lines, like a drive: name and fill; size (or why it is off) and the bar with a tick
+                         where it turns amber. An off row (unavailable, detached) is grey, the bar at the last known fill -->
+                    <div class="row bar lv-{s.level}" title="{s.name} · {s.sub}{m ? ` · ${m.text}` : ''}">
+                      <div class="row-head">
+                        <span class="name">{s.name}</span>
+                        <span class="num pct">{s.pct != null ? `${Math.round(s.pct)}%` : '—'}</span>
+                      </div>
+                      <div class="row-line">
+                        <span class="meta-t size">{s.sub}</span>
+                        <span class="track"><span class="fill" style:width="{Math.min(100, s.pct ?? 0)}%"></span><span class="tick" style:left="{s.warn}%" title="amber from {s.warn}%"></span></span>
+                      </div>
+                    </div>
+                  {/each}
                 </div>
-                <div class="track"><div class="fill" style:width="{Math.min(100, s.pct ?? 0)}%"></div></div>
-              </div>
+              </section>
             {/each}
           </div>
         {:else if p.id === 'drives'}
-          <div class="rows ruled">
-            {#each drives as d}
-              <!-- a drive in two lines: model, temperature and SMART verdict; what it is and where, and its life left as a labelled bar. The rest is in the tooltip -->
-              <div class="bar drive lv-{d.lifeLevel}" title="{d.name} · {d.meta} · {d.detail}">
-                <div class="bar-head">
-                  <span class="name">{d.name}</span>
-                  {#each d.facts as f}<span class="dfact mono" class:lv-warn={f.level === 'warn'}>{f.v}{f.k ? ` ${f.k}` : ''}</span>{/each}
-                  <span class="dstatus lv-{d.level}">{d.status}</span>
+          <!-- grouped by where they sit, like Storage -->
+          <div class="groups">
+            {#each driveGroups as g (g.name)}
+              <section class="group" aria-label={g.name}>
+                <h3 class="ghead">{g.name}</h3>
+                <div class="rows">
+                  {#each g.rows as d}
+                    <!-- a drive in two lines: model, temperature and (only when it is not ok) its SMART verdict; what it is and
+                         its life left as a labelled bar. The rest is in the tooltip -->
+                    <div class="row bar lv-{d.lifeLevel}" title="{d.name} · {d.meta} · {d.detail}">
+                      <div class="row-head">
+                        <span class="name">{d.name}</span>
+                        {#each d.facts as f}<span class="dfact num" class:lv-warn={f.level === 'warn'}>{f.v}{f.k ? ` ${f.k}` : ''}</span>{/each}
+                        {#if d.status !== 'ok'}<span class="dstatus lv-{d.level}">{d.status}</span>{/if}
+                      </div>
+                      <div class="row-line">
+                        <span class="meta-t">{driveMeta(d)}</span>
+                        {#if d.life != null}
+                          <span class="life" title="{d.life}% of the drive's rated write endurance remains"><span class="muted">Life left</span><span class="track"><span class="fill" style:width="{Math.max(0, Math.min(100, d.life))}%"></span></span><span class="num lpct">{d.life}%</span></span>
+                        {/if}
+                      </div>
+                    </div>
+                  {/each}
                 </div>
-                <div class="dline">
-                  <span class="mono muted off-sub">{d.meta}</span>
-                  {#if d.life != null}
-                    <span class="life" title="{d.life}% of the drive's rated write endurance remains"><span class="muted">Life left</span><span class="track"><span class="fill" style:width="{Math.max(0, Math.min(100, d.life))}%"></span></span><span class="mono pct">{d.life}%</span></span>
-                  {/if}
-                </div>
-              </div>
+              </section>
             {/each}
           </div>
         {:else if p.id === 'network' && network}
+          <p class="span">{span(network.from ?? network.lan?.from)}</p>
           <div class="net">
             {#if network.source}{@render traffic(network, 'WAN')}{/if}
             {#if network.lan}{@render traffic(network.lan, 'LAN')}{/if}
@@ -193,7 +229,8 @@
 
 <style>
   /* panels lay out by the card's width, not the viewport's, so they look the same wherever the card is */
-  .infra-card { container: infra / inline-size; padding: 22px; display: flex; flex-direction: column; gap: 16px; }
+  /* in the sheet, so no frame of its own: the sheet's padding is the only inset */
+  .infra-card { container: infra / inline-size; display: flex; flex-direction: column; gap: 16px; }
   .solo { font-size: 14px; font-weight: 600; }
   .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
@@ -226,42 +263,47 @@
   /* hidden panels still hold their height; visibility also takes them out of the tab order and the accessibility tree */
   .panel.off { visibility: hidden; }
 
-  /* system: one slot per gauge kind, so a missing one leaves the others their usual size */
-  .gauges { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr)); gap: 12px; }
+  /* system: tiles like Network's, one per row in the sheet, side by side only where the card is wide */
+  .gauges { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: 12px; }
 
-  /* storage and drives: rows flow into as many columns as fit */
-  .rows { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 12px 32px; align-content: start; }
-  /* drives are two lines each: a rule above every row; the first row's is clipped off */
-  .rows.ruled { gap: 10px 32px; margin-top: -11px; clip-path: inset(1px 0 0 0); grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); }
-  .bar { --fill: var(--acc); display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+  /* storage and drives: one row pattern, two lines each (name and figure; what it is and a bar), a rule above
+     every row (the first row's is clipped off); rows flow into as many columns as fit */
+  .groups { display: flex; flex-direction: column; gap: 12px; }
+  .group { padding: 10px 14px 2px; border-radius: 14px; background: var(--surface-2); }
+  .ghead { font-size: 12px; font-weight: 500; color: var(--muted); margin: 0 0 1px; }
+  .rows { display: flex; flex-direction: column; }
+  .row { display: flex; flex-direction: column; gap: 5px; min-width: 0; padding: 10px 0 11px; border-top: 1px solid var(--line); }
+  .row:first-child { border-top: 0; padding-top: 6px; }
+  .row-head { display: flex; align-items: baseline; gap: 10px; }
+  .row-head .name { flex: 1 1 auto; min-width: 0; font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row-line { display: flex; align-items: center; gap: 12px; min-height: 16px; }
+  .meta-t { flex: 1 1 auto; min-width: 0; font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* words in the text font, figures with even digits */
+  .num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .pct { flex: none; font-size: 14px; font-weight: 600; }
+  .bar { --fill: var(--acc); }
   .bar.lv-warn, .bar.lv-crit { --fill: var(--lv); }
-  .bar-head { display: flex; align-items: baseline; gap: 8px; font-size: 13px; }
-  .bar-head .name { flex: 0 1 auto; max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .bar-head .sub { flex: 1 1 auto; min-width: 0; text-align: right; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .pct { flex: none; font-size: 14px; font-weight: 500; }
-  /* a small trend beside the figure: shape only, the numbers are in its tooltip and label */
-  .trend { flex: none; width: 56px; align-self: center; }
-  .bar.lv-off .trend { opacity: 0.5; }
   .bar.lv-warn .pct, .bar.lv-crit .pct { color: var(--lv); }
   .bar.lv-off { --fill: color-mix(in srgb, var(--muted) 50%, transparent); }
   .bar.lv-off .name, .bar.lv-off .pct { color: var(--muted); }
-  .off-sub { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .drive { gap: 4px; padding-top: 10px; border-top: 1px solid var(--track); }
-  .drive .name { flex: 1 1 auto; max-width: none; }
+  /* storage: the size in a fixed slot, so every bar starts at the same place */
+  .size { flex: none; width: 8.5em; }
+  .row-line > .track { flex: 1 1 auto; }
   .dstatus { flex: none; font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 999px; color: var(--lv); background: var(--lv-soft); }
-  .dfact { flex: none; font-size: 11px; color: var(--muted); white-space: nowrap; }
+  .dfact { flex: none; font-size: 12px; color: var(--muted); }
   .dfact.lv-warn { color: var(--lv); }
-  .dline { display: flex; align-items: center; gap: 12px; }
-  .dline .off-sub { flex: 1 1 auto; min-width: 0; }
-  .life { flex: none; display: flex; align-items: center; gap: 6px; font-size: 11px; }
+  .life { flex: none; display: flex; align-items: center; gap: 6px; font-size: 12px; }
   /* fixed track and a right-aligned slot wide enough for "100%", so every drive's bar lines up */
-  .life .track { display: block; flex: none; width: 56px; height: 4px; }
-  .life .pct { min-width: 4ch; text-align: right; font-size: 11px; font-weight: 400; }
-  .life .fill { display: block; }
-  .track { height: 6px; border-radius: 4px; background: var(--track); overflow: hidden; }
-  .fill { height: 100%; border-radius: 4px; background: var(--fill); transition: width 0.6s cubic-bezier(0.2, 0.8, 0.2, 1); }
+  .life .track { display: block; flex: none; width: 56px; }
+  .lpct { min-width: 4ch; text-align: right; }
+  .track { position: relative; display: block; height: 5px; border-radius: 4px; background: var(--track); overflow: hidden; }
+  /* where the bar turns amber, like the dashed line on the charts */
+  .tick { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--warn); opacity: 0.7; }
+  .bar.lv-off .tick { display: none; }
+  .fill { display: block; height: 100%; border-radius: 4px; background: var(--fill); transition: width 0.6s cubic-bezier(0.2, 0.8, 0.2, 1); }
 
   /* network: WAN, LAN and DNS as tiles like System's, stacked in the sheet, side by side when the card is wide */
+  .span { margin: 0 0 10px; font-size: 12px; color: var(--muted); }
   .net { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: 12px; }
 
   @container infra (max-width: 519.98px) {
@@ -272,7 +314,7 @@
   /* the smallest phones: a label and its dot must still fit a quarter of the card */
   @container infra (max-width: 299.98px) { .tabs button { font-size: 13px; padding-inline: 0; gap: 3px; } }
   @media (max-width: 760px) {
-    .infra-card { padding: 16px; border-radius: 22px; gap: 14px; }
+    .infra-card { gap: 14px; }
     /* phones: each panel only as tall as it needs */
     .panel.off { display: none; }
   }
