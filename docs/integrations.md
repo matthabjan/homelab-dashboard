@@ -1,6 +1,6 @@
 # Integrations
 
-A widget adds live data to a service: its status line and stats, the infrastructure cards and their panels, and alerts. Configure it under the service's `widget:` key in `services.yaml`. The fields match [gethomepage](https://gethomepage.dev/widgets/), so existing widget blocks work as they are.
+A widget adds live data to a service: its status line and stats, the infrastructure card and its panels, and alerts. Configure it under the service's `widget:` key in `services.yaml`. The fields match [gethomepage](https://gethomepage.dev/widgets/), so existing widget blocks work as they are.
 
 **General rules**
 

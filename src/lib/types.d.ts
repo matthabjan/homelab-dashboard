@@ -719,10 +719,13 @@ export interface Snapshot {
   /** `name` is the Proxmox node; `facts` are labelled pairs shown beside it (uptime, guests) */
   host: { name: string; href: string | null; facts: { label: string; value: string }[]; gauges: Gauge[] } | null;
   /** `off` rows (unavailable, detached, size unknown) draw `pct` as a grey bar: the last known fill, or empty */
-  storage: { name: string; pct: number | null; level: Level | 'off'; sub: string; trend: Trend | null }[];
+  /** `group`: the service that reports it (rows are grouped by it); `warn`: the fill where its bar turns amber */
+  storage: { name: string; group: string; pct: number | null; level: Level | 'off'; sub: string; warn: number; trend: Trend | null }[];
   /** the infrastructure sheet's Drives panel; empty when no widget reports drives */
   drives: {
     name: string;
+    /** where it sits (the host or NAS that reports it): rows are grouped by it */
+    group: string;
     meta: string;
     /** every SMART detail as one line, for the tooltip */
     detail: string;

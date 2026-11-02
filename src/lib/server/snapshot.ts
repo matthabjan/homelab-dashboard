@@ -104,7 +104,7 @@ function driveStatus(d: Drive, where: string, th: Settings['thresholds']) {
   if (d.errors) facts.push({ k: 'errors', v: String(d.errors), level: 'warn' });
   const lifeLevel: Level = d.lifeLeft != null && d.lifeLeft <= th.driveLifeWarnPct ? 'warn' : 'ok';
   return {
-    row: { name: d.model, meta: [d.kind, fmtSize(d.size), where].join(' · '), detail: detail || 'no SMART details', status, level, life: d.lifeLeft, lifeLevel, facts },
+    row: { name: d.model, group: where, meta: [d.kind, fmtSize(d.size), where].join(' · '), detail: detail || 'no SMART details', status, level, life: d.lifeLeft, lifeLevel, facts },
     problems
   };
 }
@@ -273,9 +273,9 @@ function storagePanel(engine: SnapshotInput, th: Th, round: Round, now: number, 
     // and an offline row keeps its place instead of jumping to the end
     for (const x of [...(w?.storage || [])].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))) {
       // unavailable, detached or of unknown size: a grey bar (last known fill, if any), the widget raises any alert itself
-      if (x.offline || x.pct == null) { storage.push({ name: x.name, pct: x.pct ?? null, level: 'off', sub: x.sub, trend: trend24(mem, now, x.metric, 48) }); continue; }
+      if (x.offline || x.pct == null) { storage.push({ name: x.name, group: s.name, pct: x.pct ?? null, level: 'off', sub: x.sub, warn: th.storageAmberPct, trend: trend24(mem, now, x.metric, 48) }); continue; }
       const lv: Level = x.pct >= th.storageWarnPct ? 'crit' : x.pct >= th.storageAmberPct ? 'warn' : 'ok';
-      storage.push({ name: x.name, pct: x.pct, level: lv, sub: x.sub, trend: trend24(mem, now, x.metric, 48) });
+      storage.push({ name: x.name, group: s.name, pct: x.pct, level: lv, sub: x.sub, warn: th.storageAmberPct, trend: trend24(mem, now, x.metric, 48) });
       if (x.pct >= th.storageWarnPct) round.raise({ sev: 'warn', service: s, key: `storage-${x.name}`, title: `${x.name} is ${Math.round(x.pct)}% full`, detail: x.sub });
     }
   }

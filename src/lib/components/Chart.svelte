@@ -146,7 +146,7 @@
       <path class="line" d={geo.line} />
     </svg>
     <!-- what the dashed line is: its value, at its right end -->
-    {#if geo.warnY != null && warn != null}<span class="warn-label mono" style:top="{geo.warnY}px">{format(warn)}</span>{/if}
+    {#if geo.warnY != null && warn != null}<span class="warn-label" style:top="{geo.warnY}px">{format(warn)}</span>{/if}
     {#if at >= 0}
       <span class="cross" style:left={pos(at).left}></span>
       {#if values2?.[at] != null}<span class="dot two" style:left={pos(at).left} style:top="{y(values2[at] as number)}px"></span>{/if}
@@ -164,7 +164,7 @@
   .line { fill: none; stroke: var(--c); stroke-width: 1.75; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
   .line.two, .dot.two { --c: var(--chart-2, var(--acc-2)); }
   .line.two { stroke-width: 1.5; }
-  .warn-label { position: absolute; right: 0; transform: translateY(calc(-100% - 2px)); font-size: 9.5px; line-height: 1; color: var(--warn); opacity: 0.9; pointer-events: none; }
+  .warn-label { position: absolute; right: 0; transform: translateY(calc(-100% - 2px)); font-size: 10px; line-height: 1; font-variant-numeric: tabular-nums; color: var(--warn); opacity: 0.9; pointer-events: none; }
   .warn { stroke: var(--warn); stroke-width: 1; stroke-dasharray: 3 3; opacity: 0.7; vector-effect: non-scaling-stroke; }
   .cross { position: absolute; top: 0; bottom: 0; width: 1px; transform: translateX(-0.5px); background: color-mix(in srgb, var(--text) 30%, transparent); pointer-events: none; }
   .dot { position: absolute; width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 2px var(--surface-2, var(--surface)); pointer-events: none; }
