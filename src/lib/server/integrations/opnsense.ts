@@ -39,7 +39,8 @@ export interface OpnsenseFirmware {
   status?: string;
   /** '1' when the updates need a reboot */
   status_reboot?: string;
-  product?: { product_version?: string; product_latest?: string };
+  /** product_* after an update check; CORE_* (26.x) always, CORE_PKGVERSION with the hotfix suffix ("26.7.8_2") */
+  product?: { product_version?: string; product_latest?: string; CORE_PKGVERSION?: string; CORE_VERSION?: string };
   /** pending packages by name */
   all_packages?: Record<string, { name?: string; old?: string; new?: string }>;
   /** pending upgrade sets (a major release) by name */
@@ -148,7 +149,7 @@ function serviceFacts(services: OpnsenseServices | null) {
 function firmwareFacts(fw: OpnsenseFirmware | null) {
   const facts: [Stat, string][] = [];
   const alerts: Alert[] = [];
-  const version = fw?.product?.product_version;
+  const version = fw?.product?.product_version ?? fw?.product?.CORE_PKGVERSION ?? fw?.product?.CORE_VERSION;
   if (version) facts.push([{ k: 'version', v: version }, `OPNsense ${version}`]);
   const reboot = fw?.status_reboot === '1' && 'needs a reboot';
   if (fw?.status === 'update') {

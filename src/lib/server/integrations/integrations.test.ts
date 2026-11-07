@@ -403,6 +403,9 @@ test('OPNsense: a gateway down leads, loss warns; stopped services warn; a pendi
   // a key with only the traffic privileges: no gateways, services or firmware, no error
   const minimal: Fixtures = { 'GET /api/diagnostics/activity/getActivity': FIXTURES.opnsense['GET /api/diagnostics/activity/getActivity'], 'GET /api/diagnostics/traffic/interface': FIXTURES.opnsense['GET /api/diagnostics/traffic/interface'] };
   const bare = await run(minimal);
+  // OPNsense 26.x before an update check: only the CORE_* product fields
+  const unchecked: Fixtures = { ...FIXTURES.opnsense, 'GET /api/core/firmware/status': () => ({ status: 'none', product: { CORE_VERSION: '26.7.8', CORE_PKGVERSION: '26.7.8_2' } }) };
+  assert.equal((await run(unchecked, 'calm')).stats.find((s) => s.k === 'version')?.v, '26.7.8_2');
   assert.deepEqual([bare.alerts, bare.stats.map((s) => s.k)], [[], ['WAN ↓ / ↑ Mbit/s', 'CPU']]);
 });
 
