@@ -26,6 +26,7 @@ const WIDGETS: Record<string, WidgetOptions> = {
   docker: { url: 'http://socket-proxy.test:2375' },
   pihole: { url: 'https://pihole.test', key: 's' },
   whatsupdocker: { url: 'https://wud.test', username: 'u', password: 's' },
+  homeassistant: { url: 'https://ha.test', key: 't', custom: [{ state: 'sensor.house_power', label: 'power' }, { template: "{{ states('zone.home') }}", label: 'home' }] },
   customapi: {
     url: 'https://media.test/api/status',
     mappings: [
@@ -450,6 +451,27 @@ test('WUD: one note per container with a newer image, saying what changed; basic
   assert.match(headers[0].Authorization, /^Basic /);
   await run({ url: 'https://wud.test' });
   assert.equal(headers[1].Authorization, undefined);
+});
+
+test('cards: Home Assistant shows pending updates, then the custom values', async () => {
+  assert.deepEqual(await card('homeassistant', 'calm'), { line: 'Up to date · power 412 W', stats: [['updates', '0', null], ['power', '412 W', null]] });
+  assert.deepEqual(await card('homeassistant', 'calm', FIXTURES.homeassistant, { url: 'https://ha.test', key: 't' }),
+    { line: 'Up to date · Home Assistant 2026.11.0', stats: [['updates', '0', null], ['version', '2026.11.0', null]] });
+});
+
+test('Home Assistant: updates and low batteries are notes; a template a non-admin token may not render shows —', async () => {
+  const auth: (string | undefined)[] = [];
+  const fixtures = fixtureTransport(FIXTURES.homeassistant, { scenario: 'issues' });
+  const transport: Transport = async (url, opts) => { auth.push(opts?.headers?.Authorization); return url.endsWith('/template') ? new Response('Unauthorized', { status: 401 }) : fixtures(url, opts); };
+  const res = await INTEGRATIONS.homeassistant.collect({ type: 'homeassistant', ...WIDGETS.homeassistant }, createContext({ transport, kv: memoryKv(), settings: DEFAULT_SETTINGS, now: Date.now() }));
+  assert.deepEqual(res.alerts.map((a) => [a.sev, a.title, a.detail]), [
+    ['info', 'Home Assistant Core 2026.11.1 available', 'installed 2026.11.0'],
+    ['info', 'Mosquitto broker 6.5.2 available', 'installed 6.5.1'],
+    ['info', 'Front door battery at 9%', 'below 20%'],
+    ['info', 'Garden sensor battery low', 'the device reports its battery as low']
+  ]);
+  assert.deepEqual(res.stats.map((s) => [s.k, s.v]), [['updates', '2'], ['power', '412 W'], ['home', '—'], ['version', '2026.11.0'], ['unavailable', '1'], ['low batteries', '2']]);
+  assert.ok(auth.every((a) => a === 'Bearer t'), 'the token as a Bearer header on every call');
 });
 
 test('cards: customapi shows the first two mappings', async () => {

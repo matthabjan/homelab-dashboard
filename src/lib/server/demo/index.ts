@@ -11,10 +11,11 @@ import docker from './docker.ts';
 import pihole from './pihole.ts';
 import customapi from './customapi.ts';
 import whatsupdocker from './whatsupdocker.ts';
+import homeassistant from './homeassistant.ts';
 
 import type { Fixtures, Transport } from '$lib/types';
 
-export const FIXTURES = { proxmox, proxmoxbackupserver, opnsense, fritzbox, adguard, portainer, openmediavault, docker, pihole, customapi, whatsupdocker };
+export const FIXTURES = { proxmox, proxmoxbackupserver, opnsense, fritzbox, adguard, portainer, openmediavault, docker, pihole, customapi, whatsupdocker, homeassistant };
 
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 

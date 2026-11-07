@@ -22,6 +22,7 @@ A widget adds live data to a service: its status line and stats, rows of the inf
 | [`pihole`](#pi-hole) | Pi-hole | App password (v6), API token (v5) | ❌ |
 | [`portainer`](#portainer) | Portainer | API key | ✅ Business Edition only |
 | [`docker`](#docker) | Docker Engine | none (socket proxy) | ✅ the proxy's allowlist |
+| [`homeassistant`](#home-assistant) | Home Assistant | Long-lived access token | ✅ a non-admin user |
 | [`whatsupdocker`](#whats-up-docker) | What's Up Docker | Basic auth or none | ❌ |
 | [`fritzbox`](#fritzbox) | FRITZ!Box | none (UPnP) | n/a |
 | [`customapi`](#custom-api) | any JSON API | headers, Basic auth or none | depends on the API |
@@ -269,6 +270,39 @@ widget:
 **Counting.** A label-discovered service appears once, however many widgets see its container.
 
 **Alerts:** as for [Portainer](#portainer).
+
+---
+
+## Home Assistant
+
+Provides **pending updates** and **low batteries**, each a note in Activity, and the Home Assistant version. Updates are every `update.*` entity that is on: Core, OS, Supervisor, add-ons, HACS and device firmware. The status line shows how many updates are pending, then your first `custom` value (or the version).
+
+```yaml
+widget:
+  type: homeassistant
+  url: https://ha.home.arpa
+  key: ${HA_TOKEN}               # a long-lived access token
+  # batteryLow: 20               # our addition: battery sensors below this % are a note
+  custom:                        # as in homepage: entity states or templates, shown as stats
+    - state: sensor.house_power
+      label: power               # default: the entity's name
+      # value: "{state} {attributes.unit_of_measurement}"   # the default
+    - template: "{{ states.light | selectattr('state', 'eq', 'on') | list | count }}"
+      label: lights on           # templates need an admin token
+```
+
+**Account.** Create a user who is not an administrator (Settings → People → Add person, allow login, *Administrator* off), sign in as that user, and create a token under Profile → Security → *Long-lived access tokens*. A non-admin token reads states and the version. Home Assistant renders templates for admins only, so a `template` entry shows *—* with a non-admin token; use `state` entries instead.
+
+The widget reads all states once per widget interval (`GET /api/states`).
+
+**Notes**
+
+| Severity | When |
+|---|---|
+| info | An update entity is on: "Home Assistant Core 2026.11.1 available", with the installed version. A skipped version doesn't count, as in Home Assistant. |
+| info | A battery sensor (device class `battery`, in %) is below `batteryLow`, or a battery binary sensor reports low. |
+
+Unavailable entities are counted in the stats, without an alert: most installs have a few that are expected.
 
 ---
 
