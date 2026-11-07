@@ -2,6 +2,7 @@
 // Reads services, pending updates, SMART status and mounted file systems in one go.
 import { trimUrl } from '../http.ts';
 import { card, fmtPair, fmtPct, pct } from '../format.ts';
+import { usageLevel } from '../storage.ts';
 import { attributesFromText, fromAttributes, fromNvmeText, slowly, toDrive } from './smart.ts';
 import type { Alert, UsageRow, Context, Drive, SmartReading, Stat, Widget, WidgetResult } from '$lib/types';
 
@@ -189,12 +190,12 @@ export async function collect(w: Widget, ctx: Context): Promise<WidgetResult> {
   for (const s of storage) if (s.metric) ctx.metric(s.metric, s.pct);
   // the root file system is left out above, so this is the fullest data disk
   const fullest = [...volumes].sort((a, b) => (b.row.pct ?? 0) - (a.row.pct ?? 0))[0];
-  const full = fullest?.row.pct ?? 0, th = ctx.settings.thresholds;
+  const fullLevel = usageLevel(fullest?.row.pct ?? 0, ctx.settings.thresholds);
 
   // services only when one is stopped, updates only when OMV tells this login
   const facts: [Stat, string][] = [];
   if (stopped) facts.push([{ k: 'services', v: `${svcRunning} / ${enabled.length}`, level: 'warn' }, `${stopped} service${stopped > 1 ? 's' : ''} stopped`]);
-  if (fullest) facts.push([{ k: `${fullest.label} full`, v: fmtPct(fullest.row.pct), level: full >= th.storageWarnPct ? 'crit' : full >= th.storageAmberPct ? 'warn' : null }, `${fullest.label} ${fmtPct(fullest.row.pct)} full`]);
+  if (fullest) facts.push([{ k: `${fullest.label} full`, v: fmtPct(fullest.row.pct), level: fullLevel === 'ok' ? null : fullLevel }, `${fullest.label} ${fmtPct(fullest.row.pct)} full`]);
   if (updates != null) facts.push([{ k: 'updates', v: String(updates) }, `${updates} update${updates === 1 ? '' : 's'}`]);
 
   return {

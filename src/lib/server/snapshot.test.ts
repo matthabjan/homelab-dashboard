@@ -1,4 +1,5 @@
-// The status rules of the snapshot: tile levels and lines, attention, verdict, alert age and the fleet strip.
+// The status rules of the snapshot: tile levels and lines, attention, verdict, alert age, the infrastructure card, how
+// backups reach it, and the fleet strip.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -18,7 +19,7 @@ const { record } = await import('./check.ts');
 const { heartbeatState } = await import('./heartbeat.ts');
 const { toDrive } = await import('./integrations/smart.ts');
 import type { TestService } from './test-helpers.ts';
-import type { Alert, Drive, Snapshot, Tile, WidgetState } from '$lib/types';
+import type { Alert, Drive, PbsBackups, Snapshot, StorageRow, Tile, WidgetState } from '$lib/types';
 
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
@@ -158,6 +159,22 @@ test('a tile follows its attention: a full storage warns its tile; with a Proxmo
   assert.deepEqual(local.attention.map((a) => [a.key, a.service]), [['host|cpu-temp', undefined], ['host|nvme-temp-0', undefined]]);
 });
 
+test('a full Proxmox host disk raises once: by its storage row, or by the gauge when no row shows it', () => {
+  const now = day(23);
+  const vitals = (disk: { name: string; metric: string }) => ({ node: 'pve', cpu: 5, cpus: 8, mem: 1, maxmem: 4, memPct: 25, disk: { ...disk, pct: 91, sub: '91 / 100 GiB' }, uptime: null, guestsRunning: null, guestsTotal: null, updates: null });
+  const pve = (disk: { name: string; metric: string }, storage: StorageRow[]): TestService => ({ name: 'PVE', widget: { type: 'proxmox', url: 'https://pve.home.arpa:8006' }, state: { widget: { ...widget(now, []), host: vitals(disk), storage } } });
+  const full = (snap: Snapshot) => alertsOf(snap, 'PVE').map((a) => [a.sev, a.title]);
+
+  // host.storages leaves the gauge's disk out, or there is none and the gauge shows the root file system
+  const root = build([pve({ name: 'root', metric: 'host.root' }, [])], now);
+  assert.equal(root.host?.gauges.find((g) => g.key === 'disk')?.level, 'crit');
+  assert.deepEqual(full(root), [['warn', 'PVE: root is 91% full']], 'a red gauge has an alert behind it');
+
+  // the gauge's disk is also a storage row: one alert, not two
+  const row: StorageRow = { name: 'local-zfs', used: 91, total: 100, pct: 91, sub: '91 / 100 GiB', source: 'pve', metric: 'storage.pve.local-zfs' };
+  assert.deepEqual(full(build([pve({ name: 'local-zfs', metric: 'storage.pve.local-zfs' }, [row])], now)), [['warn', 'PVE: local-zfs is 91% full']]);
+});
+
 test('checks other than probes: a stopped container is down, a heartbeat that missed its run alerts', () => {
   const now = day(8);
   const hb = { id: 'restic', every: 24 * 60 * MIN, grace: 60 * MIN, token: 't', backup: true };
@@ -181,7 +198,7 @@ test('checks other than probes: a stopped container is down, a heartbeat that mi
   // the job with its schedule: next run expected `every` after the last one
   const [job] = snap.jobs;
   assert.deepEqual([job.name, job.state, job.lastOk, job.due, job.every, job.backup], ['Restic', 'down', lastOk, lastOk + 24 * 60 * MIN, hb.every, true]);
-  assert.deepEqual(snap.backups, { overdue: 1, oldestAge: 26 * 60 * MIN, oldestName: 'Restic', known: true });
+  assert.deepEqual([snap.backups.overdue, snap.backups.oldestAge, snap.backups.oldestName], [1, 26 * 60 * MIN, 'Restic']);
 });
 
 test('healthy: services and jobs are counted apart', () => {
@@ -208,36 +225,46 @@ test('a tile names its check, so only timed checks (http, tcp) show a p95', () =
   assert.deepEqual(['Web', 'Ssh', 'Wud', 'Borg', 'Docs'].map((n) => tile(snap, n).check), ['http', 'tcp', 'container', 'heartbeat', null]);
 });
 
-test('infrastructure: storage is amber only where a row raises an alert; offline rows never count', () => {
-  const now = day(20);
-  const row = (name: string, pct: number) => ({ name, used: pct, total: 100, pct, sub: `${pct} / 100 GiB`, source: 'pve' as const });
-  const nas = (media: number): TestService => probed('NAS', now, { state: { widget: { ...widget(now, []), storage: [row('media · NAS', media), row('tank', 50), { name: 'offsite', offline: true, sub: 'detached 3 d', source: 'pbs' }] } } });
-  const amber = build([nas(75)], now);
-  assert.equal(amber.storage.find((r) => r.name === 'media · NAS')?.level, 'warn', 'the bar is amber in the sheet');
-  assert.deepEqual(panel(amber, 'storage'), { id: 'storage', label: 'Storage', value: '75%', unit: 'full', sub: 'fullest: media (NAS) · 1 offline', level: 'none', meta: '3 storages · 1 offline' });
-  assert.deepEqual(alertsOf(amber, 'NAS'), []);
-  const full = build([nas(90)], now);
-  assert.equal(panel(full, 'storage')?.level, 'warn');
-  assert.deepEqual(alertsOf(full, 'NAS').map((a) => [a.sev, a.title]), [['warn', 'media · NAS is 90% full']]);
-});
-
-test('infrastructure: backups from every PBS widget; PBS alone warns, a late job is critical', () => {
+test('backups: every PBS widget and every job reach the card and the sheet, which agree; a red row has an alert behind it', () => {
   const now = day(21);
   const H = 60 * MIN;
-  const pbs = (name: string, overdue: number, oldestAge: number, oldestName: string): TestService => probed(name, now, { state: { widget: { ...widget(now, []), backups: { overdue, oldestAge, oldestName, known: true } } } });
-  const two = build([pbs('PBS A', 1, 30 * H, 'web'), pbs('PBS B', 2, 50 * H, 'db')], now);
-  assert.deepEqual(two.backups, { overdue: 3, oldestAge: 50 * H, oldestName: 'db', known: true }, 'the second server counts too');
-  assert.deepEqual(panel(two, 'backups'), { id: 'backups', label: 'Backups', value: '3 overdue', sub: '3 PBS backups', level: 'warn' });
+  const pbsBackups = (guestOverdue: number, oldestAge: number, oldestName: string): PbsBackups => ({ known: true, guests: 3, guestOverdue, last: now - 6 * H, hosts: [], hostOverdue: 0, hostLast: null, oldestAge, oldestName, stores: ['main'], overdueSev: 'warn' });
+  const pbs = (name: string, overdue: number, oldestAge: number, oldestName: string): TestService => probed(name, now, { state: { widget: { ...widget(now, []), backups: pbsBackups(overdue, oldestAge, oldestName) } } });
+  // a verify job makes no backup: late, it is named and red, but not counted overdue
+  const hb = { id: 'verify', every: 24 * H, grace: H, token: 't', backup: false };
+  const input = snapshotInput({ services: [pbs('PBS A', 1, 30 * H, 'web'), pbs('PBS B', 2, 50 * H, 'db'), { name: 'Verify', heartbeat: hb }] });
+  const verify = input.cfg.services[2];
+  record(verify, input.state(verify.id), heartbeatState(hb, { since: now - 26 * H, lastOk: now - 26 * H, lastFail: null }, now), now);
+  const snap = createSnapshot()(input, now);
 
-  const hb = { id: 'restic', every: 24 * H, grace: H, token: 't', backup: true };
-  const input = snapshotInput({ services: [pbs('PBS A', 1, 30 * H, 'web'), { name: 'Restic', heartbeat: hb }] });
-  const restic = input.cfg.services[1];
-  record(restic, input.state(restic.id), heartbeatState(hb, { since: now - 26 * H, lastOk: now - 26 * H, lastFail: null }, now), now);
-  const late = createSnapshot()(input, now);
-  assert.deepEqual(panel(late, 'backups'), { id: 'backups', label: 'Backups', value: '2 overdue', sub: 'Restic, 1 PBS backup', level: 'crit' });
+  assert.deepEqual([snap.backups.overdue, snap.backups.level, snap.backups.oldestName], [3, 'warn', 'db'], 'the second server counts too');
+  assert.deepEqual(panel(snap, 'backups'), { id: 'backups', label: 'Backups', value: '3 overdue', sub: 'Verify, 3 PBS backups', level: 'crit' });
+  assert.deepEqual(snap.backups.rows.map((r) => [r.title, r.state, r.level]), [['Guest backups · main', '1 overdue', 'warn'], ['Guest backups · main', '2 overdue', 'warn'], ['Verify', 'overdue', 'crit']]);
+  assert.deepEqual(alertsOf(snap, 'Verify').map((a) => a.sev), ['crit']);
+  assert.equal(snap.jobs[0].status, 'overdue', 'the service sheet says what the row says');
+});
 
-  const current = build([pbs('PBS A', 0, 20 * H, 'web')], now);
-  assert.deepEqual(panel(current, 'backups'), { id: 'backups', label: 'Backups', value: 'All current', sub: 'oldest backup 20 h · web', level: 'none' });
+test('a widget alert heads the verdict with its service named, but not on its own tile', () => {
+  const now = day(22);
+  const health = (title: string): Alert => ({ sev: 'crit', key: 'health', title, detail: 'critical when below 1' });
+  const snap = build([
+    { name: 'Media server', state: { widget: widget(now, [health('Health is Degraded')]) } },
+    { name: 'Pi-hole', state: { widget: widget(now, [health('Pi-hole is not filtering')]) } }
+  ], now);
+  assert.equal(snap.verdict.title, 'Media server: Health is Degraded', 'equal severity and age: the first raised');
+  assert.equal(tile(snap, 'Media server').line, 'Health is Degraded · critical when below 1');
+});
+
+test('icons: a configured icon that would vanish in one theme takes its measured variant; iconDark wins over it', () => {
+  const now = day(22);
+  const DI = 'https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons@main';
+  const input = snapshotInput({ services: [{ name: 'Git', icon: 'github' }, { name: 'Own', icon: 'github', iconDark: 'github-light' }] });
+  input.cfg.bookmarks.push({ group: 'Links', name: 'GitHub', href: 'https://github.com/', icon: 'github', iconDark: null });
+  input.iconVariants.set(`${DI}/png/github.png`, { icon: `${DI}/svg/github.svg`, iconDark: `${DI}/svg/github-light.svg` });
+  const snap = createSnapshot()(input, now);
+  assert.deepEqual([tile(snap, 'Git').icon, tile(snap, 'Git').iconDark], [`${DI}/svg/github.svg`, `${DI}/svg/github-light.svg`]);
+  assert.deepEqual([tile(snap, 'Own').icon, tile(snap, 'Own').iconDark], [`${DI}/png/github.png`, `${DI}/png/github-light.png`]);
+  assert.deepEqual([snap.bookmarks[0].icon, snap.bookmarks[0].iconDark], [`${DI}/svg/github.svg`, `${DI}/svg/github-light.svg`]);
 });
 
 test('fleet strip: probe failures colour their 30-minute bucket, on the fleet and on the tile', () => {

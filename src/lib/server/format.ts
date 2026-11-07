@@ -1,4 +1,4 @@
-import type { Stat } from '$lib/types';
+import type { Level, Stat } from '$lib/types';
 
 export const GiB = 1024 ** 3;
 export const TiB = 1024 ** 4;
@@ -71,6 +71,12 @@ export function fmtRelative(ts: number | null | undefined, now: number): string 
   if (Math.abs(d) < 60_000) return 'now';
   return d < 0 ? `${fmtDuration(-d)} ago` : `in ${fmtDuration(d)}`;
 }
+
+/** The worst problem among the levels, for a panel or a row: 'none' when nothing is wrong. */
+export const worst = (levels: readonly string[]): Level | 'none' => (levels.includes('crit') ? 'crit' : levels.includes('warn') ? 'warn' : 'none');
+
+/** "1 drive", "3 drives"; `many` for an irregular plural */
+export const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 /**
  * A widget's card from its facts, each a stat and the same as text: the Most used card shows the first two stats,

@@ -94,6 +94,17 @@ test('dashboard-icons: variants judged by colour, whatever they are called', asy
   assert.equal(await icons.find(['nothing']), null);
 });
 
+test('a configured icon gets the variant it needs, measured like an automatic one; one that shows in both themes none', async () => {
+  const { icons } = finder();
+  assert.equal(await icons.variantOf(`${DI}/png/vaultwarden.png`), null, 'no index yet');
+  await icons.refresh();
+  assert.deepEqual(await icons.variantOf(`${DI}/png/vaultwarden.png`), { icon: `${DI}/svg/vaultwarden.svg`, iconDark: `${DI}/svg/vaultwarden-light.svg` });
+  assert.deepEqual(await icons.variantOf(`${SH}/png/lldap.png`), { icon: `${SH}/svg/lldap.svg`, iconDark: `${SH}/svg/lldap-light.svg` });
+  assert.equal(await icons.variantOf(`${DI}/png/proxmox.png`), null, 'dark orange shows in both');
+  assert.equal(await icons.variantOf(`${DI}/png/whats-up-docker.png`), null, 'a PNG can not be measured');
+  assert.equal(await icons.variantOf('/assets/icons/mine.svg'), null, 'a local file is the config\'s own');
+});
+
 test('names match with or without hyphens', async () => {
   const { icons } = finder();
   await icons.refresh();

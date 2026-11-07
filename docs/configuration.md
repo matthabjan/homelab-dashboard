@@ -76,7 +76,7 @@ The System panel shows a Proxmox node when there is a `proxmox` widget, and othe
 | `node` | first online node | Proxmox node to show, for clusters. A widget's own `node:` takes precedence. |
 | `temperature` | `true` | Read CPU and NVMe temperatures from the kernel (`/sys/class/hwmon`). |
 | `storage` | automatic | PVE storage shown on the System panel's *Disk* gauge. By default it is the largest local storage that holds guest disks (`images` / `rootdir` content), otherwise the root filesystem. |
-| `storages` | all | List of PVE storage names to show in the Storage panel. |
+| `storages` | all | List of PVE storage names to show in the Storage panel. A storage left out still warns when the *Disk* gauge shows it and it is over `storageWarnPct`. |
 
 What the local host shows depends on where the dashboard runs:
 
@@ -122,8 +122,8 @@ A value below the minimum is raised to it, and one that isn't a number falls bac
 | `certWarnDays` | `14` | Warn when a certificate expires within this many days. Under 3 days is critical. |
 | `backupMaxAgeHours` | `26` | A guest's last backup older than this is *overdue*. |
 | `offsiteMaxDetachedDays` | `135` | Remind you when a removable PBS datastore hasn't been attached for this long. |
-| `storageAmberPct` | `70` | The storage bar turns amber (in the sheet only; the Storage row stays calm). |
-| `storageWarnPct` | `85` | The storage bar turns red and raises an alert; the Storage row turns amber. |
+| `storageAmberPct` | `70` | The storage bar and the *Disk* gauge turn amber (in the sheet only; the Storage row stays calm). It also colours OpenMediaVault's fullest-disk stat. |
+| `storageWarnPct` | `85` | The storage bar and the *Disk* gauge turn red and raise an alert, once per disk; the Storage row turns amber. |
 | `tempMinC` | `30` | Bottom of the temperature gauge's scale. |
 | `tempWarnC` | `75` | Warn at this CPU temperature; at +10 °C it is critical. NVMe drives warn at 70 °C. |
 | `driveLifeWarnPct` | `10` | Warn when a drive has this much of its rated endurance left (SMART wear). |
@@ -156,7 +156,7 @@ A list of groups. Each group is a list of services. This is the [gethomepage for
 | `href` | Where the service opens. Only services with `href` appear in the launcher. |
 | `description` | The status line when the widget has nothing more specific to show, and *About* in the service's sheet. |
 | `icon` | See [Icons](#icons). Without one, an icon is [picked automatically](#automatic-icons). |
-| `iconDark` | Icon used in dark mode. |
+| `iconDark` | Icon used in dark mode. Without it, an `icon` from selfh.st or dashboard-icons that would barely show in one theme gets its variant there automatically. |
 | `siteMonitor` | URL checked every `intervals.probe` seconds, which gives up/down status, uptime and latency. Any response below 500 counts as up, including the 401 a login page returns. Two failures in a row mark the service down. `https://` URLs also get certificate-expiry checks. `tcp://host:port` only checks that the port accepts a connection, for services without HTTP (SSH, SMB, MQTT, databases); the latency is the time to connect. `probe` is accepted as an alias. |
 | `heartbeat` | A push check for jobs, instead of `siteMonitor`. See [Heartbeats](#heartbeats). |
 | `latencyWarnMs` | The *Slow* limit for this service, overriding `thresholds.latencyWarnMs`, for its status and for the amber half hours in its 24-hour strip and the fleet strip. |
@@ -251,7 +251,7 @@ A local file in `config/icons/` with a matching name takes precedence over the C
 A service without `icon` (in `services.yaml` or as the `dashboard.icon` label) gets one from the [selfh.st](https://selfh.st/icons/) or [dashboard-icons](https://github.com/homarr-labs/dashboard-icons) collection:
 
 - **Matching**, in this order: the service name (`AdGuard Home` → `adguard-home`); for a [labelled container](#services-from-container-labels), its image (`ghcr.io/immich-app/immich-server` → `immich-server`, then `immich`); the widget type (`proxmoxbackupserver` → `proxmox-backup-server`); last the name's leading words (`OPNsense Firewall` → `opnsense`). Names match with or without hyphens (`MusicAssistant` finds `music-assistant`). selfh.st is checked first.
-- **Themes.** The icon itself is used in both themes. Where it would barely show against its background in one theme, such as a near-black icon (GitHub, LLDAP) in dark mode, its light or dark variant replaces it there. An `iconDark` you set yourself wins.
+- **Themes.** The icon itself is used in both themes. Where it would barely show against its background in one theme, such as a near-black icon (GitHub, LLDAP) in dark mode, its light or dark variant replaces it there. The same goes for an `icon` you set by its selfh.st or dashboard-icons name, on services and bookmarks alike. An `iconDark` you set yourself wins.
 - **Updates.** Both indexes are downloaded from jsDelivr once a day and kept in the database. Without jsDelivr, services without `icon` show a monogram, and it retries an hour later.
 - **A wrong match** is fixed by setting `icon`. **Setup** lists every automatic icon.
 

@@ -382,42 +382,58 @@ export interface DnsStats {
   stepMs?: number | null;
 }
 
-export interface BackupStatus {
+/** One PBS server's backups, each group judged against backupMaxAgeHours by the integration. */
+export interface PbsBackups {
+  /** false when no group was judged (no guests in PVE, nothing backed up lately) */
+  known: boolean;
+  /** guests (VMs, containers) judged, how many are overdue, their newest backup (ms) */
+  guests: number;
+  guestOverdue: number;
+  last: number | null;
+  /** host backups (proxmox-backup-client): hostnames, how many are overdue, the newest (ms) */
+  hosts: string[];
+  hostOverdue: number;
+  hostLast: number | null;
+  /** the oldest judged backup and what it is */
+  oldestAge: number | null;
+  oldestName: string | null;
+  /** the datastores read */
+  stores: string[];
+  /** how an overdue backup is raised, so the Backups row is as bad as its alerts */
+  overdueSev: 'crit' | 'warn';
+}
+
+/** A line in the Backups sheet: one PBS server's guest backups, its host backups, or a job. */
+export interface BackupRow {
+  /** the service it opens */
+  id: string;
+  title: string;
+  detail: string;
+  /** the newest run (ms), shown as "last run 5 m ago" */
+  last: number | null;
+  /** jobs: when the next run is expected (ms) */
+  due: number | null;
+  /** "on schedule", "2 overdue", "failed" */
+  state: string;
+  level: Level | 'none';
+  /** PBS rows: the server's name */
+  source: string | null;
+}
+
+/** The Backups sheet: overdue backups (PBS and jobs marked `backup: true`), the oldest backup and the rows. */
+export interface Backups {
   overdue: number;
+  /** as bad as the overdue backups' alerts */
+  level: Level | 'none';
   oldestAge: number | null;
   /** what the oldest backup is: a guest or host on PBS, or a backup job */
-  oldestName?: string | null;
-  known: boolean;
-  /** PBS: guests (VMs, containers) judged, their newest backup (ms), the datastores read */
-  guests?: number;
-  last?: number | null;
-  stores?: string[];
-  /** PBS host backups (proxmox-backup-client): hostnames, the newest (ms), how many of them are overdue */
-  hosts?: string[];
-  hostLast?: number | null;
-  hostOverdue?: number;
+  oldestName: string | null;
+  /** PBS rows first (they run daily, so they change most), then the jobs by when they are due */
+  rows: BackupRow[];
 }
 
 /** What a sheet shows: one level of the sheet stack (the page keeps it in history state). */
 export type SheetRef = { kind: 'service'; id: string } | { kind: 'infra'; tab: 'system' | 'storage' | 'drives' | 'network' } | { kind: 'backups' } | { kind: 'activity' };
-
-/** One PBS server's guest backups, as a row among the jobs in the Backups sheet, and its host backups as another. */
-export interface GuestBackups {
-  /** the PBS service */
-  id: string;
-  name: string;
-  stores: string[];
-  guests: number;
-  /** newest guest backup (ms) */
-  last: number | null;
-  /** overdue guest backups */
-  overdue: number;
-  /** hostnames with host backups; empty when there are none */
-  hosts: string[];
-  /** newest host backup (ms) */
-  hostLast: number | null;
-  hostOverdue: number;
-}
 
 export interface ContainerCounts {
   running: number;
@@ -448,7 +464,7 @@ export interface WidgetResult {
   lan?: NetworkReading | null;
   drives?: Drive[];
   dns?: DnsStats;
-  backups?: BackupStatus;
+  backups?: PbsBackups;
   containers?: ContainerCounts;
   discovered?: Discovered[];
 }
@@ -509,6 +525,8 @@ export interface CheckStatus {
   /** undefined: the line takes the tile's level */
   lineLevel?: Tile['lineLevel'];
   alert?: { sev: 'crit' | 'warn'; title: string; detail: string; ts?: number };
+  /** heartbeats: the short word for the job's state, for the Backups sheet and the service sheet */
+  word?: string;
 }
 
 export interface CertInfo {
@@ -670,6 +688,9 @@ export interface Job {
   state: 'up' | 'down' | 'pending';
   failed: boolean;
   backup: boolean;
+  /** the short word for its state ("on schedule", "overdue", "failed", "waiting for its first run") and its level, from check.ts */
+  status: string;
+  level: Level | 'none';
 }
 
 /** A metric's recent history: equal buckets from `from` to the snapshot's time, null where nothing was recorded. */
@@ -730,10 +751,8 @@ export interface Snapshot {
   lastChange: number | null;
   /** heartbeat services: jobs that report when they ran, with their schedule */
   jobs: Job[];
-  /** guest backups per PBS server, shown with the jobs */
-  guestBackups: GuestBackups[];
-  /** PBS backups and backup heartbeats together; null when there are none */
-  backups: BackupStatus | null;
+  /** the Backups sheet, from backups.ts */
+  backups: Backups;
   attention: AttentionItem[];
   needCount: number;
   /** what Activity lists: the notes (info alerts), then recent events (went down, recovered, backups completed …), newest first */

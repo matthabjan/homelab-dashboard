@@ -2,12 +2,14 @@
 import fs from 'node:fs';
 import { resolveIcon, assetUrl } from './config.ts';
 import { probeStats, uptimeSince, probeBuckets, series, recentEvents, openScores } from './db.ts';
-import { fmtHours, fmtSize } from './format.ts';
+import { fmtHours, fmtSize, plural } from './format.ts';
 import { hostService, hostSource } from './local.ts';
-import { kindOf, status as checkStatus } from './check.ts';
+import { heartbeatStatus, kindOf, status as checkStatus } from './check.ts';
 import { createAttention, type Raised } from './attention.ts';
 import { infrastructure } from './infrastructure.ts';
-import type { BackupStatus, ConfigProblem, Drive, HeartbeatState, Fact, Gauge, Job, Level, NetworkReading, Settings, Severity, Snapshot, Tile, Traffic, Trend } from '$lib/types';
+import { backups as backupsOf } from './backups.ts';
+import { storage as storageOf } from './storage.ts';
+import type { Backups, ConfigProblem, Drive, Fact, Gauge, Job, Level, NetworkReading, Settings, Severity, Snapshot, Tile, Traffic, Trend } from '$lib/types';
 import type { Engine } from './engine.ts';
 
 const RANK: Record<Severity | Level, number> = { crit: 3, warn: 2, info: 1, ok: 0 };
@@ -17,7 +19,7 @@ const H = 3600_000;
 const MIN_SLOW_SAMPLES = 10; // ~5 min of probes before a service can be called slow
 
 /** What the snapshot reads from the engine; the Engine itself satisfies it. */
-export type SnapshotInput = Pick<Engine, 'cfg' | 'state' | 'autoIcons' | 'shared' | 'temps' | 'local'>;
+export type SnapshotInput = Pick<Engine, 'cfg' | 'state' | 'autoIcons' | 'iconVariants' | 'shared' | 'temps' | 'local'>;
 type ProbeSummary = { up24: number | null; p95: number | null; p95h: number | null; n1: number; up7: number | null };
 /** What a builder carries from one snapshot to the next. */
 type Memory = { minute: { ts: number; data: Map<string, unknown> }; attention: ReturnType<typeof createAttention> };
@@ -62,38 +64,6 @@ const trend24 = (mem: Memory, now: number, key: string | undefined, points: numb
 
 const level = (v: number | null | undefined, warn: number, crit: number): Level | 'none' => (v == null ? 'none' : v >= crit ? 'crit' : v >= warn ? 'warn' : 'ok');
 
-/** A heartbeat marked `backup: true`, with its service's name. */
-export interface BackupBeat {
-  name: string;
-  hb: HeartbeatState | null;
-}
-
-/** Every PBS widget's backups as one: overdue counts added up, the oldest the oldest of them; undefined without any. */
-function sumBackups(list: BackupStatus[]): BackupStatus | undefined {
-  const known = list.filter((b) => b.known);
-  if (!known.length) return undefined;
-  const oldest = known.filter((b) => b.oldestAge != null).sort((a, b) => (b.oldestAge as number) - (a.oldestAge as number))[0];
-  return { overdue: known.reduce((n, b) => n + b.overdue, 0), oldestAge: oldest?.oldestAge ?? null, oldestName: oldest?.oldestName ?? null, known: true };
-}
-
-/**
- * PBS backups plus heartbeats marked `backup: true` (restic, borg, Kopia …): overdue counts added up, the oldest age
- * the larger one, named after what it is; a heartbeat that never ran has no age yet.
- */
-export function mergeBackups(pbs: BackupStatus | undefined, beats: BackupBeat[], now: number): BackupStatus | undefined {
-  const known = beats.filter((b) => b.hb && b.hb.state !== 'pending');
-  if (!known.length) return pbs;
-  const ages = known.flatMap((b) => (b.hb?.lastOk != null ? [{ age: now - b.hb.lastOk, name: b.name }] : []));
-  if (pbs?.oldestAge != null) ages.push({ age: pbs.oldestAge, name: pbs.oldestName ?? '' });
-  const oldest = ages.reduce<{ age: number; name: string } | null>((o, a) => (!o || a.age > o.age ? a : o), null);
-  return {
-    overdue: (pbs?.overdue ?? 0) + known.filter((b) => b.hb?.state === 'down').length,
-    oldestAge: oldest?.age ?? null,
-    oldestName: oldest?.name || null,
-    known: true
-  };
-}
-
 /**
  * A drive's row in the Drives panel, and what is wrong with it: each problem is raised for the service that reported
  * the drive, as a predicate of the drive ("WD Red has 8% life left").
@@ -124,6 +94,18 @@ function driveStatus(d: Drive, where: string, th: Settings['thresholds']) {
     row: { name: d.model, group: where, meta: [d.kind, fmtSize(d.size), where].join(' · '), detail: detail || 'no SMART details', status, level, life: d.lifeLeft, lifeLevel, tempC: d.tempC, facts },
     problems
   };
+}
+
+/**
+ * A service's or link's icon in both themes: its own `iconDark`, else the measured variant of its configured icon (one
+ * that would vanish in a theme), else the automatic icon with its variant.
+ */
+function themed(engine: SnapshotInput, name: string, icon: string | null | undefined, iconDark: string | null | undefined, auto?: { icon: string; iconDark: string | null } | null) {
+  const url = resolveIcon(icon ?? auto?.icon, name);
+  if (iconDark) return { icon: url, iconDark: resolveIcon(iconDark, name) };
+  const v = icon ? engine.iconVariants.get(url) : undefined;
+  if (v) return { icon: v.icon, iconDark: v.iconDark };
+  return { icon: url, iconDark: auto?.iconDark ? resolveIcon(auto.iconDark, name) : null };
 }
 
 type Round = ReturnType<Memory['attention']['begin']>;
@@ -174,7 +156,6 @@ function serviceTiles(engine: SnapshotInput, now: number, mem: Memory, round: Ro
       let lineLevel: Tile['lineLevel'] = null;
       if (cs?.line) { line = cs.line; lineLevel = cs.lineLevel !== undefined ? cs.lineLevel : lvl === 'unknown' ? 'muted' : lvl; }
       const auto = s.icon ? null : engine.autoIcons.get(s.id);
-      const iconDark = s.iconDark ?? auto?.iconDark;
 
       const raise = (a: Omit<Raised, 'service' | 'source'>) => round.raise({ ...a, ts: a.ts ?? w?.ts, service: s });
       if (cs?.alert) raise({ ...cs.alert, key: 'check', title: `${s.name} ${cs.alert.title}` });
@@ -211,8 +192,7 @@ function serviceTiles(engine: SnapshotInput, now: number, mem: Memory, round: Ro
         description: s.description,
         href: s.href,
         host,
-        icon: resolveIcon(s.icon ?? auto?.icon, s.name),
-        iconDark: iconDark ? resolveIcon(iconDark, s.name) : null,
+        ...themed(engine, s.name, s.icon, s.iconDark, auto),
         level: lvl,
         status,
         line,
@@ -231,11 +211,16 @@ function serviceTiles(engine: SnapshotInput, now: number, mem: Memory, round: Ro
 }
 
 /** The System panel: the Proxmox node, or the machine the dashboard runs on, plus the kernel's temperatures. */
-function hostPanel(engine: SnapshotInput, now: number, mem: Memory, round: Round): Snapshot['host'] {
+/** The machine on the System panel: the Proxmox node (with its service) when host.source picks it, else the local host. */
+function hostReading(engine: SnapshotInput) {
+  const service = hostSource(engine.cfg) === 'proxmox' ? hostService(engine.cfg) : undefined;
+  return { service, hw: service ? engine.state(service.id).widget?.host : engine.local };
+}
+
+/** The System panel: the host's gauges (the Disk gauge's level from storage.ts) and facts; CPU and NVMe heat raised. */
+function hostPanel(engine: SnapshotInput, { service: hostSvc, hw }: ReturnType<typeof hostReading>, diskLevel: Level | 'none', now: number, mem: Memory, round: Round): Snapshot['host'] {
   const { settings } = engine.cfg;
   const th = settings.thresholds;
-  const hostSvc = hostSource(engine.cfg) === 'proxmox' ? hostService(engine.cfg) : undefined;
-  const hw = hostSvc ? engine.state(hostSvc.id).widget?.host : engine.local;
   // 15-minute buckets: fine enough to scrub through, coarse enough to stay smooth
   const hist = (key: string | undefined) => {
     const t = trend24(mem, now, key, 96);
@@ -249,11 +234,7 @@ function hostPanel(engine: SnapshotInput, now: number, mem: Memory, round: Round
       gauges.push({ key: 'cpu', label: 'CPU', val: hw.cpu == null ? '—' : Math.round(hw.cpu), unit: '%', pct: hw.cpu, level: level(hw.cpu, 75, 90), sub: `${hw.cpus} threads`, ...hist('host.cpu'), max: 100, warn: 75 });
       // a percentage like the other gauges and its history; the amounts are the detail
       gauges.push({ key: 'mem', label: 'Memory', val: Math.round(hw.memPct), unit: '%', pct: hw.memPct, level: level(hw.memPct, 80, 92), sub: `${(hw.mem / 1024 ** 3).toFixed(1)} of ${Math.round(hw.maxmem / 1024 ** 3)} GiB`, ...hist('host.mem'), max: 100, warn: 80 });
-      gauges.push({ key: 'disk', label: 'Disk', val: hw.disk.pct == null ? '—' : Math.round(hw.disk.pct), unit: '%', pct: hw.disk.pct, level: level(hw.disk.pct, th.storageAmberPct, th.storageWarnPct), sub: hw.disk.name, ...hist(hostSvc ? hw.disk.metric : 'host.disk'), max: 100, warn: th.storageAmberPct });
-      // a Proxmox node's disk is also a storage row, which raises this itself; the local host has no other place for it
-      if (!hostSvc && hw.disk.pct != null && hw.disk.pct >= th.storageWarnPct) {
-        round.raise({ sev: 'warn', source: 'host', key: 'local-disk', title: `Disk ${hw.disk.name} is ${Math.round(hw.disk.pct)}% full`, detail: `${hw.node} · ${hw.disk.sub}` });
-      }
+      gauges.push({ key: 'disk', label: 'Disk', val: hw.disk.pct == null ? '—' : Math.round(hw.disk.pct), unit: '%', pct: hw.disk.pct, level: diskLevel, sub: hw.disk.name, ...hist(hostSvc ? hw.disk.metric : 'host.disk'), max: 100, warn: th.storageAmberPct });
     }
     if (temps?.cpu != null) {
       const span = th.tempWarnC + 15 - th.tempMinC;
@@ -279,24 +260,6 @@ function hostPanel(engine: SnapshotInput, now: number, mem: Memory, round: Round
     };
   }
   return host;
-}
-
-/** Storage rows from every widget that reports them; a row over `storageWarnPct` is raised for its service. */
-function storagePanel(engine: SnapshotInput, th: Th, round: Round, now: number, mem: Memory): Snapshot['storage'] {
-  const storage: Snapshot['storage'] = [];
-  for (const s of engine.cfg.services) {
-    const w = engine.state(s.id).widget;
-    // sources follow services.yaml; within one, by name: APIs (cluster/resources) don't keep a stable order,
-    // and an offline row keeps its place instead of jumping to the end
-    for (const x of [...(w?.storage || [])].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))) {
-      // unavailable, detached or of unknown size: a grey bar (last known fill, if any), the widget raises any alert itself
-      if (x.offline || x.pct == null) { storage.push({ name: x.name, group: s.name, pct: x.pct ?? null, level: 'off', sub: x.sub, warn: th.storageAmberPct, trend: trend24(mem, now, x.metric, 48) }); continue; }
-      const lv: Level = x.pct >= th.storageWarnPct ? 'crit' : x.pct >= th.storageAmberPct ? 'warn' : 'ok';
-      storage.push({ name: x.name, group: s.name, pct: x.pct, level: lv, sub: x.sub, warn: th.storageAmberPct, trend: trend24(mem, now, x.metric, 48) });
-      if (x.pct >= th.storageWarnPct) round.raise({ sev: 'warn', service: s, key: `storage-${x.name}`, title: `${x.name} is ${Math.round(x.pct)}% full`, detail: x.sub });
-    }
-  }
-  return storage;
 }
 
 /** The Drives panel: one row per disk (a disk passed through whole is listed once), its problems raised. */
@@ -385,29 +348,29 @@ function fleetStrip(engine: SnapshotInput, tiles: Map<string, Tile>, now: number
   return buckets;
 }
 
-/** Heartbeat services with their schedule: when each last ran and when the next run is due. */
-function jobList(engine: SnapshotInput): Job[] {
+/** Heartbeat services with their schedule: when each last ran, when the next run is due, and its state in short. */
+function jobList(engine: SnapshotInput, now: number): Job[] {
   return engine.cfg.services.flatMap((s) => {
     const hb = s.heartbeat;
     if (!hb) return [];
     const st = engine.state(s.id).heartbeat;
     const last = st?.lastOk ?? null;
+    const { lvl, word } = heartbeatStatus(hb, st, now);
     return [{
       id: s.id, name: s.name, group: s.group, href: s.href ?? null, description: s.description ?? '',
       every: hb.every, grace: hb.grace, lastOk: last, lastFail: st?.lastFail ?? null,
-      due: (last ?? st?.since ?? Date.now()) + hb.every,
-      state: st?.state ?? 'pending', failed: st?.failed ?? false, backup: hb.backup
+      due: (last ?? st?.since ?? now) + hb.every,
+      state: st?.state ?? 'pending', failed: st?.failed ?? false, backup: hb.backup,
+      status: word ?? '', level: lvl === 'unknown' ? 'none' : lvl
     }];
   });
 }
-
-const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 /**
  * The hero's sentence. Healthy: how many services are up, jobs counted apart ("All 11 services up", "5 backup jobs on
  * schedule"). Otherwise: the top attention item, its detail, and the way to the service.
  */
-function verdictOf(engine: SnapshotInput, all: Tile[], jobs: Job[], backups: BackupStatus | null, att: ReturnType<Round['close']>): Snapshot['verdict'] {
+function verdictOf(engine: SnapshotInput, all: Tile[], jobs: Job[], backups: Backups, att: ReturnType<Round['close']>): Snapshot['verdict'] {
   const th = engine.cfg.settings.thresholds;
   const probed = all.filter((t) => t.level !== 'unknown');
   const services = probed.filter((t) => t.check !== 'heartbeat');
@@ -428,7 +391,8 @@ function verdictOf(engine: SnapshotInput, all: Tile[], jobs: Job[], backups: Bac
     if (services.length === 1 && servicesUp === 1) title = `${services[0].name} is up`;
     else if (services.length) title = servicesUp === services.length ? `All ${services.length} services up` : `${servicesUp} of ${services.length} services up`;
     if (jobs.length) subParts.push(onSchedule === jobs.length ? `${plural(jobs.length, jobWord)} on schedule` : `${onSchedule} of ${plural(jobs.length, jobWord)} on schedule`);
-    if (backups?.known && !jobs.length) subParts.push(backups.overdue ? `${plural(backups.overdue, 'backup')} overdue` : 'backups current');
+    // an overdue backup raises an alert, so here they are current
+    if (backups.rows.length && !jobs.length) subParts.push('backups current');
     if (certWarn) subParts.push(`${plural(certWarn, 'certificate')} expiring`);
   }
   return { ...att.headline, title, sub: subParts.join(' · '), action };
@@ -453,8 +417,12 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
   const round = mem.attention.begin(now);
   configAlerts(engine, round);
   const tiles = serviceTiles(engine, now, mem, round);
-  const host = hostPanel(engine, now, mem, round);
-  const storage = storagePanel(engine, th, round, now, mem);
+  const reading = hostReading(engine);
+  const reports = engine.cfg.services.flatMap((s) => { const rows = engine.state(s.id).widget?.storage; return rows?.length ? [{ service: s, rows }] : []; });
+  const disks = storageOf(reports, reading.hw ? { service: reading.service, node: reading.hw.node, disk: reading.hw.disk } : null, th, (m) => trend24(mem, now, m, 48));
+  const host = hostPanel(engine, reading, disks.gaugeLevel, now, mem, round);
+  for (const a of disks.raised) round.raise(a);
+  const storage = disks.rows;
   const drives = drivesPanel(engine, th, round);
 
   const events = recentEvents(now - 24 * H, 20).map((e) => ({ ...e, href: (e.sid && engine.cfg.services.find((s) => s.id === e.sid)?.href) ?? null }));
@@ -466,14 +434,11 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
   const buckets = fleetStrip(engine, tiles, now, mem);
   const ups = all.map((t) => t.uptime24).filter((x) => x != null);
   const fleetAvail = ups.length ? ups.reduce((a, b) => a + b, 0) / ups.length : null;
-  const jobs = jobList(engine);
-  // every PBS widget, and the heartbeats marked `backup: true`
-  const pbs = sumBackups(widgets.flatMap(({ w }) => (w.backups ? [w.backups] : [])));
-  const backups = mergeBackups(pbs, engine.cfg.services.flatMap((s) => (s.heartbeat?.backup ? [{ name: s.name, hb: engine.state(s.id).heartbeat ?? null }] : [])), now) ?? null;
+  const jobs = jobList(engine, now);
+  const { sheet: backups, panel: backupsPanel } = backupsOf(widgets.flatMap(({ s, w }) => (w.backups ? [{ id: s.id, name: s.name, backups: w.backups }] : [])), jobs, now);
   const verdict = verdictOf(engine, all, jobs, backups, att);
   const mostUsed = mostUsedRow(all, settings, now);
 
-  const parts = { host, storage, drives, network, jobs, backups };
   return {
     generatedAt: now,
     demo: engine.cfg.demo,
@@ -487,12 +452,6 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
     verdict,
     lastChange: events[0]?.ts ?? null,
     jobs,
-    guestBackups: widgets.flatMap(({ s, w }) => {
-      const b = w.backups;
-      if (!b?.known) return [];
-      const hostOverdue = b.hostOverdue ?? 0;
-      return [{ id: s.id, name: s.name, stores: b.stores ?? [], guests: b.guests ?? 0, last: b.last ?? null, overdue: b.overdue - hostOverdue, hosts: b.hosts ?? [], hostLast: b.hostLast ?? null, hostOverdue }];
-    }),
     backups,
     attention: att.items,
     needCount: att.needCount,
@@ -503,13 +462,13 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
     storage,
     drives,
     network,
-    infrastructure: infrastructure(parts, pbs?.overdue ?? 0, now),
+    infrastructure: infrastructure({ host, drives, network }, { storage: disks.panel, backups: backupsPanel }),
     mostUsed,
     groups: groups.map((g) => {
       const ts = g.services.map((s) => (tiles.get(s.id) as Tile)); // every service got a tile above
       const known = ts.filter((t) => t.level !== 'unknown');
-      return { name: g.name, summary: `${known.filter((t) => t.status !== 'Down').length} / ${known.length} up`, services: ts };
+      return { name: g.name, summary: `${known.filter((t) => t.status !== 'Down').length} of ${known.length} up`, services: ts };
     }),
-    bookmarks: bookmarks.map((b) => ({ ...b, icon: resolveIcon(b.icon, b.name), iconDark: b.iconDark ? resolveIcon(b.iconDark, b.name) : null }))
+    bookmarks: bookmarks.map((b) => ({ ...b, ...themed(engine, b.name, b.icon, b.iconDark) }))
   };
 }

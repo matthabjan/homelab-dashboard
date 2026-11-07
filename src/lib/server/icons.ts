@@ -2,7 +2,8 @@
 // name's leading words are looked up in the selfh.st and dashboard-icons indexes (refreshed daily, kept in kv). The
 // icon itself is used in both themes; only when it would vanish in one, a variant takes its place there: the light one
 // in dark mode for a nearly black icon, the dark one in light mode for a nearly white icon. Variants are judged by
-// their colours, not their names: in dashboard-icons `lldap-dark` is the light one, `proxmox-light` too.
+// their colours, not their names: in dashboard-icons `lldap-dark` is the light one, `proxmox-light` too. An icon set in
+// services.yaml or bookmarks.yaml by its index name gets the same check (`variantOf`) unless it names `iconDark`.
 import { request } from './http.ts';
 import { CDN_DASHBOARD as DI, CDN_SELFHST as SH, slug } from './config.ts';
 import type { Kv, Transport } from '$lib/types';
@@ -176,8 +177,27 @@ export function createIconFinder({ kv, transport = request, now = Date.now }: { 
     return pick(icon, variants.map((v) => `${DI}/svg/${v}.svg`));
   }
 
+  /**
+   * A configured icon (`icon: github`, `icon: sh-traefik`), resolved to its CDN URL, measured like an automatic one: the
+   * variant pair when it would vanish in one theme, else null (it shows in both, or isn't in an index as an SVG).
+   */
+  async function variantOf(url: string): Promise<Found | null> {
+    const m = url.match(/\/(?:svg|png|webp)\/([^/]+)\.(?:svg|png|webp)$/);
+    if (!m || !index) return null;
+    const name = m[1];
+    let r: Found | null = null;
+    if (url.startsWith(`${SH}/`) && index.sh[name]?.[0] === 'svg') {
+      const [, light, dark] = index.sh[name];
+      r = await pick(`${SH}/svg/${name}.svg`, [], { light: light ? `${SH}/svg/${name}-light.svg` : null, dark: dark ? `${SH}/svg/${name}-dark.svg` : null });
+    } else if (url.startsWith(`${DI}/`) && index.di[name]?.[0] === 'svg') {
+      r = await pick(`${DI}/svg/${name}.svg`, index.di[name].slice(1).map((v) => `${DI}/svg/${v}.svg`));
+    }
+    return r?.iconDark ? r : null;
+  }
+
   return {
     refresh,
+    variantOf,
     /** First candidate either collection has; selfh.st first, it has light variants for most icons. */
     find(candidates: string[]) {
       const key = candidates.join(' ');
