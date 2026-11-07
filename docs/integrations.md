@@ -22,6 +22,7 @@ A widget adds live data to a service: its status line and stats, rows of the inf
 | [`pihole`](#pi-hole) | Pi-hole | App password (v6), API token (v5) | ❌ |
 | [`portainer`](#portainer) | Portainer | API key | ✅ Business Edition only |
 | [`docker`](#docker) | Docker Engine | none (socket proxy) | ✅ the proxy's allowlist |
+| [`whatsupdocker`](#whats-up-docker) | What's Up Docker | Basic auth or none | ❌ |
 | [`fritzbox`](#fritzbox) | FRITZ!Box | none (UPnP) | n/a |
 | [`customapi`](#custom-api) | any JSON API | headers, Basic auth or none | depends on the API |
 
@@ -113,7 +114,7 @@ proxmox-backup-manager acl update /system/disks Audit --auth-id 'dashboard@pbs!d
 
 ## OPNsense
 
-Provides **WAN traffic** for the Network panel, and firewall CPU in its status line.
+Provides **WAN traffic** for the Network panel and firewall CPU in its status line. With the matching privileges it also reports **gateways**, **services** and **firmware updates**.
 
 ```yaml
 widget:
@@ -126,9 +127,30 @@ widget:
 
 `key` and `secret` are accepted in place of `username` and `password`.
 
-**Account.** Create a dedicated user who is **not** in the admin group. Grant only the privileges for **Diagnostics: Activity** and the **traffic** API (check *Effective Privileges*), then create an API key for that user.
+**Account.** Create a dedicated user who is **not** in the admin group, then an API key for that user. Grant only what you want the widget to read, and check *Effective Privileges* for the API paths:
+
+| Reads | API path | Privilege |
+|---|---|---|
+| CPU (required) | `/api/diagnostics/activity/*` | Diagnostics: Activity |
+| WAN traffic (required) | `/api/diagnostics/traffic/*` | Diagnostics: Traffic |
+| Gateways (optional) | `/api/routes/gateway/*` | the one listing that path, e.g. System: Gateways |
+| Services (optional) | `/api/core/service/*` | Status: Services |
+| Firmware (optional) | `/api/core/firmware/*` | System: Firmware |
+
+Leave out an optional privilege and the widget skips that part without an error. OPNsense has no read-only variant of these privileges: **Status: Services** also allows starting and stopping services, and **System: Firmware** allows installing updates and rebooting. Grant them only if you are comfortable with that for the key.
 
 Traffic rates come from the difference between two polls, so the first value appears one widget interval after startup (*Collecting traffic…*).
+
+The firmware status is the result of OPNsense's last update check, read every 10 minutes; the widget never starts a check itself. Run one with **Check for updates** under System → Firmware → Status; OPNsense's own dashboard also checks when its firmware widget is shown.
+
+**Alerts**
+
+| Severity | When |
+|---|---|
+| critical | A gateway is down. It leads the status line. A gateway you marked down by hand is shown but not raised. |
+| warning | A gateway has packet loss or high latency, by the thresholds set on the gateway in OPNsense. |
+| warning | An enabled service isn't running. |
+| info | A firmware update is pending ("OPNsense 25.7.5 available", with the package count and whether it needs a reboot), or a new major release can be installed. |
 
 ---
 
@@ -247,6 +269,32 @@ widget:
 **Counting.** A label-discovered service appears once, however many widgets see its container.
 
 **Alerts:** as for [Portainer](#portainer).
+
+---
+
+## What's Up Docker
+
+Provides **pending image updates** for the containers [What's Up Docker](https://getwud.github.io/wud/) (WUD) watches: one note in Activity per container with a newer image, like the apt updates of Proxmox and OpenMediaVault. The status line shows how many updates are pending and how many containers WUD watches.
+
+```yaml
+widget:
+  type: whatsupdocker
+  url: https://wud.home.arpa
+  username: dashboard            # WUD_AUTH_BASIC_<NAME>_USER; leave both out if WUD has no auth
+  password: ${WUD_PASSWORD}      # the plain password, not WUD's hash
+```
+
+**Account.** WUD's basic auth has no roles, and its API can trigger updates where a trigger is configured. Add a separate user for the dashboard (`WUD_AUTH_BASIC_DASHBOARD_USER` / `_HASH`) so it can be removed on its own.
+
+The widget reads what WUD found on its last check (`WUD_WATCHER_<NAME>_CRON`, hourly by default); it doesn't make WUD check the registries. With several watchers (Docker hosts), each container's note names it by container name.
+
+**Notes**
+
+| Severity | When |
+|---|---|
+| info | A container has a newer image: a newer tag ("29.0.1 → 29.0.3 (patch)") or a new image for the same tag ("new image for :latest"). It goes away once the container runs the new image. |
+
+Containers whose registry lookup failed are counted as *lookup errors* in the stats; WUD's own UI shows why.
 
 ---
 

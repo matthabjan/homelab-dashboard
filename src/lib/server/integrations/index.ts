@@ -10,9 +10,10 @@ import * as openmediavault from './openmediavault.ts';
 import * as docker from './docker.ts';
 import * as pihole from './pihole.ts';
 import * as customapi from './customapi.ts';
+import * as whatsupdocker from './whatsupdocker.ts';
 import type { Context, Integration, Kv, RequestOptions, Settings, Shared, Transport } from '$lib/types';
 
-export const INTEGRATIONS: Record<string, Integration> = { proxmox, proxmoxbackupserver: pbs, opnsense, fritzbox, adguard, portainer, openmediavault, docker, pihole, customapi };
+export const INTEGRATIONS: Record<string, Integration> = { proxmox, proxmoxbackupserver: pbs, opnsense, fritzbox, adguard, portainer, openmediavault, docker, pihole, customapi, whatsupdocker };
 export const ORDER = ['proxmox']; // runs first: provides guest ids for backup freshness
 
 /**

@@ -25,6 +25,7 @@ const WIDGETS: Record<string, WidgetOptions> = {
   openmediavault: { url: 'https://nas.test', username: 'admin', password: 's' },
   docker: { url: 'http://socket-proxy.test:2375' },
   pihole: { url: 'https://pihole.test', key: 's' },
+  whatsupdocker: { url: 'https://wud.test', username: 'u', password: 's' },
   customapi: {
     url: 'https://media.test/api/status',
     mappings: [
@@ -367,15 +368,41 @@ test('OPNsense: WAN rates are text, rounded from 100 Mbit/s up', async () => {
   const poll = (now: number) => INTEGRATIONS.opnsense.collect({ type: 'opnsense', ...WIDGETS.opnsense },
     createContext({ transport: fixtureTransport(table, { scenario: 'calm', now }), kv: memoryKv(), settings: DEFAULT_SETTINGS, now, state }));
   const t0 = Date.now();
-  assert.equal((await poll(t0)).line, 'Collecting traffic…');
+  assert.equal((await poll(t0)).line, 'Collecting traffic… · CPU 4%');
   const res = await poll(t0 + 60_000);
-  assert.deepEqual(res.stats.slice(0, 2).map((s) => s.v), ['160', '1.0']);
-  assert.equal(res.line, 'WAN 160 / 1.0 Mbit/s');
+  assert.deepEqual(res.stats.slice(0, 2).map((s) => s.v), ['160 / 1.0', '4%']);
+  assert.equal(res.line, 'WAN 160 / 1.0 Mbit/s · CPU 4%');
   // a reboot resets the counters: no rate for that sample rather than a negative one
   const reset: Fixtures = { ...FIXTURES.opnsense, 'GET /api/diagnostics/traffic/interface': () => ({ interfaces: { wan: { 'bytes received': String(t0 * 40_000), 'bytes transmitted': '0' } } }) };
   const after = await INTEGRATIONS.opnsense.collect({ type: 'opnsense', ...WIDGETS.opnsense },
     createContext({ transport: fixtureTransport(reset, { scenario: 'calm', now: t0 + 120_000 }), kv: memoryKv(), settings: DEFAULT_SETTINGS, now: t0 + 120_000, state }));
   assert.equal(after.network?.up, null);
+});
+
+test('OPNsense: a gateway down leads, loss warns; stopped services warn; a pending update is a note', async () => {
+  const run = (table: Fixtures, scenario = 'issues') => INTEGRATIONS.opnsense.collect({ type: 'opnsense', ...WIDGETS.opnsense },
+    createContext({ transport: fixtureTransport(table, { scenario }), kv: memoryKv(), settings: DEFAULT_SETTINGS, now: Date.now() }));
+  const issues = await run(FIXTURES.opnsense);
+  assert.deepEqual(issues.alerts.map((a) => [a.sev, a.key, a.title, a.detail]), [
+    ['warn', 'gateway-LTE_BACKUP', 'Gateway LTE_BACKUP: packet loss', '10.64.64.1 · 61.4 ms · 22.0 % loss'],
+    ['info', 'updates', 'OPNsense 25.7.5 available', 'installed 25.7.4 · 5 packages · needs a reboot']
+  ], 'a locked service that reads stopped (pf: nocheck) is not raised');
+  assert.deepEqual(issues.stats.slice(2).map((s) => [s.k, s.v, s.level ?? null]),
+    [['WAN_DHCP', '8.2 ms · 0.0 % loss', null], ['LTE_BACKUP', 'packetloss', 'warn'], ['version', '25.7.4', null], ['updates', '5', null]]);
+
+  const broken: Fixtures = {
+    ...FIXTURES.opnsense,
+    'GET /api/routes/gateway/status': () => ({ items: [{ name: 'WAN_DHCP', address: '100.64.0.1', status: 'down', status_translated: 'Offline', delay: '~', loss: '100.0 %' }] }),
+    'GET /api/core/service/search': () => ({ rows: [{ id: 'unbound', name: 'unbound', description: 'Unbound DNS', running: 0, locked: 0 }, { id: 'ntpd', name: 'ntpd', running: 1, locked: 0 }] })
+  };
+  const res = await run(broken, 'calm');
+  assert.deepEqual(res.alerts.map((a) => [a.sev, a.title, a.detail]), [['crit', 'Gateway WAN_DHCP is down', '100.64.0.1 · 100.0 % loss'], ['warn', 'Service Unbound DNS stopped', 'OPNsense reports unbound as not running']]);
+  assert.equal(res.line, 'Gateway WAN_DHCP down · 1 service stopped');
+
+  // a key with only the traffic privileges: no gateways, services or firmware, no error
+  const minimal: Fixtures = { 'GET /api/diagnostics/activity/getActivity': FIXTURES.opnsense['GET /api/diagnostics/activity/getActivity'], 'GET /api/diagnostics/traffic/interface': FIXTURES.opnsense['GET /api/diagnostics/traffic/interface'] };
+  const bare = await run(minimal);
+  assert.deepEqual([bare.alerts, bare.stats.map((s) => s.k)], [[], ['WAN ↓ / ↑ Mbit/s', 'CPU']]);
 });
 
 // The Most used card shows a widget's first two stats, the service card its line: both say the same two facts.
@@ -401,6 +428,28 @@ test('cards: containers show running / total, then failed or unhealthy ones if a
   assert.deepEqual(await card('portainer', 'calm'), { line: '25 / 26 running', stats: [['running', '25 / 26', null]] });
   assert.deepEqual(await card('portainer', 'issues'), { line: '23 / 26 running · 2 failed', stats: [['running', '23 / 26', null], ['failed', '2', 'crit']] });
   assert.deepEqual(await card('docker', 'issues'), { line: '6 / 6 running · 1 unhealthy', stats: [['running', '6 / 6', null], ['unhealthy', '1', 'warn']] });
+});
+
+test('cards: WUD shows pending updates and the containers watched', async () => {
+  assert.deepEqual(await card('whatsupdocker', 'calm'), { line: 'Up to date · 12 watched', stats: [['updates', '0', null], ['watched', '12', null]] });
+  assert.deepEqual(await card('whatsupdocker', 'issues'), { line: '3 updates available · 12 watched', stats: [['updates', '3', null], ['watched', '12', null]] });
+});
+
+test('WUD: one note per container with a newer image, saying what changed; basic auth only when configured', async () => {
+  const headers: Record<string, string>[] = [];
+  const fixtures = fixtureTransport(FIXTURES.whatsupdocker, { scenario: 'issues' });
+  const transport: Transport = (url, opts) => { headers.push(opts?.headers ?? {}); return fixtures(url, opts); };
+  const run = (w: WidgetOptions) => INTEGRATIONS.whatsupdocker.collect({ type: 'whatsupdocker', ...w }, createContext({ transport, kv: memoryKv(), settings: DEFAULT_SETTINGS, now: Date.now() }));
+  const res = await run(WIDGETS.whatsupdocker);
+  assert.deepEqual(res.alerts.map((a) => [a.sev, a.key, a.title, a.detail]), [
+    ['info', 'update-local-immich-server', 'Update available for immich-server', 'v1.118.2 → v1.119.0 (minor)'],
+    ['info', 'update-local-nextcloud', 'Update available for nextcloud', '29.0.1 → 29.0.3 (patch)'],
+    ['info', 'update-local-vaultwarden', 'Update available for vaultwarden', 'new image for :latest']
+  ]);
+  assert.deepEqual(res.stats.at(-1), { k: 'lookup errors', v: '1' }, 'counted, the registry text is not shown');
+  assert.match(headers[0].Authorization, /^Basic /);
+  await run({ url: 'https://wud.test' });
+  assert.equal(headers[1].Authorization, undefined);
 });
 
 test('cards: customapi shows the first two mappings', async () => {

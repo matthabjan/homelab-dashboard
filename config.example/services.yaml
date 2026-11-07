@@ -113,6 +113,18 @@
         description: MQTT broker
         siteMonitor: tcp://mqtt.home.arpa:1883
 
+- Management:               # Traefik joins this group from its container labels
+    - What's Up Docker:       # wins over the container's labels: same group and name
+        icon: whats-up-docker
+        href: https://wud.home.arpa
+        description: Image updates for the Portainer host
+        siteMonitor: https://wud.home.arpa
+        widget:
+          type: whatsupdocker
+          url: https://wud.home.arpa
+          username: dashboard               # leave both out if WUD has no auth
+          password: ${WUD_PASSWORD}
+
 - Entertainment:
     - MusicAssistant:          # automatic too: matches music-assistant
         href: https://music.home.arpa
