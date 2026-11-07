@@ -28,6 +28,7 @@ src/
 ├── lib/
 │   ├── components/              Svelte UI pieces (Sheet, Infrastructure, Palette, charts)
 │   ├── types.d.ts               shared types (config, widget results, snapshot)
+│   ├── ago.ts                   times as words ("5 m", "in 6 d", "valid 74 d"), for the page and the server
 │   └── server/
 │       ├── engine.ts            rounds, state, config reload, SSE updates
 │       ├── sources.ts, demo.ts  where readings come from: live, or the demo
@@ -38,7 +39,7 @@ src/
 │       ├── snapshot.ts          state + history → page JSON (status rules live here)
 │       ├── infrastructure.ts    the infrastructure card's rows and tabs: figure, context, level
 │       ├── attention.ts         alerts → attention list, feed, headline, each service's worst alert
-│       ├── format.ts            numbers, ages and card() for stats and status lines
+│       ├── format.ts            numbers, ages, plural() and card() for stats and status lines
 │       ├── icons.ts             automatic icons from the selfh.st and dashboard-icons indexes
 │       ├── local.ts             the local host's vitals from /proc and statfs
 │       ├── http.ts              transport (undici), probes, certificate checks
