@@ -265,6 +265,18 @@ test('a widget alert heads the verdict with its service named, but not on its ow
   assert.equal(tile(snap, 'Media server').line, 'Health is Degraded · critical when below 1');
 });
 
+test('icons: a configured icon that would vanish in one theme takes its measured variant; iconDark wins over it', () => {
+  const now = day(22);
+  const DI = 'https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons@main';
+  const input = snapshotInput({ services: [{ name: 'Git', icon: 'github' }, { name: 'Own', icon: 'github', iconDark: 'github-light' }] });
+  input.cfg.bookmarks.push({ group: 'Links', name: 'GitHub', href: 'https://github.com/', icon: 'github', iconDark: null });
+  input.iconVariants.set(`${DI}/png/github.png`, { icon: `${DI}/svg/github.svg`, iconDark: `${DI}/svg/github-light.svg` });
+  const snap = createSnapshot()(input, now);
+  assert.deepEqual([tile(snap, 'Git').icon, tile(snap, 'Git').iconDark], [`${DI}/svg/github.svg`, `${DI}/svg/github-light.svg`]);
+  assert.deepEqual([tile(snap, 'Own').icon, tile(snap, 'Own').iconDark], [`${DI}/png/github.png`, `${DI}/png/github-light.png`]);
+  assert.deepEqual([snap.bookmarks[0].icon, snap.bookmarks[0].iconDark], [`${DI}/svg/github.svg`, `${DI}/svg/github-light.svg`]);
+});
+
 test('fleet strip: probe failures colour their 30-minute bucket, on the fleet and on the tile', () => {
   const now = day(99); // later than the tests above: probeBuckets reads every row from the window start on
   // bucket 45 of 48: both probes failed; bucket 47 (the last): fine

@@ -265,7 +265,7 @@
 
   /* services: one row per service, check and widget side by side */
   .cols, .row { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1.2fr) minmax(0, 1.65fr); gap: 16px; }
-  .cols { font-size: 11px; font-weight: 500; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); padding: 4px 0 0; }
+  .cols { font-size: 13px; font-weight: 500; color: var(--muted); padding: 4px 0 0; }
   .rows { list-style: none; margin: 0; padding: 0; }
   .row { padding: 10px 0; border-top: 1px solid var(--line); align-items: start; }
   .svc { display: flex; gap: 10px; align-items: flex-start; min-width: 0; }
@@ -281,14 +281,15 @@
   .err { color: color-mix(in srgb, var(--lv) 80%, var(--text)); }
   .auto { display: inline-block; font-family: 'Geist', system-ui, sans-serif; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding: 0 5px; border-radius: 4px; background: var(--surface-3); color: var(--text); }
   .sep { padding: 0 0.5ch; color: var(--muted); }
-  .docs { color: var(--acc); text-decoration: underline; text-underline-offset: 2px; text-decoration-thickness: 1px; }
+  /* the widget type reads as text; it still opens its docs, underlined on hover */
+  .docs { font-family: 'Geist', system-ui, sans-serif; color: var(--text); text-decoration: none; text-underline-offset: 2px; }
+  .docs:hover { text-decoration: underline; }
 
   /* settings */
   table { width: 100%; border-collapse: collapse; }
   .kv th, .kv td { text-align: left; vertical-align: top; padding: 6px 12px 6px 0; border-top: 1px solid var(--line); font-size: 12px; overflow-wrap: anywhere; }
   .kv th { width: 55%; color: var(--muted); font-weight: 400; }
-  .kv.changed { max-width: 640px; }
-  .kv.changed th { color: var(--text); }
+  .kv.changed th { width: 30%; color: var(--text); }
   .kv caption { text-align: left; font-size: 12px; font-weight: 600; padding-bottom: 6px; }
   .kvs { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px 32px; align-items: start; margin-top: 12px; }
   .is-changed th { color: var(--text); }

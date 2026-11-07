@@ -37,6 +37,7 @@ export function snapshotInput({ services = [], cfg, settings = DEFAULT_SETTINGS,
       return st;
     },
     autoIcons: new Map(),
+    iconVariants: new Map(),
     shared: {},
     temps,
     local

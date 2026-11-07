@@ -2,7 +2,7 @@
 // keeps runtime state, writes history and pushes snapshots to SSE clients.
 import fs from 'node:fs';
 import { EventEmitter } from 'node:events';
-import { CONFIG_DIR, loadConfig, withDiscovered } from './config.ts';
+import { CONFIG_DIR, loadConfig, resolveIcon, withDiscovered } from './config.ts';
 import { openDb, insertMetric, insertEvent, prune, kvGet, kvSet } from './db.ts';
 import { reasonText } from './http.ts';
 import { hostSource, type LocalState } from './local.ts';
@@ -47,6 +47,8 @@ export class Engine extends EventEmitter {
   heartbeatLimit = createLimiter();
   /** service id → icon found for a service without `icon` */
   autoIcons = new Map<string, { icon: string; iconDark: string | null }>();
+  /** a configured icon's URL (no `iconDark` given) → the pair to use when it would vanish in one theme */
+  iconVariants = new Map<string, { icon: string; iconDark: string }>();
   buildSnapshot = createSnapshot();
   snapshot: Snapshot | null = null;
   started = false;
@@ -267,17 +269,28 @@ export class Engine extends EventEmitter {
     this.round('icons');
   }
 
-  /** Look up icons for services without `icon` (by name, container image, widget type); publishes when they changed. */
+  /**
+   * Look up icons for services without `icon` (by name, container image, widget type), and a theme variant for icons
+   * set by their index name without `iconDark` (services and links); publishes when either changed.
+   */
   async findIcons() {
     await this.icons.refresh();
     const found = new Map();
+    const variants = new Map<string, { icon: string; iconDark: string }>();
     for (const s of this.cfg.services) {
       if (s.icon) continue;
       const f = await this.icons.find(iconCandidates(s.name, s.image, s.widget?.type));
       if (f) found.set(s.id, f);
     }
-    if (JSON.stringify([...found]) === JSON.stringify([...this.autoIcons])) return;
+    for (const x of [...this.cfg.services, ...this.cfg.bookmarks]) {
+      if (!x.icon || x.iconDark) continue;
+      const url = resolveIcon(x.icon, x.name);
+      const v = await this.icons.variantOf(url);
+      if (v?.iconDark) variants.set(url, { icon: v.icon, iconDark: v.iconDark });
+    }
+    if (JSON.stringify([...found, ...variants]) === JSON.stringify([...this.autoIcons, ...this.iconVariants])) return;
     this.autoIcons = found;
+    this.iconVariants = variants;
     this.publish();
   }
 

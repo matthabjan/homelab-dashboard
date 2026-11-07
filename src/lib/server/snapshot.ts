@@ -17,7 +17,7 @@ const H = 3600_000;
 const MIN_SLOW_SAMPLES = 10; // ~5 min of probes before a service can be called slow
 
 /** What the snapshot reads from the engine; the Engine itself satisfies it. */
-export type SnapshotInput = Pick<Engine, 'cfg' | 'state' | 'autoIcons' | 'shared' | 'temps' | 'local'>;
+export type SnapshotInput = Pick<Engine, 'cfg' | 'state' | 'autoIcons' | 'iconVariants' | 'shared' | 'temps' | 'local'>;
 type ProbeSummary = { up24: number | null; p95: number | null; p95h: number | null; n1: number; up7: number | null };
 /** What a builder carries from one snapshot to the next. */
 type Memory = { minute: { ts: number; data: Map<string, unknown> }; attention: ReturnType<typeof createAttention> };
@@ -126,6 +126,18 @@ function driveStatus(d: Drive, where: string, th: Settings['thresholds']) {
   };
 }
 
+/**
+ * A service's or link's icon in both themes: its own `iconDark`, else the measured variant of its configured icon (one
+ * that would vanish in a theme), else the automatic icon with its variant.
+ */
+function themed(engine: SnapshotInput, name: string, icon: string | null | undefined, iconDark: string | null | undefined, auto?: { icon: string; iconDark: string | null } | null) {
+  const url = resolveIcon(icon ?? auto?.icon, name);
+  if (iconDark) return { icon: url, iconDark: resolveIcon(iconDark, name) };
+  const v = icon ? engine.iconVariants.get(url) : undefined;
+  if (v) return { icon: v.icon, iconDark: v.iconDark };
+  return { icon: url, iconDark: auto?.iconDark ? resolveIcon(auto.iconDark, name) : null };
+}
+
 type Round = ReturnType<Memory['attention']['begin']>;
 type Th = Settings['thresholds'];
 /** Every service that has polled its widget at least once, with that result. */
@@ -174,7 +186,6 @@ function serviceTiles(engine: SnapshotInput, now: number, mem: Memory, round: Ro
       let lineLevel: Tile['lineLevel'] = null;
       if (cs?.line) { line = cs.line; lineLevel = cs.lineLevel !== undefined ? cs.lineLevel : lvl === 'unknown' ? 'muted' : lvl; }
       const auto = s.icon ? null : engine.autoIcons.get(s.id);
-      const iconDark = s.iconDark ?? auto?.iconDark;
 
       const raise = (a: Omit<Raised, 'service' | 'source'>) => round.raise({ ...a, ts: a.ts ?? w?.ts, service: s });
       if (cs?.alert) raise({ ...cs.alert, key: 'check', title: `${s.name} ${cs.alert.title}` });
@@ -211,8 +222,7 @@ function serviceTiles(engine: SnapshotInput, now: number, mem: Memory, round: Ro
         description: s.description,
         href: s.href,
         host,
-        icon: resolveIcon(s.icon ?? auto?.icon, s.name),
-        iconDark: iconDark ? resolveIcon(iconDark, s.name) : null,
+        ...themed(engine, s.name, s.icon, s.iconDark, auto),
         level: lvl,
         status,
         line,
@@ -506,8 +516,8 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
     groups: groups.map((g) => {
       const ts = g.services.map((s) => (tiles.get(s.id) as Tile)); // every service got a tile above
       const known = ts.filter((t) => t.level !== 'unknown');
-      return { name: g.name, summary: `${known.filter((t) => t.status !== 'Down').length} / ${known.length} up`, services: ts };
+      return { name: g.name, summary: `${known.filter((t) => t.status !== 'Down').length} of ${known.length} up`, services: ts };
     }),
-    bookmarks: bookmarks.map((b) => ({ ...b, icon: resolveIcon(b.icon, b.name), iconDark: b.iconDark ? resolveIcon(b.iconDark, b.name) : null }))
+    bookmarks: bookmarks.map((b) => ({ ...b, ...themed(engine, b.name, b.icon, b.iconDark) }))
   };
 }

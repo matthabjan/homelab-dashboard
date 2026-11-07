@@ -254,7 +254,7 @@
   <li class="ev lv-{a.sev}">
     <span class="ev-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={ICONS[a.sev] ?? ICONS.info} /></svg></span>
     <span class="txt"><span class="t">{a.title}</span>{#if a.detail}<span class="d muted">{a.detail}</span>{/if}</span>
-    <span class="mono muted small when">{ago(a.ts, now)}</span>
+    <span class="num muted small when">{ago(a.ts, now)}</span>
   </li>
 {/snippet}
 
@@ -342,14 +342,15 @@
         </div>
       {/if}
 
-      {#if snap.mostUsed.length}
+      <!-- while something needs attention the hero holds only that; the launcher stays under Services -->
+      {#if snap.mostUsed.length && !snap.needCount}
         <div class="most">
           <h2 class="k">Most used</h2>
           <div class="apps">
             {#each snap.mostUsed as t (t.id)}
               <a class="app lift" href={t.href} target={target} rel="noopener" onclick={() => opened(t.id)} aria-label="{t.name}{isProblem(t.level) ? `, ${t.status}` : ''}">
                 <span class="ic big lv-{t.level}"><Icon src={t.icon} dark={t.iconDark} name={t.name} size={28} />{#if isProblem(t.level)}<span class="pmark" aria-hidden="true"></span>{/if}</span>
-                <span class="an">{t.name}</span>
+                <span class="an" class:one={!/\s/.test(t.name)}>{t.name}</span>
               </a>
             {/each}
           </div>
@@ -407,7 +408,7 @@
                   {#each g.services as t (t.id)}
                     <a class="app lift" class:flash={flash.has(t.id)} href={t.href} target={target} rel="noopener" onclick={() => opened(t.id)} aria-label="{t.name}{isProblem(t.level) ? `, ${t.status}` : ''}">
                       <span class="ic lv-{t.level}"><Icon src={t.icon} dark={t.iconDark} name={t.name} size={24} />{#if isProblem(t.level)}<span class="pmark" aria-hidden="true"></span>{/if}</span>
-                      <span class="an">{t.name}</span>
+                      <span class="an" class:one={!/\s/.test(t.name)}>{t.name}</span>
                     </a>
                   {/each}
                 </div>
@@ -424,7 +425,7 @@
           </div>
           {#each snap.groups as g (g.name)}
             <div class="sgroup">
-              <h3>{g.name} <span class="mono muted small">{g.summary}</span></h3>
+              <h3>{g.name} <span class="num muted small">{g.summary}</span></h3>
               <ul class="srows">
                 {#each g.services as t (t.id)}
                   <li>
@@ -432,7 +433,7 @@
                       <span class="ic"><Icon src={t.icon} dark={t.iconDark} name={t.name} size={22} /></span>
                       <span class="txt"><span class="t">{t.name}</span><span class="d" class:hl={isProblem(t.lineLevel ?? '')}>{t.line}</span></span>
                       {#if t.beats}<span class="sbeats" aria-hidden="true"><Beats beats={t.beats} end={snap.generatedAt} label="" /></span>{/if}
-                      <span class="mono small muted up">{pctTxt(t.uptime24, 1)}</span>
+                      <span class="num small muted up">{pctTxt(t.uptime24, 1)}</span>
                       <span class="dot lv-{t.level}" title={t.status}></span>
                     </button>
                   </li>
@@ -454,8 +455,8 @@
     </div>
 
     {#if snap.bookmarks.length}
-      <!-- the same card and launch grid as Services: groups with their label, an icon chip over each name -->
-      <section class="card sec" aria-labelledby="h-links">
+      <!-- a compact row: each link its icon beside its name, groups with their label -->
+      <section class="card sec links" aria-labelledby="h-links">
         <div class="sec-head"><h2 id="h-links">Links</h2></div>
         <div class="launch">
           {#each linkGroups as g (g.name)}
@@ -465,7 +466,7 @@
                 {#each g.links as b (b.href + b.name)}
                   <a class="app lift" href={b.href} target={target} rel="noopener">
                     <span class="ic"><Icon src={b.icon} dark={b.iconDark} name={b.name} size={24} /></span>
-                    <span class="an">{b.name}</span>
+                    <span class="an" class:one={!/\s/.test(b.name)}>{b.name}</span>
                   </a>
                 {/each}
               </div>
@@ -500,7 +501,7 @@
         <div class="sh-block">
           <div class="sh-row"><span class="st">Last 24 hours</span><span class="muted small">{[`${pctTxt(t.uptime24)} up`, (t.check === 'http' || t.check === 'tcp') && `p95 ${t.p95 == null ? '—' : Math.round(t.p95) + ' ms'}`].filter(Boolean).join(' · ')}</span></div>
           <Beats beats={t.beats} end={snap.generatedAt} label="{t.name} over the last 24 hours" />
-          <div class="sh-row muted small mono"><span>−24 h</span><span>now</span></div>
+          <div class="sh-row muted small num"><span>−24 h</span><span>now</span></div>
         </div>
       {/if}
       {#if t.stats.length}
@@ -596,15 +597,15 @@
 
 <style>
   .boot { min-height: 100vh; display: grid; place-items: center; }
-  .page { max-width: 1240px; margin: 0 auto; padding: max(20px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 56px max(16px, env(safe-area-inset-left)); display: flex; flex-direction: column; gap: 16px; }
-  .small { font-size: 12px; }
+  .page { max-width: 1240px; margin: 0 auto; padding: max(20px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 56px max(16px, env(safe-area-inset-left)); display: flex; flex-direction: column; gap: 20px; }
+  .small { font-size: 13px; }
   h2 { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
   h2.k, .k { font-size: 13px; font-weight: 500; color: var(--muted); letter-spacing: 0; }
-  h3 { font-size: 12px; font-weight: 600; color: var(--muted); }
+  h3 { font-size: 13px; font-weight: 600; color: var(--muted); }
   .sec-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
   .txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
-  .txt .t { font-size: 14px; font-weight: 500; }
-  .txt .d { font-size: 12.5px; overflow-wrap: anywhere; }
+  .txt .t { font-size: 15px; font-weight: 500; }
+  .txt .d { font-size: 13.5px; overflow-wrap: anywhere; }
   .hl { color: color-mix(in srgb, var(--lv) 85%, var(--text)); }
 
   /* header */
@@ -619,7 +620,7 @@
   .search .ph { flex: 1; }
   kbd { font-size: 11px; padding: 2px 7px; border-radius: 6px; background: var(--surface-2); }
   .right { display: flex; align-items: center; gap: 8px; }
-  .live { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .live { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); white-space: nowrap; }
   .pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 4px var(--ok-soft); animation: breathe 3s ease-in-out infinite; }
   .live.warn .pulse { background: var(--warn); box-shadow: 0 0 0 4px var(--warn-soft); }
   .demo { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; padding: 2px 6px; border-radius: 5px; background: var(--surface-3); color: var(--text); }
@@ -631,7 +632,8 @@
 
   /* hero: the sentence, the way to what needs attention, the most used services */
   .hero { padding: 28px 30px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 22px 32px; align-items: center; }
-  .hero.alert { box-shadow: inset 0 0 0 1.5px var(--lv), var(--shadow); }
+  /* something needs attention: a faint tint of its colour and a quiet edge; the mark and the shapes carry the level */
+  .hero.alert { background: color-mix(in srgb, var(--lv) 5%, var(--surface)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--lv) 22%, transparent), var(--shadow); }
   .state { display: flex; align-items: center; gap: 18px; min-width: 0; }
   .hero:has(.also) .state, .hero:has(.also) .also { grid-column: 1 / -1; }
   .mark { width: 54px; height: 54px; border-radius: 50%; background: var(--lv-soft); color: var(--lv); display: flex; align-items: center; justify-content: center; flex: none; }
@@ -645,20 +647,21 @@
   .primary.wide { width: 100%; box-sizing: border-box; min-height: 46px; }
   .also { display: flex; flex-direction: column; gap: 8px; }
   .probs { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 10px; }
-  .prob { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 6px; border-radius: 16px; background: var(--lv-soft); min-width: 0; }
+  .prob { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 6px; border-radius: 16px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); min-width: 0; }
   .pbody { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 6px; border: 0; border-radius: 12px; background: none; color: var(--text); font: inherit; text-align: left; }
   button.pbody { cursor: pointer; }
   button.pbody:hover .t { text-decoration: underline; text-underline-offset: 3px; }
   .prob .t, .prob .d { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .ev-ico { width: 32px; height: 32px; border-radius: 10px; display: flex; align-items: center; justify-content: center; background: var(--lv-soft); color: var(--lv); flex: none; }
-  .prob .ev-ico { background: var(--surface); }
-  .ghost { flex: none; min-height: 36px; padding: 0 12px; border: 0; border-radius: 10px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+  .prob .ev-ico { background: var(--lv-soft); }
+  .ghost { flex: none; min-height: 36px; padding: 0 12px; border: 0; border-radius: 10px; background: var(--surface-2); color: var(--text); font: inherit; font-size: 13px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
   .most { display: flex; flex-direction: column; gap: 6px; }
-  .hero:has(.also) .most { grid-column: 1 / -1; }
   .apps { display: flex; flex-wrap: wrap; gap: 4px; }
-  .app { width: 96px; display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 10px 2px; border-radius: 14px; text-align: center; font-size: 12px; }
+  .app { width: 96px; display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 10px 2px; border-radius: 14px; text-align: center; font-size: 13px; }
   .app:hover { background: var(--surface-2); }
-  .an { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: break-word; hyphens: auto; line-height: 1.25; max-width: 100%; }
+  /* a name wraps at its spaces onto two lines at most; a single word too long for the tile ends in an ellipsis, never split */
+  .an { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: normal; word-break: normal; line-height: 1.25; max-width: 100%; }
+  .an.one { display: block; white-space: nowrap; text-overflow: ellipsis; }
   .ic { position: relative; width: 40px; height: 40px; border-radius: 12px; background: var(--surface-2); display: flex; align-items: center; justify-content: center; flex: none; }
   .ic.big { width: 50px; height: 50px; border-radius: 15px; }
   /* a service with a problem: one small marker, its colour from the level; the launcher shows nothing else */
@@ -684,7 +687,7 @@
   .irow.alert { background: var(--lv-soft); }
   .iico { grid-area: ic; align-self: start; width: 36px; height: 36px; border-radius: 11px; display: flex; align-items: center; justify-content: center; background: var(--surface-2); color: var(--muted); }
   .irow.alert .iico { background: color-mix(in srgb, var(--lv) 16%, transparent); color: var(--lv); }
-  .irow .k { grid-area: k; display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 12.5px; color: var(--muted); }
+  .irow .k { grid-area: k; display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 13px; color: var(--muted); }
   .irow .kw::before { content: '·'; margin-right: 6px; }
   .irow .k .dot { margin-left: 2px; }
   .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
@@ -692,9 +695,9 @@
   .fig .v, .fig .isv { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; white-space: nowrap; font-variant-numeric: tabular-nums; }
   .fig .u { margin-left: -7px; font-size: 13px; color: var(--muted); white-space: nowrap; }
   .ist { display: inline-flex; align-items: baseline; gap: 4px; white-space: nowrap; }
-  .isk { font-size: 12px; color: var(--muted); }
+  .isk { font-size: 13px; color: var(--muted); }
   .isv.hl { color: var(--lv); }
-  .irow .s { grid-area: s; font-size: 12.5px; color: var(--muted); min-width: 0; overflow-wrap: anywhere; }
+  .irow .s { grid-area: s; font-size: 13px; color: var(--muted); min-width: 0; overflow-wrap: anywhere; }
   .irow.alert .k, .irow.alert .fig .v { color: color-mix(in srgb, var(--lv) 80%, var(--text)); }
   .irow.alert .s, .irow.alert .u { color: color-mix(in srgb, var(--lv) 60%, var(--text)); }
   .chev { grid-area: chev; color: var(--muted); }
@@ -710,8 +713,10 @@
   }
 
   /* services and activity */
-  .lower { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 14px; align-items: start; }
-  .sec { padding: 20px 22px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+  .lower { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+  /* beside a long Status list, Activity stays in view */
+  .activity { position: sticky; top: 16px; }
+  .sec { padding: 24px 26px; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
   .seg { display: inline-flex; padding: 3px; border-radius: 10px; background: var(--surface-2); }
   .seg button { min-height: 32px; padding: 0 12px; border: 0; border-radius: 8px; background: none; color: var(--muted); font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; }
   .seg button[aria-pressed='true'] { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
@@ -722,26 +727,36 @@
   .sgroup { display: flex; flex-direction: column; gap: 4px; }
   .sgroup h3 { display: flex; gap: 8px; align-items: baseline; padding-top: 4px; }
   .srows { list-style: none; margin: 0; padding: 0; }
-  .srow { width: 100%; display: flex; align-items: center; gap: 12px; padding: 9px 8px; border: 0; border-radius: 12px; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+  .srow { width: 100%; display: flex; align-items: center; gap: 12px; padding: 11px 8px; border: 0; border-radius: 12px; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
   .srow:hover { background: var(--surface-2); }
   .srow .d { color: var(--muted); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; line-clamp: 1; overflow: hidden; }
   .srow .d.hl { color: color-mix(in srgb, var(--lv) 85%, var(--text)); }
-  .sbeats { width: 150px; flex: none; --beats-h: 8px; }
+  /* tall enough that a healthy day reads as a ribbon, not a rule */
+  .sbeats { width: 150px; flex: none; --beats-h: 12px; }
   .up { width: 5.5ch; text-align: right; flex: none; }
   .evs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
-  .ev { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+  .ev { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); }
   .ev:first-child { border-top: 0; }
   .ev.lv-ok .ev-ico { background: var(--surface-2); color: var(--muted); }
   .when { flex: none; }
   .link-btn { border: 0; background: none; padding: 6px 0; color: var(--acc); font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; align-self: flex-start; }
 
-  /* links, footer */
+  /* links: one compact row, each link its icon beside its name */
+  .links { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 10px 24px; padding-block: 14px; }
+  .links .launch { align-items: center; gap: 8px 24px; }
+  .links .lgroup { flex-direction: row; align-items: center; gap: 8px; }
+  .links .lgroup h3 { padding-left: 0; }
+  .links .app { width: auto; flex-direction: row; gap: 10px; padding: 6px 12px 6px 6px; font-size: 14px; text-align: left; }
+  .links .ic { width: 32px; height: 32px; border-radius: 10px; }
+  .links .an { display: block; white-space: nowrap; }
+
+  /* footer */
   .foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; padding-top: 18px; border-top: 1px solid var(--line); }
   .foot-cfg { display: flex; align-items: center; gap: 12px; min-height: 44px; padding-right: 8px; border-radius: 12px; }
   .foot-cfg > svg { box-sizing: content-box; padding: 9px; border-radius: 11px; background: var(--surface-2); color: var(--muted); }
   .foot-cfg > span { display: flex; flex-direction: column; }
-  .foot-cfg .t { font-size: 14px; font-weight: 500; }
-  .foot-cfg .d { font-size: 12px; }
+  .foot-cfg .t { font-size: 15px; font-weight: 500; }
+  .foot-cfg .d { font-size: 13px; }
   .foot-cfg:hover .t { color: var(--acc); }
   .ver { display: flex; align-items: center; gap: 14px; }
   .ver a { text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--line); }
@@ -754,10 +769,10 @@
   .st { font-size: 15px; font-weight: 600; }
   .facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
   .fact { display: flex; flex-direction: column; gap: 3px; padding: 12px 14px; border-radius: 14px; background: var(--surface-2); min-width: 0; }
-  .fact .k { font-size: 12px; }
+  .fact .k { font-size: 13px; }
   .fv { font-size: 18px; font-weight: 600; overflow-wrap: anywhere; }
   .kv { margin: 0; display: flex; flex-direction: column; }
-  .kv > div { display: flex; justify-content: space-between; gap: 16px; padding: 10px 0; border-top: 1px solid var(--line); font-size: 14px; }
+  .kv > div { display: flex; justify-content: space-between; gap: 16px; padding: 12px 0; border-top: 1px solid var(--line); font-size: 15px; }
   .kv dt { color: var(--muted); flex: none; }
   .kv dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
   .jobs { list-style: none; margin: 0; padding: 0; }
@@ -775,7 +790,7 @@
   }
   .banner > svg { color: var(--warn); flex: none; }
   .banner .t { font-weight: 600; }
-  .banner .d { font-size: 12px; color: var(--muted); }
+  .banner .d { font-size: 13px; color: var(--muted); }
   .banner button { min-height: 36px; padding: 0 14px; border: 0; border-radius: 10px; background: var(--surface); box-shadow: var(--shadow); font-weight: 500; cursor: pointer; }
   .page:has(.banner) :is(.hero, .infra, .lower) { filter: grayscale(0.7); opacity: 0.8; transition: filter 0.3s, opacity 0.3s; }
   @keyframes drop { from { opacity: 0; transform: translateY(-6px); } }
@@ -786,6 +801,7 @@
   @media (max-width: 1000px) {
     .hero { grid-template-columns: minmax(0, 1fr); }
     .lower { grid-template-columns: minmax(0, 1fr); }
+    .activity { position: static; }
     .sbeats { width: 110px; }
   }
   /* phones: the same order, tighter; search and setup in the header (the theme switch is on the Setup page) */
@@ -835,9 +851,13 @@
     .irow .k .dot { position: absolute; top: 5px; left: calc(50% + 17px); margin: 0; }
     .isay { display: block; margin: 6px 10px 0; font-size: 14px; line-height: 1.45; color: var(--muted); }
     .isay b { color: var(--text); font-weight: 600; }
-    .sec { padding: 16px; border-radius: 20px; }
+    .sec { padding: 18px; border-radius: 20px; }
     .sbeats, .up { display: none; }
     .seg button { min-height: 36px; }
     .banner button { min-height: 44px; min-width: 64px; }
+    /* links stay a wrapping row of chips, not the launcher's grid of four */
+    .links .launch, .links .lgroup .apps { display: flex; flex-wrap: wrap; gap: 6px; }
+    .links .lgroup { display: flex; }
+    .links .lgroup h3 { display: block; }
   }
 </style>

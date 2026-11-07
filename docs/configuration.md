@@ -156,7 +156,7 @@ A list of groups. Each group is a list of services. This is the [gethomepage for
 | `href` | Where the service opens. Only services with `href` appear in the launcher. |
 | `description` | The status line when the widget has nothing more specific to show, and *About* in the service's sheet. |
 | `icon` | See [Icons](#icons). Without one, an icon is [picked automatically](#automatic-icons). |
-| `iconDark` | Icon used in dark mode. |
+| `iconDark` | Icon used in dark mode. Without it, an `icon` from selfh.st or dashboard-icons that would barely show in one theme gets its variant there automatically. |
 | `siteMonitor` | URL checked every `intervals.probe` seconds, which gives up/down status, uptime and latency. Any response below 500 counts as up, including the 401 a login page returns. Two failures in a row mark the service down. `https://` URLs also get certificate-expiry checks. `tcp://host:port` only checks that the port accepts a connection, for services without HTTP (SSH, SMB, MQTT, databases); the latency is the time to connect. `probe` is accepted as an alias. |
 | `heartbeat` | A push check for jobs, instead of `siteMonitor`. See [Heartbeats](#heartbeats). |
 | `latencyWarnMs` | The *Slow* limit for this service, overriding `thresholds.latencyWarnMs`, for its status and for the amber half hours in its 24-hour strip and the fleet strip. |
@@ -251,7 +251,7 @@ A local file in `config/icons/` with a matching name takes precedence over the C
 A service without `icon` (in `services.yaml` or as the `dashboard.icon` label) gets one from the [selfh.st](https://selfh.st/icons/) or [dashboard-icons](https://github.com/homarr-labs/dashboard-icons) collection:
 
 - **Matching**, in this order: the service name (`AdGuard Home` → `adguard-home`); for a [labelled container](#services-from-container-labels), its image (`ghcr.io/immich-app/immich-server` → `immich-server`, then `immich`); the widget type (`proxmoxbackupserver` → `proxmox-backup-server`); last the name's leading words (`OPNsense Firewall` → `opnsense`). Names match with or without hyphens (`MusicAssistant` finds `music-assistant`). selfh.st is checked first.
-- **Themes.** The icon itself is used in both themes. Where it would barely show against its background in one theme, such as a near-black icon (GitHub, LLDAP) in dark mode, its light or dark variant replaces it there. An `iconDark` you set yourself wins.
+- **Themes.** The icon itself is used in both themes. Where it would barely show against its background in one theme, such as a near-black icon (GitHub, LLDAP) in dark mode, its light or dark variant replaces it there. The same goes for an `icon` you set by its selfh.st or dashboard-icons name, on services and bookmarks alike. An `iconDark` you set yourself wins.
 - **Updates.** Both indexes are downloaded from jsDelivr once a day and kept in the database. Without jsDelivr, services without `icon` show a monogram, and it retries an hour later.
 - **A wrong match** is fixed by setting `icon`. **Setup** lists every automatic icon.
 

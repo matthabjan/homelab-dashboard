@@ -30,6 +30,9 @@
       dialog.style.transform = '';
       dialog.style.transition = '';
       dialog.showModal();
+      // the title takes focus, not the close button: a mouse click shouldn't open a sheet with a ring on Close, and a
+      // screen reader starts at the title; Tab goes on to Back and Close
+      dialog.querySelector<HTMLElement>('#sheet-title')?.focus();
     }
     if (!open && dialog.open) dialog.close();
   });
@@ -118,7 +121,7 @@
             <span class="vh">Back to </span>{backTo}
           </button>
         {/if}
-        <h2 id="sheet-title">{title}</h2>
+        <h2 id="sheet-title" tabindex="-1">{title}</h2>
         {#if sub}<p class="muted">{sub}</p>{/if}
       </div>
       <button class="close" onclick={onclose} aria-label={backTo ? 'Close all' : 'Close'}>
@@ -143,6 +146,7 @@
   header { display: flex; align-items: flex-start; gap: 12px; }
   .ttl { flex: 1; min-width: 0; }
   h2 { font-size: 21px; font-weight: 700; letter-spacing: -0.015em; }
+  h2:focus { outline: none; }
   .ttl p { margin: 2px 0 0; font-size: 13px; }
   .close { flex: none; width: 40px; height: 40px; border: 0; border-radius: 12px; background: var(--surface-2); color: var(--text); display: flex; align-items: center; justify-content: center; cursor: pointer; }
   .close:hover { background: var(--surface-3); }

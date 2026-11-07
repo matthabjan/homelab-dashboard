@@ -23,13 +23,14 @@
   --muted: #5b6573;
   --acc: var(--accent, #1f6fe0);
   --acc-2: #7c4ddb;
-  --ok: #12955f;
-  --ok-soft: rgba(18, 149, 95, 0.14);
-  --warn: #a86300;
+  /* as text these reach 4.5:1 on white and on their own tint; --none (no data) 3:1 */
+  --ok: #0e7f50;
+  --ok-soft: rgba(14, 127, 80, 0.12);
+  --warn: #935600;
   --warn-soft: rgba(201, 120, 0, 0.1);
-  --crit: #d23b3b;
-  --crit-soft: rgba(210, 59, 59, 0.09);
-  --none: #d5dae0;
+  --crit: #bf3434;
+  --crit-soft: rgba(191, 52, 52, 0.09);
+  --none: #8a94a0;
   --shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.04);
   --shadow-lg: 0 24px 64px rgba(16, 24, 40, 0.18);
   --scrim: rgba(15, 20, 30, 0.35);
@@ -56,7 +57,7 @@
     --warn-soft: rgba(245, 181, 68, 0.12);
     --crit: #ff6b6b;
     --crit-soft: rgba(255, 107, 107, 0.12);
-    --none: #2a323c;
+    --none: #5c6673;
     --shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
     --shadow-lg: 0 30px 80px rgba(0, 0, 0, 0.55);
     --scrim: rgba(5, 7, 10, 0.7);
@@ -82,7 +83,7 @@
   --warn-soft: rgba(245, 181, 68, 0.12);
   --crit: #ff6b6b;
   --crit-soft: rgba(255, 107, 107, 0.12);
-  --none: #2a323c;
+  --none: #5c6673;
   --shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
   --shadow-lg: 0 30px 80px rgba(0, 0, 0, 0.55);
   --scrim: rgba(5, 7, 10, 0.7);
@@ -106,8 +107,8 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: 'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  font-size: 14px;
-  line-height: 1.4;
+  font-size: 15px;
+  line-height: 1.45;
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
 }
@@ -115,6 +116,8 @@ a { color: inherit; text-decoration: none; }
 button { font: inherit; color: inherit; }
 h1, h2, h3 { margin: 0; }
 .mono { font-family: 'Geist Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+/* figures that line up in a column (times, counts, percentages) without a monospace face */
+.num { font-variant-numeric: tabular-nums; }
 .muted { color: var(--muted); }
 .card { background: var(--surface); border-radius: 20px; box-shadow: var(--shadow); }
 .lift { transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1), background 0.18s, box-shadow 0.18s; }

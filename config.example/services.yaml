@@ -2,7 +2,8 @@
 #   icon:        file name in config/icons/ (e.g. proxmox.png), a dashboard-icons name (fetched from the CDN),
 #                "sh-<name>" for selfh.st icons, or a full URL. Missing icon → picked by service name from
 #                selfh.st / dashboard-icons, or a generated monogram when there's no match.
-#   iconDark:    optional variant used in dark mode
+#   iconDark:    optional variant used in dark mode (without it, a CDN icon that would vanish in one theme
+#                gets its variant there automatically)
 #   siteMonitor: URL that is checked every 30 s (uptime, latency, TLS certificate);
 #                tcp://host:port only checks that the port accepts connections (SSH, SMB, MQTT …)
 #   heartbeat:   a push check instead: the job calls the dashboard when it ran (see Backups below)

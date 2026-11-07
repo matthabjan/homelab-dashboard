@@ -70,7 +70,6 @@
   .strip span:last-child { border-radius: 0 4px 4px 0; }
   .strip .lv-ok { opacity: 0.55; }
   .strip .lv-warn, .strip .lv-crit { height: 100%; border-radius: 3px; margin: 0 1px; }
-  .strip .lv-none { opacity: 0.6; }
   /* hover only where it exists: a tap must not leave a slot raised */
   @media (hover: hover) { .strip span:hover { opacity: 1; height: 100%; } }
   /* scrubbing: sideways drags pick a slot, vertical ones still scroll the page */
