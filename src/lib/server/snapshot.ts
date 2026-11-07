@@ -197,7 +197,7 @@ function serviceTiles(engine: SnapshotInput, now: number, mem: Memory, round: Ro
         status,
         line,
         lineLevel,
-        stats: (w?.stats || []).slice(0, 3),
+        stats: w?.stats || [],
         uptime24: ps?.up24 ?? null,
         uptime7: ps?.up7 ?? null,
         p95: ps?.p95 ?? null,
