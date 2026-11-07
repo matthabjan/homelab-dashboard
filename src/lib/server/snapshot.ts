@@ -8,6 +8,7 @@ import { heartbeatStatus, kindOf, status as checkStatus } from './check.ts';
 import { createAttention, type Raised } from './attention.ts';
 import { infrastructure } from './infrastructure.ts';
 import { backups as backupsOf } from './backups.ts';
+import { storage as storageOf } from './storage.ts';
 import type { Backups, ConfigProblem, Drive, Fact, Gauge, Job, Level, NetworkReading, Settings, Severity, Snapshot, Tile, Traffic, Trend } from '$lib/types';
 import type { Engine } from './engine.ts';
 
@@ -210,11 +211,16 @@ function serviceTiles(engine: SnapshotInput, now: number, mem: Memory, round: Ro
 }
 
 /** The System panel: the Proxmox node, or the machine the dashboard runs on, plus the kernel's temperatures. */
-function hostPanel(engine: SnapshotInput, now: number, mem: Memory, round: Round): Snapshot['host'] {
+/** The machine on the System panel: the Proxmox node (with its service) when host.source picks it, else the local host. */
+function hostReading(engine: SnapshotInput) {
+  const service = hostSource(engine.cfg) === 'proxmox' ? hostService(engine.cfg) : undefined;
+  return { service, hw: service ? engine.state(service.id).widget?.host : engine.local };
+}
+
+/** The System panel: the host's gauges (the Disk gauge's level from storage.ts) and facts; CPU and NVMe heat raised. */
+function hostPanel(engine: SnapshotInput, { service: hostSvc, hw }: ReturnType<typeof hostReading>, diskLevel: Level | 'none', now: number, mem: Memory, round: Round): Snapshot['host'] {
   const { settings } = engine.cfg;
   const th = settings.thresholds;
-  const hostSvc = hostSource(engine.cfg) === 'proxmox' ? hostService(engine.cfg) : undefined;
-  const hw = hostSvc ? engine.state(hostSvc.id).widget?.host : engine.local;
   // 15-minute buckets: fine enough to scrub through, coarse enough to stay smooth
   const hist = (key: string | undefined) => {
     const t = trend24(mem, now, key, 96);
@@ -228,16 +234,7 @@ function hostPanel(engine: SnapshotInput, now: number, mem: Memory, round: Round
       gauges.push({ key: 'cpu', label: 'CPU', val: hw.cpu == null ? '—' : Math.round(hw.cpu), unit: '%', pct: hw.cpu, level: level(hw.cpu, 75, 90), sub: `${hw.cpus} threads`, ...hist('host.cpu'), max: 100, warn: 75 });
       // a percentage like the other gauges and its history; the amounts are the detail
       gauges.push({ key: 'mem', label: 'Memory', val: Math.round(hw.memPct), unit: '%', pct: hw.memPct, level: level(hw.memPct, 80, 92), sub: `${(hw.mem / 1024 ** 3).toFixed(1)} of ${Math.round(hw.maxmem / 1024 ** 3)} GiB`, ...hist('host.mem'), max: 100, warn: 80 });
-      gauges.push({ key: 'disk', label: 'Disk', val: hw.disk.pct == null ? '—' : Math.round(hw.disk.pct), unit: '%', pct: hw.disk.pct, level: level(hw.disk.pct, th.storageAmberPct, th.storageWarnPct), sub: hw.disk.name, ...hist(hostSvc ? hw.disk.metric : 'host.disk'), max: 100, warn: th.storageAmberPct });
-      // a Proxmox disk that is also a storage row (same metric) is raised by the row; one host.storages leaves out, or
-      // the root file system, only by the gauge. The local host has no other place for it
-      if (hw.disk.pct != null && hw.disk.pct >= th.storageWarnPct) {
-        const pct = Math.round(hw.disk.pct);
-        if (!hostSvc) round.raise({ sev: 'warn', source: 'host', key: 'local-disk', title: `Disk ${hw.disk.name} is ${pct}% full`, detail: `${hw.node} · ${hw.disk.sub}` });
-        else if (!engine.state(hostSvc.id).widget?.storage?.some((r) => r.metric === hw.disk.metric)) {
-          round.raise({ sev: 'warn', service: hostSvc, key: `storage-${hw.disk.name}`, title: `${hw.disk.name} is ${pct}% full`, detail: hw.disk.sub });
-        }
-      }
+      gauges.push({ key: 'disk', label: 'Disk', val: hw.disk.pct == null ? '—' : Math.round(hw.disk.pct), unit: '%', pct: hw.disk.pct, level: diskLevel, sub: hw.disk.name, ...hist(hostSvc ? hw.disk.metric : 'host.disk'), max: 100, warn: th.storageAmberPct });
     }
     if (temps?.cpu != null) {
       const span = th.tempWarnC + 15 - th.tempMinC;
@@ -263,24 +260,6 @@ function hostPanel(engine: SnapshotInput, now: number, mem: Memory, round: Round
     };
   }
   return host;
-}
-
-/** Storage rows from every widget that reports them; a row over `storageWarnPct` is raised for its service. */
-function storagePanel(engine: SnapshotInput, th: Th, round: Round, now: number, mem: Memory): Snapshot['storage'] {
-  const storage: Snapshot['storage'] = [];
-  for (const s of engine.cfg.services) {
-    const w = engine.state(s.id).widget;
-    // sources follow services.yaml; within one, by name: APIs (cluster/resources) don't keep a stable order,
-    // and an offline row keeps its place instead of jumping to the end
-    for (const x of [...(w?.storage || [])].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))) {
-      // unavailable, detached or of unknown size: a grey bar (last known fill, if any), the widget raises any alert itself
-      if (x.offline || x.pct == null) { storage.push({ name: x.name, group: s.name, pct: x.pct ?? null, level: 'off', sub: x.sub, warn: th.storageAmberPct, trend: trend24(mem, now, x.metric, 48) }); continue; }
-      const lv: Level = x.pct >= th.storageWarnPct ? 'crit' : x.pct >= th.storageAmberPct ? 'warn' : 'ok';
-      storage.push({ name: x.name, group: s.name, pct: x.pct, level: lv, sub: x.sub, warn: th.storageAmberPct, trend: trend24(mem, now, x.metric, 48) });
-      if (x.pct >= th.storageWarnPct) round.raise({ sev: 'warn', service: s, key: `storage-${x.name}`, title: `${x.name} is ${Math.round(x.pct)}% full`, detail: x.sub });
-    }
-  }
-  return storage;
 }
 
 /** The Drives panel: one row per disk (a disk passed through whole is listed once), its problems raised. */
@@ -438,8 +417,12 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
   const round = mem.attention.begin(now);
   configAlerts(engine, round);
   const tiles = serviceTiles(engine, now, mem, round);
-  const host = hostPanel(engine, now, mem, round);
-  const storage = storagePanel(engine, th, round, now, mem);
+  const reading = hostReading(engine);
+  const reports = engine.cfg.services.flatMap((s) => { const rows = engine.state(s.id).widget?.storage; return rows?.length ? [{ service: s, rows }] : []; });
+  const disks = storageOf(reports, reading.hw ? { service: reading.service, node: reading.hw.node, disk: reading.hw.disk } : null, th, (m) => trend24(mem, now, m, 48));
+  const host = hostPanel(engine, reading, disks.gaugeLevel, now, mem, round);
+  for (const a of disks.raised) round.raise(a);
+  const storage = disks.rows;
   const drives = drivesPanel(engine, th, round);
 
   const events = recentEvents(now - 24 * H, 20).map((e) => ({ ...e, href: (e.sid && engine.cfg.services.find((s) => s.id === e.sid)?.href) ?? null }));
@@ -479,7 +462,7 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
     storage,
     drives,
     network,
-    infrastructure: infrastructure({ host, storage, drives, network }, backupsPanel),
+    infrastructure: infrastructure({ host, drives, network }, { storage: disks.panel, backups: backupsPanel }),
     mostUsed,
     groups: groups.map((g) => {
       const ts = g.services.map((s) => (tiles.get(s.id) as Tile)); // every service got a tile above

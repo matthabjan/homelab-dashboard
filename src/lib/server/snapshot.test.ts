@@ -225,19 +225,6 @@ test('a tile names its check, so only timed checks (http, tcp) show a p95', () =
   assert.deepEqual(['Web', 'Ssh', 'Wud', 'Borg', 'Docs'].map((n) => tile(snap, n).check), ['http', 'tcp', 'container', 'heartbeat', null]);
 });
 
-test('infrastructure: storage is amber only where a row raises an alert; offline rows never count', () => {
-  const now = day(20);
-  const row = (name: string, pct: number) => ({ name, used: pct, total: 100, pct, sub: `${pct} / 100 GiB`, source: 'pve' as const });
-  const nas = (media: number): TestService => probed('NAS', now, { state: { widget: { ...widget(now, []), storage: [row('media · NAS', media), row('tank', 50), { name: 'offsite', offline: true, sub: 'detached 3 d', source: 'pbs' }] } } });
-  const amber = build([nas(75)], now);
-  assert.equal(amber.storage.find((r) => r.name === 'media · NAS')?.level, 'warn', 'the bar is amber in the sheet');
-  assert.deepEqual(panel(amber, 'storage'), { id: 'storage', label: 'Storage', value: '75%', unit: 'full', sub: 'fullest: media (NAS) · 1 offline', level: 'none', meta: '3 storages · 1 offline' });
-  assert.deepEqual(alertsOf(amber, 'NAS'), []);
-  const full = build([nas(90)], now);
-  assert.equal(panel(full, 'storage')?.level, 'warn');
-  assert.deepEqual(alertsOf(full, 'NAS').map((a) => [a.sev, a.title]), [['warn', 'media · NAS is 90% full']]);
-});
-
 test('backups: every PBS widget and every job reach the card and the sheet, which agree; a red row has an alert behind it', () => {
   const now = day(21);
   const H = 60 * MIN;

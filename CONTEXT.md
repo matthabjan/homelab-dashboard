@@ -44,7 +44,7 @@ Terms used in the code and in design discussions.
 
 **Config view** — the read-only page `/config` (Setup): whether the configuration is right (problems, each service's check, widget connection and icon, settings), not how services are doing; built by `config-view.ts` from an allowlist so no secret can appear in it.
 
-**Storage row** — one line in the Storage panel: usage (`used`, `total`, `pct`, `sub`) or `offline` (an unavailable PVE storage, a detached removable datastore).
+**Storage row** — one line in the Storage panel: usage (`used`, `total`, `pct`, `sub`) or `offline` (an unavailable PVE storage, a detached removable datastore). `storage.ts` judges every fill once, the rows and the System panel's Disk gauge alike: amber from `storageAmberPct` (the bar only), red and a warning from `storageWarnPct`. A disk is one alert: the gauge's disk warns through its storage row when one has its metric, else by itself.
 
 **Drive** — a physical disk in the infrastructure Drives panel, with what SMART says about it (health, life left, temperature, power-on time, data written). Reported by PVE (host disks), OMV and PBS (disks passed into their VMs); virtual disks are skipped. Not the same as a storage row: a storage is a filesystem or pool, a drive is hardware.
 
