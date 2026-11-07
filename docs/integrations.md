@@ -142,7 +142,7 @@ Leave out an optional privilege and the widget skips that part without an error.
 
 Traffic rates come from the difference between two polls, so the first value appears one widget interval after startup (*Collecting traffic…*).
 
-The firmware status is the result of OPNsense's last update check, read every 10 minutes; the widget never starts a check itself. Run one with **Check for updates** under System → Firmware → Status; OPNsense's own dashboard also checks when its firmware widget is shown.
+The firmware status is the result of OPNsense's last update check, read every 10 minutes; the widget never starts a check itself. OPNsense doesn't check on a schedule by default: add a daily job under System → Settings → Cron with the command **Firmware update check** (not *Automatic firmware update*, which installs them), or run one with **Check for updates** under System → Firmware → Status.
 
 **Alerts**
 

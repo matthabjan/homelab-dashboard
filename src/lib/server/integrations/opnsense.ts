@@ -154,9 +154,11 @@ function firmwareFacts(fw: OpnsenseFirmware | null) {
   const reboot = fw?.status_reboot === '1' && 'needs a reboot';
   if (fw?.status === 'update') {
     const n = Object.keys(fw.all_packages ?? {}).length;
+    // product_latest has no hotfix suffix ("26.7.8" while "26.7.8_2" runs): only a different release is news
     const latest = fw.product?.product_latest;
+    const newer = latest && latest !== version && latest !== version?.replace(/_\d+$/, '');
     if (n) facts.push([{ k: 'updates', v: String(n) }, plural(n, 'update')]);
-    alerts.push({ sev: 'info', key: 'updates', title: latest && latest !== version ? `OPNsense ${latest} available` : n ? `${plural(n, 'update')} available on OPNsense` : 'Updates available on OPNsense', detail: [version && `installed ${version}`, n && plural(n, 'package'), reboot].filter(Boolean).join(' · ') });
+    alerts.push({ sev: 'info', key: 'updates', title: newer ? `OPNsense ${latest} available` : n ? `${plural(n, 'update')} available on OPNsense` : 'Updates available on OPNsense', detail: [version && `installed ${version}`, n && plural(n, 'package'), reboot].filter(Boolean).join(' · ') });
   }
   if (fw?.status === 'upgrade') {
     const next = Object.values(fw.all_sets ?? {}).find((s) => s.new)?.new;

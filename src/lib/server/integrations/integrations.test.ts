@@ -406,6 +406,9 @@ test('OPNsense: a gateway down leads, loss warns; stopped services warn; a pendi
   // OPNsense 26.x before an update check: only the CORE_* product fields
   const unchecked: Fixtures = { ...FIXTURES.opnsense, 'GET /api/core/firmware/status': () => ({ status: 'none', product: { CORE_VERSION: '26.7.8', CORE_PKGVERSION: '26.7.8_2' } }) };
   assert.equal((await run(unchecked, 'calm')).stats.find((s) => s.k === 'version')?.v, '26.7.8_2');
+  // package updates on a hotfix release: product_latest drops the suffix, which is not a new release
+  const packages: Fixtures = { ...FIXTURES.opnsense, 'GET /api/core/firmware/status': () => ({ status: 'update', product: { product_version: '26.7.8_2', product_latest: '26.7.8' }, all_packages: { curl: {}, unbound: {} } }) };
+  assert.equal((await run(packages, 'calm')).alerts.at(-1)?.title, '2 updates available on OPNsense');
   assert.deepEqual([bare.alerts, bare.stats.map((s) => s.k)], [[], ['WAN ↓ / ↑ Mbit/s', 'CPU']]);
 });
 
