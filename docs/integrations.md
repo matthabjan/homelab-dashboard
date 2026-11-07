@@ -133,7 +133,7 @@ widget:
 | Reads | API path | Privilege |
 |---|---|---|
 | CPU (required) | `/api/diagnostics/activity/*` | Diagnostics: Activity |
-| WAN traffic (required) | `/api/diagnostics/traffic/*` | Diagnostics: Traffic |
+| WAN traffic (required) | `/api/diagnostics/traffic/*` | Reporting: Traffic or Diagnostics: Traffic, depending on the version |
 | Gateways (optional) | `/api/routes/gateway/*` | the one listing that path, e.g. System: Gateways |
 | Services (optional) | `/api/core/service/*` | Status: Services |
 | Firmware (optional) | `/api/core/firmware/*` | System: Firmware |
@@ -142,7 +142,7 @@ Leave out an optional privilege and the widget skips that part without an error.
 
 Traffic rates come from the difference between two polls, so the first value appears one widget interval after startup (*Collecting traffic…*).
 
-The firmware status is the result of OPNsense's last update check, read every 10 minutes; the widget never starts a check itself. OPNsense doesn't check on a schedule by default: add a daily job under System → Settings → Cron with the command **Firmware update check** (not *Automatic firmware update*, which installs them), or run one with **Check for updates** under System → Firmware → Status.
+Firmware updates come from OPNsense's last update check, read every 10 minutes; the widget never starts a check itself.
 
 **Alerts**
 
@@ -293,8 +293,6 @@ widget:
 
 **Account.** Create a user who is not an administrator (Settings → People → Add person, allow login, *Administrator* off), sign in as that user, and create a token under Profile → Security → *Long-lived access tokens*. A non-admin token reads states and the version. Home Assistant renders templates for admins only, so a `template` entry shows *—* with a non-admin token; use `state` entries instead.
 
-The widget reads all states once per widget interval (`GET /api/states`).
-
 **Notes**
 
 | Severity | When |
@@ -320,7 +318,7 @@ widget:
 
 **Account.** WUD's basic auth has no roles, and its API can trigger updates where a trigger is configured. Add a separate user for the dashboard (`WUD_AUTH_BASIC_DASHBOARD_USER` / `_HASH`) so it can be removed on its own.
 
-The widget reads what WUD found on its last check (`WUD_WATCHER_<NAME>_CRON`, hourly by default); it doesn't make WUD check the registries. With several watchers (Docker hosts), each container's note names it by container name.
+The widget reads what WUD found on its last check (`WUD_WATCHER_<NAME>_CRON`, hourly by default); it doesn't make WUD check the registries.
 
 **Notes**
 
