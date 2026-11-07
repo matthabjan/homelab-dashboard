@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { pushState } from '$app/navigation';
   import { page } from '$app/state';
-  import type { FeedItem, Job, Level, SheetRef, Snapshot, Tile } from '$lib/types';
+  import type { FeedItem, InfraPanel, Job, SheetRef, Snapshot, Tile } from '$lib/types';
   import type { PageProps } from './$types';
   import Icon from '$lib/components/Icon.svelte';
   import Infrastructure from '$lib/components/Infrastructure.svelte';
@@ -78,75 +78,10 @@
     return groups;
   });
   const jobById = $derived(new Map((snap?.jobs ?? []).map((j) => [j.id, j])));
-  const nextJob = $derived([...(snap?.jobs ?? [])].sort((a, b) => a.due - b.due)[0] ?? null);
 
-  /** `stats`: figures shown instead of value, where one figure can't say it, each with its label unless the unit says it (°C); `where`: beside the label */
-  type Card = {
-    id: 'system' | 'storage' | 'drives' | 'network' | 'backups'; label: string; where?: string; value: string; unit?: string; sub: string;
-    stats?: { k: string; v: string; level: Level | 'none' }[]; level: Level | 'none';
-  };
-  /** a storage row's name for prose: "media · NAS" → "media (NAS)" */
-  const storageName = (name: string) => name.replace(/^(.+?) · (.+)$/, '$1 ($2)');
-  const worst = (levels: string[]): Level | 'none' => (levels.includes('crit') ? 'crit' : levels.includes('warn') ? 'warn' : 'none');
-  const cards: Card[] = $derived.by(() => {
-    if (!snap) return [];
-    const out: Card[] = [];
-    const g = (k: string) => snap?.host?.gauges.find((x) => x.key === k);
-    if (snap.host) {
-      const cpu = g('cpu'), mem = g('mem'), temp = g('temp');
-      out.push({
-        id: 'system', label: 'System', where: snap.host.name,
-        value: '', sub: snap.host.facts.map((f) => `${f.label} ${f.value}`).join(' · '),
-        stats: [
-          cpu && { k: 'CPU', v: `${cpu.val}%`, level: cpu.level },
-          mem && { k: 'RAM', v: mem.pct != null ? `${Math.round(mem.pct)}%` : '—', level: mem.level },
-          temp && { k: 'TEMP', v: `${temp.val}°C`, level: temp.level }
-        ].filter((x) => !!x),
-        level: worst(snap.host.gauges.map((x) => x.level))
-      });
-    }
-    // a detached or unavailable row (a removable offsite disk) is expected: it never sets the card's figure or colour.
-    // The card turns amber only for a row over storageWarnPct (it raises an alert); the bar's amber stays in the sheet
-    const rows = snap.storage.filter((s) => s.level !== 'off' && s.pct != null);
-    if (snap.storage.length) {
-      const top = [...rows].sort((a, b) => (b.pct ?? 0) - (a.pct ?? 0))[0];
-      const off = snap.storage.length - rows.length;
-      out.push({ id: 'storage', label: 'Storage', value: top ? `${Math.round(top.pct ?? 0)}%` : '—', unit: top ? 'full' : '', sub: [top ? `fullest: ${storageName(top.name)}` : 'no usage reported', off && `${off} offline`].filter(Boolean).join(' · '), level: worst(rows.map((s): string => (s.level === 'crit' ? 'warn' : 'ok'))) });
-    }
-    if (snap.drives.length) {
-      const d = snap.drives;
-      const failing = d.filter((x) => x.status === 'failing').length;
-      const check = d.filter((x) => isProblem(x.level) || isProblem(x.lifeLevel)).length - failing;
-      // the hottest drive and the least life left, from the facts the Drives panel shows
-      const temps = d.flatMap((x) => x.facts.map((f) => (f.k === '' ? parseFloat(f.v) : NaN))).filter((t) => !Number.isNaN(t));
-      const lives = d.map((x) => x.life).filter((l): l is number => l != null);
-      out.push({
-        id: 'drives', label: 'Drives',
-        value: failing ? `${failing} failing` : check ? `${check} to check` : d.every((x) => x.status === 'ok') ? 'All healthy' : 'No problems',
-        sub: [`${d.length} drive${d.length === 1 ? '' : 's'}`, temps.length && `max ${Math.max(...temps)}°C`, lives.length && `${Math.min(...lives)}% life left`].filter(Boolean).join(' · '),
-        level: worst(d.flatMap((x) => [x.level, x.lifeLevel]))
-      });
-    }
-    if (snap.network) {
-      const n = snap.network;
-      const r = (v: number | null) => (v == null ? '—' : v >= 100 ? String(Math.round(v)) : v.toFixed(1));
-      out.push({ id: 'network', label: 'Network', value: n.down != null ? `↓${r(n.down)} ↑${r(n.up)}` : n.dns ? `${n.dns.blockedPct?.toFixed(1) ?? '—'}%` : '—', unit: n.down != null ? 'Mbit/s' : 'blocked', sub: [n.source, n.dns && n.down != null && `DNS ${n.dns.blockedPct?.toFixed(1) ?? '—'}% blocked`].filter(Boolean).join(' · '), level: 'none' });
-    }
-    const jobs = snap.jobs;
-    if (jobs.length || snap.backups?.known) {
-      const late = jobs.filter((j) => j.state === 'down');
-      // PBS guests behind on backups: the merged count less the backup jobs that are late
-      const pbsLate = Math.max(0, (snap.backups?.overdue ?? 0) - late.filter((j) => j.backup).length);
-      const overdue = late.length + pbsLate;
-      out.push({
-        id: 'backups', label: 'Backups',
-        value: overdue ? `${overdue} overdue` : 'All current',
-        sub: overdue ? [...late.map((j) => j.name), pbsLate && `${pbsLate} PBS backup${pbsLate === 1 ? '' : 's'}`].filter(Boolean).join(', ') : nextJob ? `next: ${nextJob.name} ${until(nextJob.due)}` : snap.backups?.oldestAge != null ? `oldest backup ${ago(now - snap.backups.oldestAge, now)}${snap.backups.oldestName ? ` · ${snap.backups.oldestName}` : ''}` : '',
-        level: overdue || late.length ? 'crit' : 'none'
-      });
-    }
-    return out;
-  });
+  // the infrastructure card: one row per area, worded and judged on the server (the same panels are the sheet's tabs)
+  type Card = InfraPanel;
+  const cards = $derived(snap?.infrastructure ?? []);
 
   /** a card's figure as words: "19% CPU · 64% RAM · 49°C TEMP", "90% full", "2 overdue" */
   const figText = (c: Card) => (c.stats ? c.stats.map((x) => (x.k ? `${x.v} ${x.k}` : x.v)).join(' · ') : [c.value, c.unit].filter(Boolean).join(' '));
@@ -600,12 +535,12 @@
         {/if}
       </div>
     {:else if sheet?.kind === 'infra'}
-      <Infrastructure host={snap.host} storage={snap.storage} drives={snap.drives} network={snap.network} {target} now={snap.generatedAt} initial={sheet.tab} />
+      <Infrastructure panels={snap.infrastructure} host={snap.host} storage={snap.storage} drives={snap.drives} network={snap.network} {target} now={snap.generatedAt} initial={sheet.tab} />
     {:else if sheet?.kind === 'backups'}
       {#if snap.backups?.known && snap.backups.oldestAge != null}
         <div class="facts">
           <div class="fact"><span class="muted k">Oldest backup</span><span class="fv">{ago(now - snap.backups.oldestAge, now)}</span>{#if snap.backups.oldestName}<span class="muted small">{snap.backups.oldestName}</span>{/if}</div>
-          <div class="fact lv-{snap.backups.overdue ? 'crit' : 'none'}"><span class="muted k">Overdue</span><span class="fv" class:hl={!!snap.backups.overdue}>{snap.backups.overdue}</span></div>
+          <div class="fact lv-{cards.find((c) => c.id === 'backups')?.level ?? 'none'}"><span class="muted k">Overdue</span><span class="fv" class:hl={!!snap.backups.overdue}>{snap.backups.overdue}</span></div>
         </div>
       {/if}
       {#if snap.jobs.length || snap.guestBackups.length}
@@ -616,7 +551,7 @@
               <li>
                 <button class="job" onclick={() => show({ kind: 'service', id: gb.id })}>
                   <span class="txt"><span class="t">Guest backups{gb.stores.length ? ` · ${gb.stores.join(', ')}` : ''}</span><span class="d muted">{gb.guests} guest{gb.guests === 1 ? '' : 's'} · last run {since(gb.last)}</span></span>
-                  <span class="jr"><span class="state-w lv-{gb.overdue ? 'crit' : 'ok'}"><span class="dot lv-{gb.overdue ? 'crit' : 'ok'}" aria-hidden="true"></span>{gb.overdue ? `${gb.overdue} overdue` : 'on schedule'}</span><span class="muted small">{gb.name}</span></span>
+                  <span class="jr"><span class="state-w lv-{gb.overdue ? 'warn' : 'ok'}"><span class="dot lv-{gb.overdue ? 'warn' : 'ok'}" aria-hidden="true"></span>{gb.overdue ? `${gb.overdue} overdue` : 'on schedule'}</span><span class="muted small">{gb.name}</span></span>
                 </button>
               </li>
             {/if}
@@ -624,7 +559,7 @@
               <li>
                 <button class="job" onclick={() => show({ kind: 'service', id: gb.id })}>
                   <span class="txt"><span class="t">Host backups{gb.stores.length ? ` · ${gb.stores.join(', ')}` : ''}</span><span class="d muted">{gb.hosts.length > 3 ? `${gb.hosts.slice(0, 2).join(', ')} and ${gb.hosts.length - 2} more` : gb.hosts.join(', ')} · last run {since(gb.hostLast)}</span></span>
-                  <span class="jr"><span class="state-w lv-{gb.hostOverdue ? 'crit' : 'ok'}"><span class="dot lv-{gb.hostOverdue ? 'crit' : 'ok'}" aria-hidden="true"></span>{gb.hostOverdue ? `${gb.hostOverdue} overdue` : 'on schedule'}</span><span class="muted small">{gb.name}</span></span>
+                  <span class="jr"><span class="state-w lv-{gb.hostOverdue ? 'warn' : 'ok'}"><span class="dot lv-{gb.hostOverdue ? 'warn' : 'ok'}" aria-hidden="true"></span>{gb.hostOverdue ? `${gb.hostOverdue} overdue` : 'on schedule'}</span><span class="muted small">{gb.name}</span></span>
                 </button>
               </li>
             {/if}

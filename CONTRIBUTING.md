@@ -36,6 +36,7 @@ src/
 │       ├── check.ts             probe, container and heartbeat readings → check state
 │       ├── heartbeat.ts         the /api/heartbeat endpoint's rules
 │       ├── snapshot.ts          state + history → page JSON (status rules live here)
+│       ├── infrastructure.ts    the infrastructure card's rows and tabs: figure, context, level
 │       ├── attention.ts         alerts → attention list, feed, headline, each service's worst alert
 │       ├── format.ts            numbers, ages and card() for stats and status lines
 │       ├── icons.ts             automatic icons from the selfh.st and dashboard-icons indexes

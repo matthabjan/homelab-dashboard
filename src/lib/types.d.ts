@@ -694,6 +694,24 @@ export interface Gauge {
   warn?: number | null;
 }
 
+/** One area of the infrastructure card, said once for its row and its tab. */
+export interface InfraPanel {
+  id: 'system' | 'storage' | 'drives' | 'network' | 'backups';
+  label: string;
+  /** beside the label: the host's name */
+  where?: string;
+  value: string;
+  unit?: string;
+  /** the line of context under the figure */
+  sub: string;
+  /** figures shown instead of `value` where one can't say it, each with its label */
+  stats?: { k: string; v: string; level: Level | 'none' }[];
+  /** as bad as what is raised for the area: a marker always has an alert behind it */
+  level: Level | 'none';
+  /** the line under the panel's tab in the Infrastructure sheet */
+  meta?: string;
+}
+
 export interface Snapshot {
   generatedAt: number;
   demo: boolean;
@@ -741,6 +759,8 @@ export interface Snapshot {
     /** % of rated endurance left, drawn as a bar; null when the drive doesn't report it */
     life: number | null;
     lifeLevel: Level;
+    /** °C, for the card's hottest drive */
+    tempC: number | null;
     facts: Fact[];
   }[];
   network: (Traffic & {
@@ -748,6 +768,8 @@ export interface Snapshot {
     lan: Traffic | null;
     dns: (DnsStats & { href: string | null; name: string }) | null;
   }) | null;
+  /** the infrastructure card's rows, which are also the Infrastructure sheet's tabs (all but Backups) */
+  infrastructure: InfraPanel[];
   /** most-opened services, by open count with a half-life of `settings.mostUsed.halfLifeDays` */
   mostUsed: Tile[];
   groups: { name: string; summary: string; services: Tile[] }[];

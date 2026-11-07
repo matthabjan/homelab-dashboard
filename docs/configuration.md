@@ -122,8 +122,8 @@ A value below the minimum is raised to it, and one that isn't a number falls bac
 | `certWarnDays` | `14` | Warn when a certificate expires within this many days. Under 3 days is critical. |
 | `backupMaxAgeHours` | `26` | A guest's last backup older than this is *overdue*. |
 | `offsiteMaxDetachedDays` | `135` | Remind you when a removable PBS datastore hasn't been attached for this long. |
-| `storageAmberPct` | `70` | The storage bar turns amber. |
-| `storageWarnPct` | `85` | The storage bar turns red and raises an alert. |
+| `storageAmberPct` | `70` | The storage bar turns amber (in the sheet only; the Storage row stays calm). |
+| `storageWarnPct` | `85` | The storage bar turns red and raises an alert; the Storage row turns amber. |
 | `tempMinC` | `30` | Bottom of the temperature gauge's scale. |
 | `tempWarnC` | `75` | Warn at this CPU temperature; at +10 °C it is critical. NVMe drives warn at 70 °C. |
 | `driveLifeWarnPct` | `10` | Warn when a drive has this much of its rated endurance left (SMART wear). |

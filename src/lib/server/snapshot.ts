@@ -6,6 +6,7 @@ import { fmtHours, fmtSize } from './format.ts';
 import { hostService, hostSource } from './local.ts';
 import { kindOf, status as checkStatus } from './check.ts';
 import { createAttention, type Raised } from './attention.ts';
+import { infrastructure } from './infrastructure.ts';
 import type { BackupStatus, ConfigProblem, Drive, HeartbeatState, Fact, Gauge, Job, Level, NetworkReading, Settings, Severity, Snapshot, Tile, Traffic, Trend } from '$lib/types';
 import type { Engine } from './engine.ts';
 
@@ -67,6 +68,14 @@ export interface BackupBeat {
   hb: HeartbeatState | null;
 }
 
+/** Every PBS widget's backups as one: overdue counts added up, the oldest the oldest of them; undefined without any. */
+function sumBackups(list: BackupStatus[]): BackupStatus | undefined {
+  const known = list.filter((b) => b.known);
+  if (!known.length) return undefined;
+  const oldest = known.filter((b) => b.oldestAge != null).sort((a, b) => (b.oldestAge as number) - (a.oldestAge as number))[0];
+  return { overdue: known.reduce((n, b) => n + b.overdue, 0), oldestAge: oldest?.oldestAge ?? null, oldestName: oldest?.oldestName ?? null, known: true };
+}
+
 /**
  * PBS backups plus heartbeats marked `backup: true` (restic, borg, Kopia …): overdue counts added up, the oldest age
  * the larger one, named after what it is; a heartbeat that never ran has no age yet.
@@ -112,7 +121,7 @@ function driveStatus(d: Drive, where: string, th: Settings['thresholds']) {
   if (d.errors) facts.push({ k: 'errors', v: String(d.errors), level: 'warn' });
   const lifeLevel: Level = d.lifeLeft != null && d.lifeLeft <= th.driveLifeWarnPct ? 'warn' : 'ok';
   return {
-    row: { name: d.model, group: where, meta: [d.kind, fmtSize(d.size), where].join(' · '), detail: detail || 'no SMART details', status, level, life: d.lifeLeft, lifeLevel, facts },
+    row: { name: d.model, group: where, meta: [d.kind, fmtSize(d.size), where].join(' · '), detail: detail || 'no SMART details', status, level, life: d.lifeLeft, lifeLevel, tempC: d.tempC, facts },
     problems
   };
 }
@@ -398,12 +407,11 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
  * The hero's sentence. Healthy: how many services are up, jobs counted apart ("All 11 services up", "5 backup jobs on
  * schedule"). Otherwise: the top attention item, its detail, and the way to the service.
  */
-function verdictOf(engine: SnapshotInput, widgets: ReturnType<typeof widgetsOf>, all: Tile[], jobs: Job[], att: ReturnType<Round['close']>, now: number) {
+function verdictOf(engine: SnapshotInput, all: Tile[], jobs: Job[], backups: BackupStatus | null, att: ReturnType<Round['close']>): Snapshot['verdict'] {
   const th = engine.cfg.settings.thresholds;
   const probed = all.filter((t) => t.level !== 'unknown');
   const services = probed.filter((t) => t.check !== 'heartbeat');
   const servicesUp = services.filter((t) => t.status !== 'Down').length;
-  const backups = mergeBackups(widgets.find((x) => x.w.backups)?.w.backups, engine.cfg.services.flatMap((s) => (s.heartbeat?.backup ? [{ name: s.name, hb: engine.state(s.id).heartbeat ?? null }] : [])), now);
   const certWarn = all.filter((t) => t.cert && t.cert.days < th.certWarnDays).length;
   const onSchedule = jobs.filter((j) => j.state !== 'down').length;
   const jobWord = jobs.every((j) => j.backup) ? 'backup job' : 'job';
@@ -423,8 +431,7 @@ function verdictOf(engine: SnapshotInput, widgets: ReturnType<typeof widgetsOf>,
     if (backups?.known && !jobs.length) subParts.push(backups.overdue ? `${plural(backups.overdue, 'backup')} overdue` : 'backups current');
     if (certWarn) subParts.push(`${plural(certWarn, 'certificate')} expiring`);
   }
-  const verdict: Snapshot['verdict'] = { ...att.headline, title, sub: subParts.join(' · '), action };
-  return { verdict, backups: backups ?? null };
+  return { ...att.headline, title, sub: subParts.join(' · '), action };
 }
 
 /** The Most used row: services with a link, by their decaying open score, ties in services.yaml order. */
@@ -460,9 +467,13 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
   const ups = all.map((t) => t.uptime24).filter((x) => x != null);
   const fleetAvail = ups.length ? ups.reduce((a, b) => a + b, 0) / ups.length : null;
   const jobs = jobList(engine);
-  const { verdict, backups } = verdictOf(engine, widgets, all, jobs, att, now);
+  // every PBS widget, and the heartbeats marked `backup: true`
+  const pbs = sumBackups(widgets.flatMap(({ w }) => (w.backups ? [w.backups] : [])));
+  const backups = mergeBackups(pbs, engine.cfg.services.flatMap((s) => (s.heartbeat?.backup ? [{ name: s.name, hb: engine.state(s.id).heartbeat ?? null }] : [])), now) ?? null;
+  const verdict = verdictOf(engine, all, jobs, backups, att);
   const mostUsed = mostUsedRow(all, settings, now);
 
+  const parts = { host, storage, drives, network, jobs, backups };
   return {
     generatedAt: now,
     demo: engine.cfg.demo,
@@ -492,6 +503,7 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
     storage,
     drives,
     network,
+    infrastructure: infrastructure(parts, pbs?.overdue ?? 0, now),
     mostUsed,
     groups: groups.map((g) => {
       const ts = g.services.map((s) => (tiles.get(s.id) as Tile)); // every service got a tile above
