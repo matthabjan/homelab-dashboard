@@ -258,6 +258,20 @@ test('infrastructure: backups from every PBS widget; PBS alone warns, a late job
   assert.deepEqual(panel(current, 'backups'), { id: 'backups', label: 'Backups', value: 'All current', sub: 'oldest backup 20 h · web', level: 'none' });
 });
 
+test('backups: a late job that makes no backup turns the row red but is not counted overdue, so the card and the sheet agree', () => {
+  const now = day(24);
+  const H = 60 * MIN;
+  const hb = { id: 'verify', every: 24 * H, grace: H, token: 't', backup: false };
+  const pbs = probed('PBS', now, { state: { widget: { ...widget(now, []), backups: { overdue: 1, oldestAge: 30 * H, oldestName: 'web', known: true } } } });
+  const input = snapshotInput({ services: [pbs, { name: 'Verify', heartbeat: hb }] });
+  const verify = input.cfg.services[1];
+  record(verify, input.state(verify.id), heartbeatState(hb, { since: now - 26 * H, lastOk: now - 26 * H, lastFail: null }, now), now);
+  const snap = createSnapshot()(input, now);
+  assert.equal(snap.backups?.overdue, 1, 'the sheet: PBS only');
+  assert.deepEqual(panel(snap, 'backups'), { id: 'backups', label: 'Backups', value: '1 overdue', sub: 'Verify, 1 PBS backup', level: 'crit' });
+  assert.deepEqual(alertsOf(snap, 'Verify').map((a) => a.sev), ['crit'], 'the red row has the late job\'s alert behind it');
+});
+
 test('backups: heartbeats marked backup add to PBS (overdue summed, oldest age the larger, named)', () => {
   const H = 60 * MIN;
   const now = 100 * H;

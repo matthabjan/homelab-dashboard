@@ -69,14 +69,15 @@ function network(n: NonNullable<Parts['network']>): InfraPanel {
 }
 
 /**
- * Late jobs and overdue PBS backups (`pbsOverdue`, from every PBS widget). A late job is critical, as its alert is; PBS
+ * Late jobs and overdue PBS backups (`pbsOverdue`, from every PBS widget). The figure counts backups only, as the
+ * Backups sheet does: PBS and the jobs marked `backup: true`. Any late job is named and critical, as its alert is; PBS
  * backups alone only warn, as theirs do. With nothing late: the next job due, else the oldest backup.
  */
 function backups(jobs: Parts['jobs'], merged: Parts['backups'], pbsOverdue: number, now: number): InfraPanel {
   const late = jobs.filter((j) => j.state === 'down');
-  const overdue = late.length + pbsOverdue;
+  const overdue = merged?.overdue ?? 0;
   const next = [...jobs].sort((a, b) => a.due - b.due)[0];
-  const sub = overdue
+  const sub = overdue || late.length
     ? [...late.map((j) => j.name), pbsOverdue && plural(pbsOverdue, 'PBS backup')].filter(Boolean).join(', ')
     : next ? `next: ${next.name} ${until(next.due, now)}`
     : merged?.oldestAge != null ? `oldest backup ${ago(now - merged.oldestAge, now)}${merged.oldestName ? ` · ${merged.oldestName}` : ''}`
