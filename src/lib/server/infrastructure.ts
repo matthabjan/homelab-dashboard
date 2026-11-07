@@ -1,12 +1,10 @@
 // The infrastructure card's rows and the Infrastructure sheet's tabs: each panel's figure, context and level, said once
-// for both. Built from the snapshot's own parts, after attention closed.
-import { ago, until } from '../ago.ts';
-import { plural } from './format.ts';
-import type { InfraPanel, Level, Snapshot } from '$lib/types';
+// for both. Built from the snapshot's own parts, after attention closed; the Backups row comes from backups.ts.
+import { plural, worst } from './format.ts';
+import type { InfraPanel, Snapshot } from '$lib/types';
 
-type Parts = Pick<Snapshot, 'host' | 'storage' | 'drives' | 'network' | 'jobs' | 'backups'>;
+type Parts = Pick<Snapshot, 'host' | 'storage' | 'drives' | 'network'>;
 
-const worst = (levels: string[]): Level | 'none' => (levels.includes('crit') ? 'crit' : levels.includes('warn') ? 'warn' : 'none');
 /** a storage row's name for prose: "media · NAS" → "media (NAS)" */
 const storageName = (name: string) => name.replace(/^(.+?) · (.+)$/, '$1 ($2)');
 /** Mbit/s: whole numbers from 100 up */
@@ -68,30 +66,13 @@ function network(n: NonNullable<Parts['network']>): InfraPanel {
   };
 }
 
-/**
- * Late jobs and overdue PBS backups (`pbsOverdue`, from every PBS widget). The figure counts backups only, as the
- * Backups sheet does: PBS and the jobs marked `backup: true`. Any late job is named and critical, as its alert is; PBS
- * backups alone only warn, as theirs do. With nothing late: the next job due, else the oldest backup.
- */
-function backups(jobs: Parts['jobs'], merged: Parts['backups'], pbsOverdue: number, now: number): InfraPanel {
-  const late = jobs.filter((j) => j.state === 'down');
-  const overdue = merged?.overdue ?? 0;
-  const next = [...jobs].sort((a, b) => a.due - b.due)[0];
-  const sub = overdue || late.length
-    ? [...late.map((j) => j.name), pbsOverdue && plural(pbsOverdue, 'PBS backup')].filter(Boolean).join(', ')
-    : next ? `next: ${next.name} ${until(next.due, now)}`
-    : merged?.oldestAge != null ? `oldest backup ${ago(now - merged.oldestAge, now)}${merged.oldestName ? ` · ${merged.oldestName}` : ''}`
-    : '';
-  return { id: 'backups', label: 'Backups', value: overdue ? `${overdue} overdue` : 'All current', sub, level: late.length ? 'crit' : pbsOverdue ? 'warn' : 'none' };
-}
-
 /** One panel per area that has data, in the card's order. */
-export function infrastructure(p: Parts, pbsOverdue: number, now: number): InfraPanel[] {
+export function infrastructure(p: Parts, backups: InfraPanel | null): InfraPanel[] {
   const out: InfraPanel[] = [];
   if (p.host) out.push(system(p.host));
   if (p.storage.length) out.push(storage(p.storage));
   if (p.drives.length) out.push(drives(p.drives));
   if (p.network) out.push(network(p.network));
-  if (p.jobs.length || p.backups?.known) out.push(backups(p.jobs, p.backups, pbsOverdue, now));
+  if (backups) out.push(backups);
   return out;
 }

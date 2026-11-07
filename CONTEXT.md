@@ -34,6 +34,8 @@ Terms used in the code and in design discussions.
 
 **Job** — a heartbeat service: something that reports when it ran (a backup, a sync, a verify) rather than being opened. Jobs are counted apart from services, listed in the Backups sheet and the Status view, never in the launcher.
 
+**Backup row** — a line in the Backups sheet: one PBS server's guest backups, its host backups, or a job; each with its state in short ("on schedule", "2 overdue", "failed") and a level as bad as its alerts. Built by `backups.ts`, which also gives the Backups figures: *overdue* counts PBS backups and jobs marked `backup: true`; a late job that makes no backup is named and red, but not counted.
+
 **Local host** — the machine the dashboard runs on, shown in the System panel when there is no Proxmox widget (`host.source`). Its vitals come from `/proc` and `statfs` (`local.ts`); in Docker that is the host, under lxcfs the container.
 
 **Heartbeat** — a push check: a scheduled job (backup, cron) calls `/api/heartbeat/<id>` when it ran, or `…/fail`. A service with a `heartbeat:` block is up while the last run is within `every + grace` and no failure came after it; the endpoint stores the last success and failure in `kv`. `backup: true` adds it to the backup figures.

@@ -91,19 +91,19 @@ function containerStatus(c: ContainerState): CheckStatus {
 }
 
 /**
- * When the job last ran, or since when it is overdue or failed.
+ * When the job last ran, or since when it is overdue or failed; `word` says the same in short for its row.
  */
-function heartbeatStatus(hb: NonNullable<Service['heartbeat']>, st: HeartbeatState | null | undefined, now: number): CheckStatus {
+export function heartbeatStatus(hb: NonNullable<Service['heartbeat']>, st: HeartbeatState | null | undefined, now: number): CheckStatus {
   const every = `every ${fmtDuration(hb.every)}`;
-  if (!st || st.state === 'pending') return { lvl: 'unknown', status: 'Waiting', line: `Waiting for the first run · ${every}`, lineLevel: 'muted' };
+  if (!st || st.state === 'pending') return { lvl: 'unknown', status: 'Waiting', line: `Waiting for the first run · ${every}`, lineLevel: 'muted', word: 'waiting for its first run' };
   const last = st.lastOk != null ? `last run ${fmtDuration(now - st.lastOk)} ago` : 'never ran';
   if (st.failed) {
     const at = (st.lastFail as number);
-    return { lvl: 'crit', status: 'Down', line: `Reported failure ${fmtClock(at)}`, alert: { sev: 'crit', title: 'reported a failure', detail: `${fmtClock(at)} · ${last}`, ts: at } };
+    return { lvl: 'crit', status: 'Down', line: `Reported failure ${fmtClock(at)}`, alert: { sev: 'crit', title: 'reported a failure', detail: `${fmtClock(at)} · ${last}`, ts: at }, word: 'failed' };
   }
   if (st.state === 'down') {
     const since = (st.overdueSince as number);
-    return { lvl: 'crit', status: 'Down', line: `Overdue since ${fmtClock(since)}`, alert: { sev: 'crit', title: 'missed its run', detail: `${last} · ${every}`, ts: since } };
+    return { lvl: 'crit', status: 'Down', line: `Overdue since ${fmtClock(since)}`, alert: { sev: 'crit', title: 'missed its run', detail: `${last} · ${every}`, ts: since }, word: 'overdue' };
   }
-  return { lvl: 'ok', status: 'Up', line: `Last run ${fmtDuration(now - (st.lastOk as number))} ago · ${every}`, lineLevel: null };
+  return { lvl: 'ok', status: 'Up', line: `Last run ${fmtDuration(now - (st.lastOk as number))} ago · ${every}`, lineLevel: null, word: 'on schedule' };
 }

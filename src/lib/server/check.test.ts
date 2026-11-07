@@ -109,25 +109,26 @@ test('heartbeat: pending changes nothing; up, overdue and a reported failure; hi
 
   tick({}, T + H);
   assert.deepEqual([st.heartbeat?.state, st.check.checked], ['pending', null]);
-  assert.deepEqual(status(s, st, T + H), { lvl: 'unknown', status: 'Waiting', line: `Waiting for the first run · ${every}`, lineLevel: 'muted' });
+  assert.deepEqual(status(s, st, T + H), { lvl: 'unknown', status: 'Waiting', line: `Waiting for the first run · ${every}`, lineLevel: 'muted', word: 'waiting for its first run' });
   assert.deepEqual(history(s.id), []);
 
   const ran = T + 2 * H;
   tick({ lastOk: ran }, ran + H);
-  assert.deepEqual(status(s, st, ran + H), { lvl: 'ok', status: 'Up', line: `Last run ${fmtDuration(H)} ago · ${every}`, lineLevel: null });
+  assert.deepEqual(status(s, st, ran + H), { lvl: 'ok', status: 'Up', line: `Last run ${fmtDuration(H)} ago · ${every}`, lineLevel: null, word: 'on schedule' });
 
   const due = ran + 25 * H;
   tick({ lastOk: ran }, due + 10 * 60_000);
   assert.deepEqual([st.check.down, st.check.reason], [true, 'Missed its run']);
   assert.deepEqual(status(s, st, due + 10 * 60_000), {
     lvl: 'crit', status: 'Down', line: `Overdue since ${fmtClock(due)}`,
-    alert: { sev: 'crit', title: 'missed its run', detail: `last run ${fmtDuration(25 * H + 10 * 60_000)} ago · ${every}`, ts: due }
+    alert: { sev: 'crit', title: 'missed its run', detail: `last run ${fmtDuration(25 * H + 10 * 60_000)} ago · ${every}`, ts: due }, word: 'overdue'
   });
 
   // the job runs, then reports a failure through the endpoint: events, but no history row
   tick({ lastOk: due + H }, due + H);
   tick({ lastOk: due + H, lastFail: due + 2 * H }, due + 2 * H, { history: false });
   assert.deepEqual([st.check.down, st.check.reason], [true, 'Reported a failure']);
+  assert.equal(status(s, st, due + 2 * H)?.word, 'failed');
   assert.deepEqual(status(s, st, due + 2 * H)?.alert, { sev: 'crit', title: 'reported a failure', detail: `${fmtClock(due + 2 * H)} · last run ${fmtDuration(H)} ago`, ts: due + 2 * H });
   assert.deepEqual(events(s.id).map((e) => e.slice(0, 2)), [['crit', 'Restic went down'], ['ok', 'Restic recovered'], ['crit', 'Restic went down']]);
   assert.deepEqual(history(s.id), [1, 0, 1]);

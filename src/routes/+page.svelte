@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { pushState } from '$app/navigation';
   import { page } from '$app/state';
-  import type { FeedItem, InfraPanel, Job, SheetRef, Snapshot } from '$lib/types';
+  import type { FeedItem, InfraPanel, SheetRef, Snapshot } from '$lib/types';
   import type { PageProps } from './$types';
   import Icon from '$lib/components/Icon.svelte';
   import Infrastructure from '$lib/components/Infrastructure.svelte';
@@ -230,7 +230,6 @@
     ok: 'M20 6 9 17l-5-5'
   };
   const KIND: Record<string, string> = { http: 'HTTP', tcp: 'TCP', container: 'Container state', heartbeat: 'Heartbeat' };
-  const jobState = (j: Job) => (j.state === 'down' ? (j.failed ? 'failed' : 'overdue') : j.state === 'pending' ? 'waiting for its first run' : 'on schedule');
 </script>
 
 <svelte:window onkeydown={onKey} />
@@ -513,7 +512,7 @@
         {#if j}
           <div><dt>Schedule</dt><dd>every {ago(0, j.every)} · grace {ago(0, j.grace)}</dd></div>
           <div><dt>Last run</dt><dd>{since(j.lastOk)}{#if j.lastFail && (!j.lastOk || j.lastFail > j.lastOk)} · failure reported {since(j.lastFail)}{/if}</dd></div>
-          <div><dt>Next run</dt><dd>{until(j.due, now)} · {jobState(j)}</dd></div>
+          <div><dt>Next run</dt><dd>{until(j.due, now)} · {j.status}</dd></div>
         {:else if t.check}
           <div><dt>Check</dt><dd>{KIND[t.check] ?? t.check}</dd></div>
         {/if}
@@ -535,38 +534,19 @@
     {:else if sheet?.kind === 'infra'}
       <Infrastructure panels={snap.infrastructure} host={snap.host} storage={snap.storage} drives={snap.drives} network={snap.network} {target} now={snap.generatedAt} initial={sheet.tab} />
     {:else if sheet?.kind === 'backups'}
-      {#if snap.backups?.known && snap.backups.oldestAge != null}
+      {#if snap.backups.oldestAge != null}
         <div class="facts">
           <div class="fact"><span class="muted k">Oldest backup</span><span class="fv">{ago(now - snap.backups.oldestAge, now)}</span>{#if snap.backups.oldestName}<span class="muted small">{snap.backups.oldestName}</span>{/if}</div>
-          <div class="fact lv-{cards.find((c) => c.id === 'backups')?.level ?? 'none'}"><span class="muted k">Overdue</span><span class="fv" class:hl={!!snap.backups.overdue}>{snap.backups.overdue}</span></div>
+          <div class="fact lv-{snap.backups.level}"><span class="muted k">Overdue</span><span class="fv" class:hl={!!snap.backups.overdue}>{snap.backups.overdue}</span></div>
         </div>
       {/if}
-      {#if snap.jobs.length || snap.guestBackups.length}
+      {#if snap.backups.rows.length}
         <ul class="jobs">
-          <!-- PBS guest backups first: they run daily, so they are the ones that change most -->
-          {#each snap.guestBackups as gb (gb.id)}
-            {#if gb.guests || !gb.hosts.length}
-              <li>
-                <button class="job" onclick={() => show({ kind: 'service', id: gb.id })}>
-                  <span class="txt"><span class="t">Guest backups{gb.stores.length ? ` · ${gb.stores.join(', ')}` : ''}</span><span class="d muted">{gb.guests} guest{gb.guests === 1 ? '' : 's'} · last run {since(gb.last)}</span></span>
-                  <span class="jr"><span class="state-w lv-{gb.overdue ? 'warn' : 'ok'}"><span class="dot lv-{gb.overdue ? 'warn' : 'ok'}" aria-hidden="true"></span>{gb.overdue ? `${gb.overdue} overdue` : 'on schedule'}</span><span class="muted small">{gb.name}</span></span>
-                </button>
-              </li>
-            {/if}
-            {#if gb.hosts.length}
-              <li>
-                <button class="job" onclick={() => show({ kind: 'service', id: gb.id })}>
-                  <span class="txt"><span class="t">Host backups{gb.stores.length ? ` · ${gb.stores.join(', ')}` : ''}</span><span class="d muted">{gb.hosts.length > 3 ? `${gb.hosts.slice(0, 2).join(', ')} and ${gb.hosts.length - 2} more` : gb.hosts.join(', ')} · last run {since(gb.hostLast)}</span></span>
-                  <span class="jr"><span class="state-w lv-{gb.hostOverdue ? 'warn' : 'ok'}"><span class="dot lv-{gb.hostOverdue ? 'warn' : 'ok'}" aria-hidden="true"></span>{gb.hostOverdue ? `${gb.hostOverdue} overdue` : 'on schedule'}</span><span class="muted small">{gb.name}</span></span>
-                </button>
-              </li>
-            {/if}
-          {/each}
-          {#each [...snap.jobs].sort((a, b) => a.due - b.due) as j (j.id)}
+          {#each snap.backups.rows as r (r.id + r.title)}
             <li>
-              <button class="job" onclick={() => show({ kind: 'service', id: j.id })}>
-                <span class="txt"><span class="t">{j.name}</span><span class="d muted">every {ago(0, j.every)} · last run {since(j.lastOk)}</span></span>
-                <span class="jr"><span class="state-w lv-{j.state === 'down' ? 'crit' : j.state === 'up' ? 'ok' : 'none'}"><span class="dot lv-{j.state === 'down' ? 'crit' : j.state === 'up' ? 'ok' : 'none'}" aria-hidden="true"></span>{jobState(j)}</span><span class="muted small">next {until(j.due, now)}</span></span>
+              <button class="job" onclick={() => show({ kind: 'service', id: r.id })}>
+                <span class="txt"><span class="t">{r.title}</span><span class="d muted">{r.detail} · last run {since(r.last)}</span></span>
+                <span class="jr"><span class="state-w lv-{r.level}"><span class="dot lv-{r.level}" aria-hidden="true"></span>{r.state}</span><span class="muted small">{r.due != null ? `next ${until(r.due, now)}` : r.source}</span></span>
               </button>
             </li>
           {/each}

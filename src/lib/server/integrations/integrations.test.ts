@@ -70,7 +70,7 @@ test('PBS: a guest is as fresh as its latest backup in any store; guests of ever
     createContext({ transport, kv: memoryKv(), settings: DEFAULT_SETTINGS, now, shared }));
   assert.deepEqual(res.alerts.filter((a) => a.title === 'Backup overdue'), []);
   assert.equal(res.stats.find((s) => s.k === 'groups')?.v, '2');
-  assert.equal(res.backups?.overdue, 0);
+  assert.deepEqual([res.backups?.guestOverdue, res.backups?.hostOverdue], [0, 0]);
   // the Backups sheet's row: guests judged, the newest backup, the stores read
   assert.deepEqual([res.backups?.guests, res.backups?.last, res.backups?.stores], [2, sec(2) * 1000, ['main', 'offsite']]);
 });
@@ -118,11 +118,11 @@ test('PBS: host backups are counted apart from guests; the oldest backup is name
   const shared: Shared = { guests: { 'https://pve.test pve': { 100: 'web', 101: 'db' } } };
   const res = await INTEGRATIONS.proxmoxbackupserver.collect({ type: 'proxmoxbackupserver', ...WIDGETS.proxmoxbackupserver },
     createContext({ transport, kv: memoryKv(), settings: DEFAULT_SETTINGS, now, shared }));
-  const { guests, last, hosts, hostLast, hostOverdue, overdue, oldestName } = res.backups ?? {};
+  const { guests, guestOverdue, last, hosts, hostLast, hostOverdue, oldestName, overdueSev } = res.backups ?? {};
   // the guest row says when the guests last ran, not the half-hourly host backup
-  assert.deepEqual({ guests, last, hosts, hostLast, hostOverdue, overdue, oldestName },
-    { guests: 2, last: Math.floor((now - 15 * H) / 1000) * 1000, hosts: ['nas', 'pve'], hostLast: Math.floor((now - 12 * 60_000) / 1000) * 1000, hostOverdue: 1, overdue: 1, oldestName: 'nas' });
-  assert.deepEqual(res.alerts.map((a) => [a.key, a.detail]), [['backup-nas', 'host nas · last success 30 h ago']]);
+  assert.deepEqual({ guests, guestOverdue, last, hosts, hostLast, hostOverdue, oldestName },
+    { guests: 2, guestOverdue: 0, last: Math.floor((now - 15 * H) / 1000) * 1000, hosts: ['nas', 'pve'], hostLast: Math.floor((now - 12 * 60_000) / 1000) * 1000, hostOverdue: 1, oldestName: 'nas' });
+  assert.deepEqual(res.alerts.map((a) => [a.key, a.sev, a.detail]), [['backup-nas', overdueSev, 'host nas · last success 30 h ago']], 'the result says how overdue backups are raised');
   assert.deepEqual(res.stats.map((s) => [s.k, s.v]), [['overdue', '1'], ['last backup', '15 h'], ['datastore', '10%'], ['host backup', '12 m'], ['groups', '4']]);
 });
 

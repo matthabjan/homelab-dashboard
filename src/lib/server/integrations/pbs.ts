@@ -116,6 +116,9 @@ type Group = PbsBackupGroup & { store: string };
 /** A host backup (proxmox-backup-client on a machine), as opposed to a guest's (vzdump of a VM or container). */
 const isHost = (g: PbsBackupGroup) => g['backup-type'] === 'host';
 
+/** An overdue backup warns; the result says so too, so the Backups row is as bad as these alerts. */
+const OVERDUE_SEV = 'warn';
+
 /** The guest's Proxmox name, else the group's comment, else "VM 101" / "CT 105" (a host backup's id is its hostname). */
 function guestLabel(g: PbsBackupGroup, guests: Record<string, string> | null): string {
   const id = String(g['backup-id']);
@@ -219,15 +222,16 @@ export async function collect(w: Widget, ctx: Context): Promise<WidgetResult> {
     guests ? isHost(g) || Object.hasOwn(guests, String(g['backup-id'])) : now - g['last-backup'] * 1000 < 14 * 86_400_000
   );
   let oldest: { age: number; name: string } | null = null;
-  let hostOverdue = 0;
+  let guestOverdue = 0, hostOverdue = 0;
   for (const g of relevant) {
     const age = now - g['last-backup'] * 1000;
     const label = guestLabel(g, guests);
     if (!oldest || age > oldest.age) oldest = { age, name: label };
     if (age > maxAge) {
       if (isHost(g)) hostOverdue++;
+      else guestOverdue++;
       const what = isHost(g) ? `host ${label}` : /^(VM|CT) /.test(label) ? label : `${g['backup-id']} ${label}`;
-      alerts.push({ sev: 'warn', key: `backup-${g['backup-id']}`, title: 'Backup overdue', detail: `${what} · last success ${fmtDuration(age)} ago` });
+      alerts.push({ sev: OVERDUE_SEV, key: `backup-${g['backup-id']}`, title: 'Backup overdue', detail: `${what} · last success ${fmtDuration(age)} ago` });
     }
   }
 
@@ -244,7 +248,7 @@ export async function collect(w: Widget, ctx: Context): Promise<WidgetResult> {
   const store = regular[0] ?? null;
   if (freshnessError) alerts.push({ sev: 'info', key: 'pbs-perm', title: 'Backup freshness unavailable', detail: freshnessError });
 
-  const overdue = alerts.filter((a) => a.title === 'Backup overdue').length;
+  const overdue = guestOverdue + hostOverdue;
   // overdue backups only when there are any; the line starts with a capital
   const facts: [Stat, string][] = [];
   const cap = (t: string) => (facts.length ? t : t[0].toUpperCase() + t.slice(1));
@@ -268,9 +272,10 @@ export async function collect(w: Widget, ctx: Context): Promise<WidgetResult> {
     storage,
     drives: (await slowly(ctx, 'drives', () => pbsDrives(ctx, base, opts))) ?? [],
     backups: {
-      overdue, oldestAge: oldest?.age ?? null, oldestName: oldest?.name ?? null, known: relevant.length > 0,
-      guests: guestCount, last: guestLatest ? guestLatest * 1000 : null, stores: stores.map((s) => s.store),
-      hosts: hostNames, hostLast: hostLatest ? hostLatest * 1000 : null, hostOverdue
+      known: relevant.length > 0,
+      guests: guestCount, guestOverdue, last: guestLatest ? guestLatest * 1000 : null,
+      hosts: hostNames, hostOverdue, hostLast: hostLatest ? hostLatest * 1000 : null,
+      oldestAge: oldest?.age ?? null, oldestName: oldest?.name ?? null, stores: stores.map((s) => s.store), overdueSev: OVERDUE_SEV
     }
   };
 }

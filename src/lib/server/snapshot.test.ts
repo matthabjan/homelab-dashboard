@@ -1,5 +1,5 @@
-// The status rules of the snapshot: tile levels and lines, attention, verdict, alert age, the infrastructure card, the
-// backups merge and the fleet strip.
+// The status rules of the snapshot: tile levels and lines, attention, verdict, alert age, the infrastructure card, how
+// backups reach it, and the fleet strip.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -11,7 +11,7 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dashboard-snapshot-'));
 process.env.DATA_DIR = path.join(tmp, 'data');
 process.env.CONFIG_DIR = tmp;
 delete process.env.DEMO;
-const { createSnapshot, mergeBackups } = await import('./snapshot.ts');
+const { createSnapshot } = await import('./snapshot.ts');
 const { snapshotInput } = await import('./test-helpers.ts');
 const { insertProbe, insertMetric } = await import('./db.ts');
 const { fmtClock } = await import('./format.ts');
@@ -19,8 +19,7 @@ const { record } = await import('./check.ts');
 const { heartbeatState } = await import('./heartbeat.ts');
 const { toDrive } = await import('./integrations/smart.ts');
 import type { TestService } from './test-helpers.ts';
-import type { BackupBeat } from './snapshot.ts';
-import type { Alert, Drive, HeartbeatState, Snapshot, StorageRow, Tile, WidgetState } from '$lib/types';
+import type { Alert, Drive, PbsBackups, Snapshot, StorageRow, Tile, WidgetState } from '$lib/types';
 
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
@@ -199,7 +198,7 @@ test('checks other than probes: a stopped container is down, a heartbeat that mi
   // the job with its schedule: next run expected `every` after the last one
   const [job] = snap.jobs;
   assert.deepEqual([job.name, job.state, job.lastOk, job.due, job.every, job.backup], ['Restic', 'down', lastOk, lastOk + 24 * 60 * MIN, hb.every, true]);
-  assert.deepEqual(snap.backups, { overdue: 1, oldestAge: 26 * 60 * MIN, oldestName: 'Restic', known: true });
+  assert.deepEqual([snap.backups.overdue, snap.backups.oldestAge, snap.backups.oldestName], [1, 26 * 60 * MIN, 'Restic']);
 });
 
 test('healthy: services and jobs are counted apart', () => {
@@ -239,49 +238,23 @@ test('infrastructure: storage is amber only where a row raises an alert; offline
   assert.deepEqual(alertsOf(full, 'NAS').map((a) => [a.sev, a.title]), [['warn', 'media · NAS is 90% full']]);
 });
 
-test('infrastructure: backups from every PBS widget; PBS alone warns, a late job is critical', () => {
+test('backups: every PBS widget and every job reach the card and the sheet, which agree; a red row has an alert behind it', () => {
   const now = day(21);
   const H = 60 * MIN;
-  const pbs = (name: string, overdue: number, oldestAge: number, oldestName: string): TestService => probed(name, now, { state: { widget: { ...widget(now, []), backups: { overdue, oldestAge, oldestName, known: true } } } });
-  const two = build([pbs('PBS A', 1, 30 * H, 'web'), pbs('PBS B', 2, 50 * H, 'db')], now);
-  assert.deepEqual(two.backups, { overdue: 3, oldestAge: 50 * H, oldestName: 'db', known: true }, 'the second server counts too');
-  assert.deepEqual(panel(two, 'backups'), { id: 'backups', label: 'Backups', value: '3 overdue', sub: '3 PBS backups', level: 'warn' });
-
-  const hb = { id: 'restic', every: 24 * H, grace: H, token: 't', backup: true };
-  const input = snapshotInput({ services: [pbs('PBS A', 1, 30 * H, 'web'), { name: 'Restic', heartbeat: hb }] });
-  const restic = input.cfg.services[1];
-  record(restic, input.state(restic.id), heartbeatState(hb, { since: now - 26 * H, lastOk: now - 26 * H, lastFail: null }, now), now);
-  const late = createSnapshot()(input, now);
-  assert.deepEqual(panel(late, 'backups'), { id: 'backups', label: 'Backups', value: '2 overdue', sub: 'Restic, 1 PBS backup', level: 'crit' });
-
-  const current = build([pbs('PBS A', 0, 20 * H, 'web')], now);
-  assert.deepEqual(panel(current, 'backups'), { id: 'backups', label: 'Backups', value: 'All current', sub: 'oldest backup 20 h · web', level: 'none' });
-});
-
-test('backups: a late job that makes no backup turns the row red but is not counted overdue, so the card and the sheet agree', () => {
-  const now = day(24);
-  const H = 60 * MIN;
+  const pbsBackups = (guestOverdue: number, oldestAge: number, oldestName: string): PbsBackups => ({ known: true, guests: 3, guestOverdue, last: now - 6 * H, hosts: [], hostOverdue: 0, hostLast: null, oldestAge, oldestName, stores: ['main'], overdueSev: 'warn' });
+  const pbs = (name: string, overdue: number, oldestAge: number, oldestName: string): TestService => probed(name, now, { state: { widget: { ...widget(now, []), backups: pbsBackups(overdue, oldestAge, oldestName) } } });
+  // a verify job makes no backup: late, it is named and red, but not counted overdue
   const hb = { id: 'verify', every: 24 * H, grace: H, token: 't', backup: false };
-  const pbs = probed('PBS', now, { state: { widget: { ...widget(now, []), backups: { overdue: 1, oldestAge: 30 * H, oldestName: 'web', known: true } } } });
-  const input = snapshotInput({ services: [pbs, { name: 'Verify', heartbeat: hb }] });
-  const verify = input.cfg.services[1];
+  const input = snapshotInput({ services: [pbs('PBS A', 1, 30 * H, 'web'), pbs('PBS B', 2, 50 * H, 'db'), { name: 'Verify', heartbeat: hb }] });
+  const verify = input.cfg.services[2];
   record(verify, input.state(verify.id), heartbeatState(hb, { since: now - 26 * H, lastOk: now - 26 * H, lastFail: null }, now), now);
   const snap = createSnapshot()(input, now);
-  assert.equal(snap.backups?.overdue, 1, 'the sheet: PBS only');
-  assert.deepEqual(panel(snap, 'backups'), { id: 'backups', label: 'Backups', value: '1 overdue', sub: 'Verify, 1 PBS backup', level: 'crit' });
-  assert.deepEqual(alertsOf(snap, 'Verify').map((a) => a.sev), ['crit'], 'the red row has the late job\'s alert behind it');
-});
 
-test('backups: heartbeats marked backup add to PBS (overdue summed, oldest age the larger, named)', () => {
-  const H = 60 * MIN;
-  const now = 100 * H;
-  const beat = (name: string, state: HeartbeatState['state'], lastOk: number | null): BackupBeat => ({ name, hb: { state, lastOk, lastFail: null, since: 0, failed: false, overdueSince: null } });
-  const pbs = { overdue: 1, oldestAge: 30 * H, oldestName: 'web', known: true };
-  assert.deepEqual(mergeBackups(pbs, [beat('Restic', 'down', now - 31 * H), beat('Borg', 'up', now - 6 * H)], now), { overdue: 2, oldestAge: 31 * H, oldestName: 'Restic', known: true });
-  assert.deepEqual(mergeBackups(pbs, [beat('Borg', 'up', now - 6 * H)], now), { overdue: 1, oldestAge: 30 * H, oldestName: 'web', known: true }, 'PBS keeps the name of its oldest');
-  assert.deepEqual(mergeBackups(undefined, [beat('Borg', 'up', now - 6 * H)], now), { overdue: 0, oldestAge: 6 * H, oldestName: 'Borg', known: true });
-  assert.equal(mergeBackups(pbs, [beat('Borg', 'pending', null)], now), pbs, 'a heartbeat that never ran adds nothing yet');
-  assert.equal(mergeBackups(undefined, [], now), undefined);
+  assert.deepEqual([snap.backups.overdue, snap.backups.level, snap.backups.oldestName], [3, 'warn', 'db'], 'the second server counts too');
+  assert.deepEqual(panel(snap, 'backups'), { id: 'backups', label: 'Backups', value: '3 overdue', sub: 'Verify, 3 PBS backups', level: 'crit' });
+  assert.deepEqual(snap.backups.rows.map((r) => [r.title, r.state, r.level]), [['Guest backups · main', '1 overdue', 'warn'], ['Guest backups · main', '2 overdue', 'warn'], ['Verify', 'overdue', 'crit']]);
+  assert.deepEqual(alertsOf(snap, 'Verify').map((a) => a.sev), ['crit']);
+  assert.equal(snap.jobs[0].status, 'overdue', 'the service sheet says what the row says');
 });
 
 test('a widget alert heads the verdict with its service named, but not on its own tile', () => {
