@@ -10,6 +10,11 @@ export function ago(ts: number, now: number) {
   return `${Math.floor(h / 24)} d`;
 }
 
+/** When a time comes, in the same words: "now" once it is due, else "in 5 m", "in 6 d". */
+export function until(ts: number, now: number) {
+  return ts <= now ? 'now' : `in ${ago(now, ts)}`;
+}
+
 /**
  * How long a certificate stays valid: "valid 74 d", "expired"; beyond 10 years "valid > 10 y", since appliance
  * self-signed certificates (PBS, PVE) run for centuries and a six-digit day count says nothing.

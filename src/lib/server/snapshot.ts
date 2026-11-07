@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import { resolveIcon, assetUrl } from './config.ts';
 import { probeStats, uptimeSince, probeBuckets, series, recentEvents, openScores } from './db.ts';
-import { fmtHours, fmtSize } from './format.ts';
+import { fmtHours, fmtSize, plural } from './format.ts';
 import { hostService, hostSource } from './local.ts';
 import { kindOf, status as checkStatus } from './check.ts';
 import { createAttention, type Raised } from './attention.ts';
@@ -400,8 +400,6 @@ function jobList(engine: SnapshotInput): Job[] {
     }];
   });
 }
-
-const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 /**
  * The hero's sentence. Healthy: how many services are up, jobs counted apart ("All 11 services up", "5 backup jobs on

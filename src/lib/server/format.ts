@@ -72,6 +72,9 @@ export function fmtRelative(ts: number | null | undefined, now: number): string 
   return d < 0 ? `${fmtDuration(-d)} ago` : `in ${fmtDuration(d)}`;
 }
 
+/** "1 drive", "3 drives"; `many` for an irregular plural */
+export const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
 /**
  * A widget's card from its facts, each a stat and the same as text: the Most used card shows the first two stats,
  * the service card the line, so the line is the first two texts and both say the same.

@@ -1,12 +1,12 @@
 // The infrastructure card's rows and the Infrastructure sheet's tabs: each panel's figure, context and level, said once
 // for both. Built from the snapshot's own parts, after attention closed.
-import { ago } from '../ago.ts';
+import { ago, until } from '../ago.ts';
+import { plural } from './format.ts';
 import type { InfraPanel, Level, Snapshot } from '$lib/types';
 
 type Parts = Pick<Snapshot, 'host' | 'storage' | 'drives' | 'network' | 'jobs' | 'backups'>;
 
 const worst = (levels: string[]): Level | 'none' => (levels.includes('crit') ? 'crit' : levels.includes('warn') ? 'warn' : 'none');
-const count = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 /** a storage row's name for prose: "media · NAS" → "media (NAS)" */
 const storageName = (name: string) => name.replace(/^(.+?) · (.+)$/, '$1 ($2)');
 /** Mbit/s: whole numbers from 100 up */
@@ -39,7 +39,7 @@ function storage(rows: Parts['storage']): InfraPanel {
     id: 'storage', label: 'Storage', value: top ? `${Math.round(top.pct ?? 0)}%` : '—', unit: top ? 'full' : '',
     sub: [top ? `fullest: ${storageName(top.name)}` : 'no usage reported', off && `${off} offline`].filter(Boolean).join(' · '),
     level: used.some((s) => s.level === 'crit') ? 'warn' : 'none',
-    meta: count(rows.length, 'storage') + (off ? ` · ${off} offline` : '')
+    meta: plural(rows.length, 'storage') + (off ? ` · ${off} offline` : '')
   };
 }
 
@@ -52,9 +52,9 @@ function drives(d: Parts['drives']): InfraPanel {
   return {
     id: 'drives', label: 'Drives',
     value: failing ? `${failing} failing` : check ? `${check} to check` : allOk ? 'All healthy' : 'No problems',
-    sub: [count(d.length, 'drive'), temps.length && `max ${Math.max(...temps)}°C`, lives.length && `${Math.min(...lives)}% life left`].filter(Boolean).join(' · '),
+    sub: [plural(d.length, 'drive'), temps.length && `max ${Math.max(...temps)}°C`, lives.length && `${Math.min(...lives)}% life left`].filter(Boolean).join(' · '),
     level: worst(d.map((x) => x.level)),
-    meta: count(d.length, 'drive') + (failing ? ` · ${failing} failing` : check ? ` · ${check} to check` : allOk ? ' · SMART ok' : '')
+    meta: plural(d.length, 'drive') + (failing ? ` · ${failing} failing` : check ? ` · ${check} to check` : allOk ? ' · SMART ok' : '')
   };
 }
 
@@ -77,8 +77,8 @@ function backups(jobs: Parts['jobs'], merged: Parts['backups'], pbsOverdue: numb
   const overdue = late.length + pbsOverdue;
   const next = [...jobs].sort((a, b) => a.due - b.due)[0];
   const sub = overdue
-    ? [...late.map((j) => j.name), pbsOverdue && count(pbsOverdue, 'PBS backup')].filter(Boolean).join(', ')
-    : next ? `next: ${next.name} ${next.due <= now ? 'now' : `in ${ago(now, next.due)}`}`
+    ? [...late.map((j) => j.name), pbsOverdue && plural(pbsOverdue, 'PBS backup')].filter(Boolean).join(', ')
+    : next ? `next: ${next.name} ${until(next.due, now)}`
     : merged?.oldestAge != null ? `oldest backup ${ago(now - merged.oldestAge, now)}${merged.oldestName ? ` · ${merged.oldestName}` : ''}`
     : '';
   return { id: 'backups', label: 'Backups', value: overdue ? `${overdue} overdue` : 'All current', sub, level: late.length ? 'crit' : pbsOverdue ? 'warn' : 'none' };

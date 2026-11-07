@@ -10,7 +10,7 @@
   import Palette from '$lib/components/Palette.svelte';
   import Beats from '$lib/components/Beats.svelte';
   import Sheet from '$lib/components/Sheet.svelte';
-  import { ago, validFor } from '$lib/ago.ts';
+  import { ago, until, validFor } from '$lib/ago.ts';
 
   // The page answers "is everything fine?" at a glance and gets you to a service in one tap. Everything else (strips,
   // charts, readings) is one tap deeper, in a sheet.
@@ -54,8 +54,6 @@
   const pctTxt = (v: number | null, d = 2) => (v == null ? '—' : v >= 99.995 ? '100%' : v.toFixed(d) + '%');
   /** "2 h ago", "just now" */
   const since = (ts: number | null) => (ts == null ? 'never' : ago(ts, now) === 'now' ? 'just now' : `${ago(ts, now)} ago`);
-  /** "in 3 d", "now" for a time that has passed */
-  const until = (ts: number) => (ts <= now ? 'now' : `in ${ago(now, ts)}`);
   const today = $derived.by(() => {
     const d = new Date(now);
     return `${d.toLocaleDateString('en-GB', { weekday: 'long' })}, ${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`;
@@ -80,11 +78,10 @@
   const jobById = $derived(new Map((snap?.jobs ?? []).map((j) => [j.id, j])));
 
   // the infrastructure card: one row per area, worded and judged on the server (the same panels are the sheet's tabs)
-  type Card = InfraPanel;
   const cards = $derived(snap?.infrastructure ?? []);
 
   /** a card's figure as words: "19% CPU · 64% RAM · 49°C TEMP", "90% full", "2 overdue" */
-  const figText = (c: Card) => (c.stats ? c.stats.map((x) => (x.k ? `${x.v} ${x.k}` : x.v)).join(' · ') : [c.value, c.unit].filter(Boolean).join(' '));
+  const figText = (c: InfraPanel) => (c.stats ? c.stats.map((x) => (x.k ? `${x.v} ${x.k}` : x.v)).join(' · ') : [c.value, c.unit].filter(Boolean).join(' '));
   // the infrastructure card's header and its phone summary: what needs attention, or, when nothing does, the key figures
   const infraProblems = $derived(cards.filter((c) => isProblem(c.level)));
   const infraStatus = $derived(infraProblems.length ? `${infraProblems.length} need${infraProblems.length === 1 ? 's' : ''} attention` : 'All healthy');
@@ -104,7 +101,7 @@
   const show = (s: SheetRef) => pushState('', { sheets: [...stack, s] });
   const back = () => history.back();
   const closeSheets = () => { if (stack.length) history.go(-stack.length); };
-  const openCard = (c: Card) => show(c.id === 'backups' ? { kind: 'backups' } : { kind: 'infra', tab: c.id });
+  const openCard = (c: InfraPanel) => show(c.id === 'backups' ? { kind: 'backups' } : { kind: 'infra', tab: c.id });
   const sheetId = $derived(sheet?.kind === 'service' ? sheet.id : null);
   const sheetTile = $derived(sheetId ? allServices.find((t) => t.id === sheetId) ?? null : null);
   const sheetJob = $derived(sheetId ? jobById.get(sheetId) ?? null : null);
@@ -241,7 +238,7 @@
 <!-- setup: the header button and the footer link -->
 {#snippet sliders()}<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1" /><circle cx="15" cy="6" r="2" /><circle cx="9" cy="12" r="2" /><circle cx="17" cy="18" r="2" /></svg>{/snippet}
 <!-- one glyph per infrastructure area, so a row is found without reading it -->
-{#snippet areaIcon(id: Card['id'])}
+{#snippet areaIcon(id: InfraPanel['id'])}
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
     {#if id === 'system'}<rect x="5" y="5" width="14" height="14" rx="2" /><rect x="9" y="9" width="6" height="6" rx="1" /><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3" />
     {:else if id === 'storage'}<ellipse cx="12" cy="5" rx="8" ry="3" /><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5" /><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3" />
@@ -515,7 +512,7 @@
         {#if j}
           <div><dt>Schedule</dt><dd>every {ago(0, j.every)} · grace {ago(0, j.grace)}</dd></div>
           <div><dt>Last run</dt><dd>{since(j.lastOk)}{#if j.lastFail && (!j.lastOk || j.lastFail > j.lastOk)} · failure reported {since(j.lastFail)}{/if}</dd></div>
-          <div><dt>Next run</dt><dd>{until(j.due)} · {jobState(j)}</dd></div>
+          <div><dt>Next run</dt><dd>{until(j.due, now)} · {jobState(j)}</dd></div>
         {:else if t.check}
           <div><dt>Check</dt><dd>{KIND[t.check] ?? t.check}</dd></div>
         {/if}
@@ -568,7 +565,7 @@
             <li>
               <button class="job" onclick={() => show({ kind: 'service', id: j.id })}>
                 <span class="txt"><span class="t">{j.name}</span><span class="d muted">every {ago(0, j.every)} · last run {since(j.lastOk)}</span></span>
-                <span class="jr"><span class="state-w lv-{j.state === 'down' ? 'crit' : j.state === 'up' ? 'ok' : 'none'}"><span class="dot lv-{j.state === 'down' ? 'crit' : j.state === 'up' ? 'ok' : 'none'}" aria-hidden="true"></span>{jobState(j)}</span><span class="muted small">next {until(j.due)}</span></span>
+                <span class="jr"><span class="state-w lv-{j.state === 'down' ? 'crit' : j.state === 'up' ? 'ok' : 'none'}"><span class="dot lv-{j.state === 'down' ? 'crit' : j.state === 'up' ? 'ok' : 'none'}" aria-hidden="true"></span>{jobState(j)}</span><span class="muted small">next {until(j.due, now)}</span></span>
               </button>
             </li>
           {/each}
