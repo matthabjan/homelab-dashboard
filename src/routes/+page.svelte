@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { pushState } from '$app/navigation';
   import { page } from '$app/state';
-  import type { FeedItem, InfraPanel, Job, SheetRef, Snapshot, Tile } from '$lib/types';
+  import type { FeedItem, InfraPanel, Job, SheetRef, Snapshot } from '$lib/types';
   import type { PageProps } from './$types';
   import Icon from '$lib/components/Icon.svelte';
   import Infrastructure from '$lib/components/Infrastructure.svelte';

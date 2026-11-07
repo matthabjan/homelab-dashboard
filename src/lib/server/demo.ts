@@ -24,7 +24,7 @@ function rnd(seed: string): () => number {
   return () => ((h = Math.imul(h ^ (h >>> 15), 2246822507) ^ Math.imul(h ^ (h >>> 13), 3266489909)) >>> 0) / 4294967296;
 }
 
-export function demoProbe(s: Service, now: number): ProbeResult {
+export function demoProbe(s: Service): ProbeResult {
   if (isDown(s)) return { ok: false, ms: null, code: 'ECONNREFUSED' };
   const r = Math.random();
   return { ok: true, ms: isSlow(s) ? 180 + r * 260 : baseMs(s) + r * 12, code: 200 };

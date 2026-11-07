@@ -319,7 +319,7 @@ test('customapi: a non-JSON answer is an error with the body for the log only', 
   assert.equal(err?.message, 'Response is not JSON');
   assert.equal(err?.body, '<html>login</html>');
   const post: { method: string; headers: Record<string, string>; body: string } = { method: '', headers: {}, body: '' };
-  const record: Transport = async (url, opts = {}) => (Object.assign(post, opts), Response.json({ ok: 1 }));
+  const record: Transport = async (_url, opts = {}) => (Object.assign(post, opts), Response.json({ ok: 1 }));
   await INTEGRATIONS.customapi.collect({ type: 'customapi', url: 'https://x.test/', method: 'post', requestBody: { q: 1 }, username: 'u', password: 'p', mappings: [{ field: 'ok' }] },
     createContext({ transport: record, kv: memoryKv(), settings: DEFAULT_SETTINGS, now: Date.now() }));
   assert.deepEqual([post.method, post.body, post.headers['Content-Type'], post.headers.Authorization], ['POST', '{"q":1}', 'application/json', 'Basic dTpw']);
