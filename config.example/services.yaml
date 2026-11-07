@@ -109,9 +109,28 @@
         href: https://ha.home.arpa
         description: Home automation
         siteMonitor: https://ha.home.arpa
+        widget:
+          type: homeassistant
+          url: https://ha.home.arpa
+          key: ${HA_TOKEN}              # a long-lived access token
+          # batteryLow: 20              # our addition: batteries below this % are a note
+          custom:                       # homepage's custom values, after the updates
+            - { state: sensor.house_power, label: power }
     - Mosquitto:
         description: MQTT broker
         siteMonitor: tcp://mqtt.home.arpa:1883
+
+- Management:               # Traefik joins this group from its container labels
+    - What's Up Docker:       # wins over the container's labels: same group and name
+        icon: whats-up-docker
+        href: https://wud.home.arpa
+        description: Image updates for the Portainer host
+        siteMonitor: https://wud.home.arpa
+        widget:
+          type: whatsupdocker
+          url: https://wud.home.arpa
+          username: dashboard               # leave both out if WUD has no auth
+          password: ${WUD_PASSWORD}
 
 - Entertainment:
     - MusicAssistant:          # automatic too: matches music-assistant

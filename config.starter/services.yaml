@@ -33,6 +33,15 @@
 #             - { field: sessions.active, label: sessions, format: number }
 #             - { field: healthy, label: health, crit: { below: 1 } }
 #
+#     # Pending updates and low batteries as notes; a long-lived token of a non-admin user is enough
+#     - Home Assistant:
+#         href: https://ha.example.com
+#         siteMonitor: https://ha.example.com
+#         widget:
+#           type: homeassistant
+#           url: https://ha.example.com
+#           key: ${HA_TOKEN}
+#
 # - Network:
 #     - Pi-hole:
 #         href: https://pihole.example.com/admin

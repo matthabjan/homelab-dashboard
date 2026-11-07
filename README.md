@@ -4,7 +4,7 @@
 [![Docker Hub](https://img.shields.io/docker/v/matthabjan/homelab-dashboard?sort=semver&label=docker%20hub)](https://hub.docker.com/r/matthabjan/homelab-dashboard)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-A self-hosted launcher and status page for a homelab on **any Docker host**: it shows at a glance whether everything is OK and gets you to your services quickly. Proxmox VE, Proxmox Backup Server, OPNsense, OpenMediaVault, AdGuard Home or Pi-hole, Portainer or Docker, and FRITZ!Box add detail when you have them. For in-depth metrics, link out to a tool such as [Pulse](https://github.com/rcourtman/Pulse).
+A self-hosted launcher and status page for a homelab on **any Docker host**: it shows at a glance whether everything is OK and gets you to your services quickly. Proxmox VE, Proxmox Backup Server, OPNsense, OpenMediaVault, AdGuard Home or Pi-hole, Portainer or Docker, What's Up Docker, Home Assistant, and FRITZ!Box add detail when you have them. For in-depth metrics, link out to a tool such as [Pulse](https://github.com/rcourtman/Pulse).
 
 It is made for your **LAN or VPN** (WireGuard, Tailscale, …): it has no login of its own and must not be reachable from the internet.
 
@@ -18,7 +18,7 @@ It is made for your **LAN or VPN** (WireGuard, Tailscale, …): it has no login 
 - **Works without Proxmox.** On a plain Docker host you still get the machine's vitals, your containers (through a read-only socket proxy), values from any JSON API with alert thresholds, `tcp://` checks for services without a web page, and heartbeats: backup and cron jobs report when they ran, and a missed or failed run becomes an alert.
 - **Works with gethomepage configs.** [gethomepage](https://gethomepage.dev)'s `services.yaml`, `bookmarks.yaml` and icon names work as they are; its `homepage.*` container labels work once renamed to `dashboard.*`. Services without an icon get one automatically.
 
-**Integrations:** Proxmox VE · Proxmox Backup Server · OPNsense · OpenMediaVault · AdGuard Home · Pi-hole · Portainer · Docker · FRITZ!Box · any JSON API (`customapi`)
+**Integrations:** Proxmox VE · Proxmox Backup Server · OPNsense · OpenMediaVault · AdGuard Home · Pi-hole · Portainer · Docker · What's Up Docker · Home Assistant · FRITZ!Box · any JSON API (`customapi`)
 
 **Not included:** notifications (it shows problems but doesn't send them; pair it with a monitor that alerts, such as Uptime Kuma), user accounts, and editing the configuration in the browser. A read-only **Setup** page shows whether your config is right: what loaded, which widgets connect and any missing secrets, never their values.
 
@@ -40,7 +40,7 @@ docker run --rm -p 3000:3000 -e DEMO=1 matthabjan/homelab-dashboard:latest
 
 Open <http://localhost:3000>. Add `-e DEMO_SCENARIO=calm` to see a homelab where everything is healthy.
 
-For your own services, copy the starter config out of the image, edit `config/services.yaml`, and start it with Docker Compose. The starter works as it is (the host's vitals, a self-check, two links) and has commented examples for Docker, Pi-hole, a JSON API, a `tcp://` check and a heartbeat. [config.example/](config.example) shows every widget.
+For your own services, copy the starter config out of the image, edit `config/services.yaml`, and start it with Docker Compose. The starter works as it is (the host's vitals, a self-check, two links) and has commented examples for Docker, Pi-hole, Home Assistant, a JSON API, a `tcp://` check and a heartbeat. [config.example/](config.example) shows every widget.
 
 ```bash
 mkdir -p config && docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/config:/seed" matthabjan/homelab-dashboard:latest cp -r /config/. /seed/
@@ -50,7 +50,7 @@ mkdir -p config && docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/config:/s
 # compose.yaml
 services:
   dashboard:
-    image: matthabjan/homelab-dashboard:0.2.12 # pin a version, update deliberately
+    image: matthabjan/homelab-dashboard:0.2.13 # pin a version, update deliberately
     restart: unless-stopped
     ports:
       - 127.0.0.1:3000:3000 # localhost only; reach it from the LAN or VPN through a reverse proxy

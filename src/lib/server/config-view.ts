@@ -25,7 +25,8 @@ const SAFE_OPTIONS: Record<string, string[]> = {
   opnsense: ['wan'],
   portainer: ['env'],
   pihole: ['version'],
-  customapi: ['method', 'refreshInterval']
+  customapi: ['method', 'refreshInterval'],
+  homeassistant: ['batteryLow']
 };
 
 /** Scheme, host and port: no userinfo, path or query, which can carry tokens. Just the scheme for a non-URL. */
@@ -80,6 +81,7 @@ function widgetRows(engine: ConfigViewInput): ConfigView['widgets'] {
     const st = engine.state(s.id).widget;
     const options = (SAFE_OPTIONS[w.type] ?? []).filter((k) => w[k] != null && typeof w[k] !== 'object').map((k) => ({ k, v: String(w[k]) }));
     if (w.type === 'customapi' && Array.isArray(w.mappings)) options.push({ k: 'mappings', v: String(w.mappings.length) });
+    if (w.type === 'homeassistant' && Array.isArray(w.custom)) options.push({ k: 'custom', v: String(w.custom.length) });
     const status: ConfigView['widgets'][number]['status'] = !(w.type in INTEGRATIONS) ? 'unsupported' : !st ? 'never' : st.ok ? 'ok' : 'error';
     return {
       id: s.id,
