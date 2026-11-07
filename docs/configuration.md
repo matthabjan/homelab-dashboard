@@ -76,7 +76,7 @@ The System panel shows a Proxmox node when there is a `proxmox` widget, and othe
 | `node` | first online node | Proxmox node to show, for clusters. A widget's own `node:` takes precedence. |
 | `temperature` | `true` | Read CPU and NVMe temperatures from the kernel (`/sys/class/hwmon`). |
 | `storage` | automatic | PVE storage shown on the System panel's *Disk* gauge. By default it is the largest local storage that holds guest disks (`images` / `rootdir` content), otherwise the root filesystem. |
-| `storages` | all | List of PVE storage names to show in the Storage panel. |
+| `storages` | all | List of PVE storage names to show in the Storage panel. A storage left out still warns when the *Disk* gauge shows it and it is over `storageWarnPct`. |
 
 What the local host shows depends on where the dashboard runs:
 

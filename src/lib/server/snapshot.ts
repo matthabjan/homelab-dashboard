@@ -260,9 +260,14 @@ function hostPanel(engine: SnapshotInput, now: number, mem: Memory, round: Round
       // a percentage like the other gauges and its history; the amounts are the detail
       gauges.push({ key: 'mem', label: 'Memory', val: Math.round(hw.memPct), unit: '%', pct: hw.memPct, level: level(hw.memPct, 80, 92), sub: `${(hw.mem / 1024 ** 3).toFixed(1)} of ${Math.round(hw.maxmem / 1024 ** 3)} GiB`, ...hist('host.mem'), max: 100, warn: 80 });
       gauges.push({ key: 'disk', label: 'Disk', val: hw.disk.pct == null ? '—' : Math.round(hw.disk.pct), unit: '%', pct: hw.disk.pct, level: level(hw.disk.pct, th.storageAmberPct, th.storageWarnPct), sub: hw.disk.name, ...hist(hostSvc ? hw.disk.metric : 'host.disk'), max: 100, warn: th.storageAmberPct });
-      // a Proxmox node's disk is also a storage row, which raises this itself; the local host has no other place for it
-      if (!hostSvc && hw.disk.pct != null && hw.disk.pct >= th.storageWarnPct) {
-        round.raise({ sev: 'warn', source: 'host', key: 'local-disk', title: `Disk ${hw.disk.name} is ${Math.round(hw.disk.pct)}% full`, detail: `${hw.node} · ${hw.disk.sub}` });
+      // a Proxmox disk that is also a storage row (same metric) is raised by the row; one host.storages leaves out, or
+      // the root file system, only by the gauge. The local host has no other place for it
+      if (hw.disk.pct != null && hw.disk.pct >= th.storageWarnPct) {
+        const pct = Math.round(hw.disk.pct);
+        if (!hostSvc) round.raise({ sev: 'warn', source: 'host', key: 'local-disk', title: `Disk ${hw.disk.name} is ${pct}% full`, detail: `${hw.node} · ${hw.disk.sub}` });
+        else if (!engine.state(hostSvc.id).widget?.storage?.some((r) => r.metric === hw.disk.metric)) {
+          round.raise({ sev: 'warn', service: hostSvc, key: `storage-${hw.disk.name}`, title: `${hw.disk.name} is ${pct}% full`, detail: hw.disk.sub });
+        }
       }
     }
     if (temps?.cpu != null) {

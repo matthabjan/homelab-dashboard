@@ -20,7 +20,7 @@ const { heartbeatState } = await import('./heartbeat.ts');
 const { toDrive } = await import('./integrations/smart.ts');
 import type { TestService } from './test-helpers.ts';
 import type { BackupBeat } from './snapshot.ts';
-import type { Alert, Drive, HeartbeatState, Snapshot, Tile, WidgetState } from '$lib/types';
+import type { Alert, Drive, HeartbeatState, Snapshot, StorageRow, Tile, WidgetState } from '$lib/types';
 
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
@@ -158,6 +158,22 @@ test('a tile follows its attention: a full storage warns its tile; with a Proxmo
   // the local host has no tile: its alerts belong to no service
   const local = createSnapshot()(snapshotInput({ services: [probed('Web', now)], temps }), now);
   assert.deepEqual(local.attention.map((a) => [a.key, a.service]), [['host|cpu-temp', undefined], ['host|nvme-temp-0', undefined]]);
+});
+
+test('a full Proxmox host disk raises once: by its storage row, or by the gauge when no row shows it', () => {
+  const now = day(23);
+  const vitals = (disk: { name: string; metric: string }) => ({ node: 'pve', cpu: 5, cpus: 8, mem: 1, maxmem: 4, memPct: 25, disk: { ...disk, pct: 91, sub: '91 / 100 GiB' }, uptime: null, guestsRunning: null, guestsTotal: null, updates: null });
+  const pve = (disk: { name: string; metric: string }, storage: StorageRow[]): TestService => ({ name: 'PVE', widget: { type: 'proxmox', url: 'https://pve.home.arpa:8006' }, state: { widget: { ...widget(now, []), host: vitals(disk), storage } } });
+  const full = (snap: Snapshot) => alertsOf(snap, 'PVE').map((a) => [a.sev, a.title]);
+
+  // host.storages leaves the gauge's disk out, or there is none and the gauge shows the root file system
+  const root = build([pve({ name: 'root', metric: 'host.root' }, [])], now);
+  assert.equal(root.host?.gauges.find((g) => g.key === 'disk')?.level, 'crit');
+  assert.deepEqual(full(root), [['warn', 'PVE: root is 91% full']], 'a red gauge has an alert behind it');
+
+  // the gauge's disk is also a storage row: one alert, not two
+  const row: StorageRow = { name: 'local-zfs', used: 91, total: 100, pct: 91, sub: '91 / 100 GiB', source: 'pve', metric: 'storage.pve.local-zfs' };
+  assert.deepEqual(full(build([pve({ name: 'local-zfs', metric: 'storage.pve.local-zfs' }, [row])], now)), [['warn', 'PVE: local-zfs is 91% full']]);
 });
 
 test('checks other than probes: a stopped container is down, a heartbeat that missed its run alerts', () => {
