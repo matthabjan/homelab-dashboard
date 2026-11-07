@@ -32,7 +32,7 @@ export interface TileAlert {
 export interface Closed {
   /** most severe first, then newest */
   items: AttentionItem[];
-  /** the attention list while anything needs attention; else every alert and recent event, newest first */
+  /** the notes (info alerts), then the recent events that don't repeat an alert: what Activity lists */
   feed: FeedItem[];
   /** crit and warn items */
   needCount: number;
@@ -81,7 +81,7 @@ export function createAttention() {
           const top = items[0];
           return {
             items,
-            feed: needCount ? items : feedOf(entries, events),
+            feed: [...items.filter((a) => a.sev === 'info'), ...withoutRepeats(items, events)],
             needCount,
             headline: needCount
               ? { level: top.sev as Level, tag: `${needCount} ${needCount === 1 ? 'needs' : 'need'} attention`, title: `${top.title}.` }
@@ -98,13 +98,7 @@ export function createAttention() {
   };
 }
 
-/**
- * Alerts and events together, newest first. An event that says what an alert says (the alert logged it), or what a
- * newer event already said, is left out.
- */
-function feedOf(entries: Entry[], events: FeedEvent[]): FeedItem[] {
-  const said = (sid: string | null | undefined, title: string) => `${sid ?? ''}\0${title}`;
-  const seen = new Set(entries.map((e) => said(e.item.sid, e.bare)));
-  const fresh = [...events].sort((a, b) => b.ts - a.ts).filter((e) => !seen.has(said(e.sid, e.title)) && !!seen.add(said(e.sid, e.title)));
-  return [...entries.map((e) => e.item), ...fresh].sort((a, b) => b.ts - a.ts);
+/** `events` without those that say what one of the alerts says (the alert logged it). Everything else stays: a repeat is a log, a service that went down twice did so twice. */
+export function withoutRepeats<E extends { sid?: string | null; title: string }>(alerts: AttentionItem[], events: E[]): E[] {
+  return events.filter((e) => !alerts.some((a) => (a.sid ?? null) === (e.sid ?? null) && a.title === (a.service ? named(a.service, e.title) : e.title)));
 }

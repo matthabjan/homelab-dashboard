@@ -24,7 +24,7 @@ Terms used in the code and in design discussions.
 
 **Attention** — the list of alerts that need looking at, most severe first. Checks, widgets, the infrastructure panels and the config raise them, each with a key that is unique within its service (or source, such as `host` or `config`); the attention module (`attention.ts`) names each after its service, keeps the time it first appeared by that key, and gives each tile its worst alert: a tile is as bad as what is raised for it.
 
-**Feed** — the attention list while anything needs attention, else every alert and the last day's events, newest first, without an event that repeats what an alert or a newer event says. Built on the server; the page's **Activity** card shows the notes (info alerts) and events from it.
+**Feed** — what the **Activity** card lists: the notes (info alerts), then the last day's events, newest first, without an event that repeats an alert (`withoutRepeats`). A repeat of an event stays: a service that went down twice did so twice. Built on the server. Warnings and critical alerts are the hero's, so they are not in it.
 
 **Verdict** — the hero's sentence: "All 15 services up" (with jobs, backups and expiring certificates as context), or the top attention item with an Open action for its service.
 

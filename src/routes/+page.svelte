@@ -64,13 +64,6 @@
   // ---- what the page shows, from the snapshot ----
   // under the hero: the other warnings and critical items (notes, such as pending updates, are the activity card's)
   const also = $derived(snap?.needCount ? snap.attention.slice(1).filter((a) => a.sev !== 'info') : []);
-  const notes = $derived(snap ? snap.attention.filter((a) => a.sev === 'info') : []);
-  // the activity list: notes, then events, without an event that repeats a note (the alert logged it)
-  const activity = $derived.by(() => {
-    if (!snap) return [];
-    const said = new Set(notes.map((n) => `${n.sid ?? ''}\0${n.title}`));
-    return [...notes, ...snap.events.filter((e) => !notes.some((n) => (n.sid === e.sid || !e.sid) && n.title.endsWith(e.title)) && !said.has(`${e.sid ?? ''}\0${e.title}`))];
-  });
   let alsoAll = $state(false);
   const ALSO = 3;
   // the launcher: only what can be opened (jobs and services without href live in the Status view and the sheets)
@@ -181,7 +174,8 @@
   const sheetTile = $derived(sheetId ? allServices.find((t) => t.id === sheetId) ?? null : null);
   const sheetJob = $derived(sheetId ? jobById.get(sheetId) ?? null : null);
   // the service sheet's activity: what is raised about it now, then its events of the last 7 days (fetched, since the
-  // snapshot only carries the latest events of all services), refreshed when something changes
+  // snapshot only carries the latest of all services; both leave out events that repeat an alert), refreshed when
+  // something changes
   let svcEvents = $state<{ sid: string; items: FeedItem[] } | null>(null);
   $effect(() => {
     const sid = sheetId;
@@ -216,8 +210,8 @@
   const sheetActivity = $derived.by(() => {
     if (!snap || !sheetId) return [];
     const raised = snap.attention.filter((a) => a.sid === sheetId);
-    const past = svcEvents?.sid === sheetId ? svcEvents.items : snap.events.filter((e) => e.sid === sheetId);
-    return [...raised, ...past.filter((e) => !raised.some((a) => a.title.endsWith(e.title)))];
+    const past = svcEvents?.sid === sheetId ? svcEvents.items : snap.feed.filter((e) => e.sid === sheetId && !('key' in e));
+    return [...raised, ...past];
   });
   const titleOf = (s: SheetRef | null | undefined) =>
     !s ? '' : s.kind === 'service' ? allServices.find((t) => t.id === s.id)?.name ?? '' : s.kind === 'infra' ? 'Infrastructure' : s.kind === 'backups' ? 'Backups' : 'Activity';
@@ -518,9 +512,9 @@
       </section>
 
       <section class="card sec activity" aria-labelledby="h-activity">
-        <div class="sec-head"><h2 id="h-activity">Activity</h2>{#if activity.length > 5}<button class="link-btn" onclick={() => show({ kind: 'activity' })}>Show all</button>{/if}</div>
-        {#if activity.length}
-          <ul class="evs">{#each activity.slice(0, 5) as a (a.ts + a.title)}{@render event(a)}{/each}</ul>
+        <div class="sec-head"><h2 id="h-activity">Activity</h2>{#if snap.feed.length > 5}<button class="link-btn" onclick={() => show({ kind: 'activity' })}>Show all</button>{/if}</div>
+        {#if snap.feed.length}
+          <ul class="evs">{#each snap.feed.slice(0, 5) as a (a.ts + a.title)}{@render event(a)}{/each}</ul>
         {:else}
           <p class="muted small">No changes in the last 24 hours.</p>
         {/if}
@@ -661,7 +655,7 @@
         <div class="sh-row"><span class="st">All services</span><span class="muted small">{pctTxt(snap.fleetAvail)} uptime</span></div>
         <Beats beats={snap.fleet} end={snap.generatedAt} label="Availability of all services over the last 24 hours" />
       </div>
-      <ul class="evs">{#each activity as a (a.ts + a.title)}{@render event(a)}{/each}</ul>
+      <ul class="evs">{#each snap.feed as a (a.ts + a.title)}{@render event(a)}{/each}</ul>
     {/if}
   </Sheet>
 

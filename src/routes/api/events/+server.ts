@@ -2,6 +2,7 @@ import type { RequestHandler } from './$types';
 import { json } from '@sveltejs/kit';
 import { getEngine } from '$lib/server/engine.ts';
 import { eventsOf, serviceEvents } from '$lib/server/db.ts';
+import { withoutRepeats } from '$lib/server/attention.ts';
 
 const WEEK = 7 * 86_400_000;
 
@@ -18,5 +19,5 @@ export const GET: RequestHandler = ({ url }) => {
   }
   const sid = url.searchParams.get('sid');
   if (!sid || !href.has(sid)) return new Response(null, { status: 404 });
-  return json(serviceEvents(sid, since).map((e) => ({ ...e, href: href.get(sid) ?? null })), { headers });
+  return json(withoutRepeats(engine.snapshot?.attention ?? [], serviceEvents(sid, since)).map((e) => ({ ...e, href: href.get(sid) ?? null })), { headers });
 };

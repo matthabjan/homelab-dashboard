@@ -2,7 +2,7 @@
 // "issues": music-assistant crashed and stays exited; wud was `docker stop`ped (exit 0, but it should be running).
 // In both, certbot-renew is a one-shot job that finished (exit 0, no restart policy): not a failure.
 import type { Fixtures } from '$lib/types';
-import type { DockerContainer, DockerContainerInspect, DockerInfo } from '../integrations/containers.ts';
+import type { DockerContainer, DockerContainerInspect } from '../integrations/containers.ts';
 
 const plain = ['postgres', 'redis', 'immich-server', 'immich-ml', 'paperless', 'gotenberg', 'tika', 'jellyfin', 'sonarr', 'radarr', 'prowlarr', 'qbittorrent', 'vaultwarden',
   'nextcloud', 'mariadb', 'mosquitto', 'zigbee2mqtt', 'node-red', 'uptime-kuma', 'grafana', 'prometheus', 'loki'];
@@ -10,7 +10,6 @@ const plain = ['postgres', 'redis', 'immich-server', 'immich-ml', 'paperless', '
 export const container = (name: string, state = 'running', status = 'Up 3 days', labels: Record<string, string> = {}): DockerContainer => ({ Id: `${name.padEnd(12, '0')}abcdef`, Names: [`/${name}`], Image: `ghcr.io/example/${name}:latest`, State: state, Status: status, Labels: labels });
 
 export default {
-  'GET /api/endpoints/:env/docker/info': (): DockerInfo => ({ ID: 'DEMO:PORTAINER:ENGINE', Name: 'docker-01' }),
   'GET /api/endpoints/:env/docker/containers/json': ({ scenario }): DockerContainer[] => [
     ...plain.map((n) => container(n)),
     scenario === 'issues' ? container('music-assistant', 'exited', 'Exited (1) 1 hour ago') : container('music-assistant'),

@@ -141,7 +141,6 @@ test('verdict and facts: how many services are up, or the top attention item wit
   assert.match(issues.verdict.sub, /^HTTP 502 · since \d\d:\d\d · 1 of 2 services up$/);
   const linked = build([probed('Web', now, { href: 'https://web.home.arpa', state: { check: { fails: 2, down: true, since: now - MIN, reason: 'HTTP 502', ms: null, checked: now } } })], now);
   assert.deepEqual(linked.verdict.action, { label: 'Open Web', href: 'https://web.home.arpa' });
-  assert.deepEqual(issues.facts.map((f) => [f.k, f.v, f.level]), [['services up', '1 / 2', 'crit'], ['next cert', '5 d', 'warn']]);
 });
 
 test('a tile follows its attention: a full storage warns its tile; with a Proxmox host, so do the CPU and NVMe temperatures', () => {

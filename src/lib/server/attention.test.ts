@@ -1,8 +1,8 @@
 // Attention through its interface: begin, raise, close.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createAttention } from './attention.ts';
-import type { FeedEvent } from '$lib/types';
+import { createAttention, withoutRepeats } from './attention.ts';
+import type { AttentionItem, FeedEvent } from '$lib/types';
 
 const MIN = 60_000;
 const T = Date.UTC(2026, 0, 1);
@@ -80,22 +80,27 @@ test("worst: a service's most severe crit or warn alert, with its bare title; in
   assert.equal(c.worst('g-pi-hole'), null);
 });
 
-test('feed: only attention while anything needs it; else alerts and events, without what an alert already says', () => {
+test('feed: the notes, then the events, without what an alert already says; repeats of an event stay', () => {
   const event = (ts: number, title: string, sid: string | null = nas.id): FeedEvent => ({ ts, sev: 'ok', sid, title, detail: null, href: null });
   const events = [event(T - MIN, '4 updates available'), event(T - 2 * MIN, 'Backups completed', null), event(T - 3 * MIN, 'NAS recovered'), event(T - 9 * MIN, 'NAS recovered')];
 
-  const busy = createAttention().begin(T);
-  busy.raise({ sev: 'warn', service: nas, key: 'new', title: 'newer warning' });
-  const b = busy.close(events);
-  assert.deepEqual(b.feed, b.items);
-
-  const calm = createAttention().begin(T);
-  calm.raise({ sev: 'info', service: nas, key: 'updates', title: '4 updates available' });
-  assert.deepEqual(calm.close(events).feed.map((x) => [x.title, x.ts]), [
+  const r = createAttention().begin(T);
+  r.raise({ sev: 'warn', service: nas, key: 'new', title: 'newer warning' });
+  r.raise({ sev: 'info', service: nas, key: 'updates', title: '4 updates available' });
+  assert.deepEqual(r.close(events).feed.map((x) => [x.title, x.ts]), [
     ['NAS: 4 updates available', T],
     ['Backups completed', T - 2 * MIN],
-    ['NAS recovered', T - 3 * MIN]
-  ], 'the event the alert logged and the older repeat are left out');
+    ['NAS recovered', T - 3 * MIN],
+    ['NAS recovered', T - 9 * MIN]
+  ], 'the warning is the hero\'s, the event the note logged is left out, and the older repeat stays');
+});
+
+test('withoutRepeats: an event repeats an alert of its own service, by the whole title', () => {
+  const alert = (title: string, sid?: string, service?: string): AttentionItem => ({ sev: 'info', key: 'k', title, ts: T, sid, service });
+  const event = (title: string, sid: string | null) => ({ title, sid });
+  const alerts = [alert('NAS: 4 updates available', 'nas', 'NAS'), alert('Pi-hole is down', 'pihole', 'Pi-hole'), alert('settings.yaml has an error')];
+  const events = [event('4 updates available', 'nas'), event('Pi-hole is down', 'pihole'), event('settings.yaml has an error', null), event('4 updates available', 'other'), event('updates available', 'nas')];
+  assert.deepEqual(withoutRepeats(alerts, events), [event('4 updates available', 'other'), event('updates available', 'nas')], 'another service, or only the end of a title, is no repeat');
 });
 
 test('raising after close throws: every source raises before tiles are built', () => {

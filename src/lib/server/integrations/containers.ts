@@ -22,17 +22,10 @@ export interface DockerContainerInspect {
   HostConfig?: { RestartPolicy?: { Name?: string } };
 }
 
-/** GET /info, the fields read here. */
-export interface DockerInfo {
-  ID?: string;
-  Name?: string;
-}
-
 /** What a container widget keeps in ctx.state between polls. */
 interface ContainersState {
   /** container id → restart policy, for exited containers */
   restartPolicy?: Record<string, string>;
-  engineId?: string | null;
 }
 
 type Inspect = (c: DockerContainer) => Promise<DockerContainerInspect | null>;
@@ -87,13 +80,6 @@ export const containerOf = (c: DockerContainer, failed: DockerContainer[]): Cont
   done: c.State === 'exited' && !failed.includes(c)
 });
 
-/** The engine's id from /info, looked up once per service; the base URL when /info isn't allowed. */
-async function engineId(base: string, opts: RequestOptions, ctx: Context) {
-  const state = ctx.state as ContainersState;
-  state.engineId ??= (await ctx.getJson<DockerInfo>(`${base}/info`, opts).catch(() => null))?.ID ?? null;
-  return state.engineId ?? base;
-}
-
 /**
  * Alerts for restarting, failed and unhealthy containers. A labelled container without siteMonitor is its own tile,
  * health and alert included, so it gets no second alert here.
@@ -137,8 +123,6 @@ export async function collectContainers(base: string, opts: RequestOptions, ctx:
     .map(({ weight, ...d }) => d);
 
   const containers: ContainerCounts = { running: running.length, total: list.length, failed: failed.length + restarting.length, unhealthy: unhealthy.length };
-  // keyed by Docker engine, so Portainer and a docker widget on the same engine count its containers once
-  (ctx.shared.containers ??= {})[await engineId(base, opts, ctx)] = containers;
   const bad = failed.length + restarting.length;
   // failed and unhealthy ones only when there are any; a finished one-shot job is neither
   const facts: [Stat, string][] = [[{ k: 'running', v: `${running.length} / ${list.length}` }, `${running.length} / ${list.length} running`]];
