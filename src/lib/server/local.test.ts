@@ -94,15 +94,3 @@ test('a nearly full local disk raises the storage warning', async () => {
   const ok = { ...local, disk: { name: '/', pct: 84, sub: '' } };
   assert.equal(buildSnapshot(snapshotInput({ local: ok })).attention.filter((a) => a.key === 'host|local-disk').length, 0);
 });
-
-test('a widget alert names its service in the attention list and headline, not on its own tile', () => {
-  const widget = (title: string): import('$lib/types').WidgetState => ({ ok: true, ts: Date.now(), lastOk: Date.now(), stats: [], line: '', alerts: [{ sev: 'crit', key: 'health', title, detail: 'critical when below 1' }] });
-  const snap = buildSnapshot(snapshotInput({ services: [
-    { name: 'Media server', state: { widget: widget('Health is Degraded') } },
-    { name: 'Pi-hole', state: { widget: widget('Pi-hole is not filtering') } }
-  ] }));
-  assert.deepEqual(snap.attention.map((a) => a.title).sort(), ['Media server: Health is Degraded', 'Pi-hole is not filtering']);
-  assert.match(snap.verdict.title, /^(Media server: Health is Degraded|Pi-hole is not filtering)$/);
-  const tile = snap.groups[0].services.find((t) => t.name === 'Media server');
-  assert.equal(tile?.line, 'Health is Degraded · critical when below 1');
-});

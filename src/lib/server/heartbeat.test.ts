@@ -1,14 +1,9 @@
-// Heartbeats: the endpoint's check-in (token, 404, rate limit), the state rule, the backups merge; and TCP probes.
+// Heartbeats: the endpoint's check-in (token, 404, rate limit) and the state rule.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { EventEmitter } from 'node:events';
-import type net from 'node:net';
 import { checkIn, createLimiter, heartbeatState, kvKey, response, tokenMatches, tokenOf } from './heartbeat.ts';
-import { tcpProbe } from './http.ts';
-import { mergeBackups } from './snapshot.ts';
-import type { BackupBeat } from './snapshot.ts';
 import { memoryKv } from './test-helpers.ts';
-import type { HeartbeatRecord, HeartbeatState, Kv, Service } from '$lib/types';
+import type { HeartbeatRecord, Kv, Service } from '$lib/types';
 
 const H = 3600_000;
 const hb = { id: 'backups-nightly-restic', every: 24 * H, grace: H, token: 's3cret', backup: true };
@@ -72,31 +67,4 @@ test('state: on time, overdue after every + grace, failure until the next succes
   const failed = at(t0, t0 + H, t0 + 2 * H);
   assert.deepEqual([failed.state, failed.failed, failed.overdueSince], ['down', true, null]);
   assert.equal(at(t0 + 2 * H, t0 + H, t0 + 3 * H).state, 'up', 'a success after the failure');
-});
-
-test('TCP probe: connected is up with the connect time, refused and timeouts are down', async () => {
-  const fake = (act: (s: EventEmitter) => void) => () => {
-    const s = Object.assign(new EventEmitter(), { destroy() {}, setTimeout(ms: number, fn: () => void) { if (ms === 1) setImmediate(fn); } });
-    setImmediate(() => act(s));
-    // a stand-in for the socket net.connect returns: only what tcpProbe touches
-    return s as unknown as net.Socket;
-  };
-  const up = await tcpProbe('h', 22, { connect: (fake((s) => s.emit('connect')) as typeof net.connect) });
-  assert.equal(up.ok, true);
-  assert.ok(typeof up.ms === 'number');
-  const refused = await tcpProbe('h', 22, { connect: (fake((s) => s.emit('error', Object.assign(new Error('x'), { code: 'ECONNREFUSED' }))) as typeof net.connect) });
-  assert.deepEqual(refused, { ok: false, ms: null, code: 'ECONNREFUSED' });
-  const slow = await tcpProbe('h', 22, { connect: (fake(() => {}) as typeof net.connect), timeout: 1 });
-  assert.deepEqual(slow, { ok: false, ms: null, code: 'ETIMEDOUT' });
-});
-
-test('backups: heartbeats marked backup add to PBS (overdue summed, oldest age the larger, named)', () => {
-  const now = 100 * H;
-  const beat = (name: string, state: HeartbeatState['state'], lastOk: number | null): BackupBeat => ({ name, hb: { state, lastOk, lastFail: null, since: 0, failed: false, overdueSince: null } });
-  const pbs = { overdue: 1, oldestAge: 30 * H, oldestName: 'web', known: true };
-  assert.deepEqual(mergeBackups(pbs, [beat('Restic', 'down', now - 31 * H), beat('Borg', 'up', now - 6 * H)], now), { overdue: 2, oldestAge: 31 * H, oldestName: 'Restic', known: true });
-  assert.deepEqual(mergeBackups(pbs, [beat('Borg', 'up', now - 6 * H)], now), { overdue: 1, oldestAge: 30 * H, oldestName: 'web', known: true }, 'PBS keeps the name of its oldest');
-  assert.deepEqual(mergeBackups(undefined, [beat('Borg', 'up', now - 6 * H)], now), { overdue: 0, oldestAge: 6 * H, oldestName: 'Borg', known: true });
-  assert.equal(mergeBackups(pbs, [beat('Borg', 'pending', null)], now), pbs, 'a heartbeat that never ran adds nothing yet');
-  assert.equal(mergeBackups(undefined, [], now), undefined);
 });

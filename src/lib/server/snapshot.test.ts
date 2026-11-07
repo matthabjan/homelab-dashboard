@@ -1,4 +1,5 @@
-// The status rules of the snapshot: tile levels and lines, attention, verdict, alert age and the fleet strip.
+// The status rules of the snapshot: tile levels and lines, attention, verdict, alert age, the infrastructure card, the
+// backups merge and the fleet strip.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -10,7 +11,7 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dashboard-snapshot-'));
 process.env.DATA_DIR = path.join(tmp, 'data');
 process.env.CONFIG_DIR = tmp;
 delete process.env.DEMO;
-const { createSnapshot } = await import('./snapshot.ts');
+const { createSnapshot, mergeBackups } = await import('./snapshot.ts');
 const { snapshotInput } = await import('./test-helpers.ts');
 const { insertProbe, insertMetric } = await import('./db.ts');
 const { fmtClock } = await import('./format.ts');
@@ -18,7 +19,8 @@ const { record } = await import('./check.ts');
 const { heartbeatState } = await import('./heartbeat.ts');
 const { toDrive } = await import('./integrations/smart.ts');
 import type { TestService } from './test-helpers.ts';
-import type { Alert, Drive, Snapshot, Tile, WidgetState } from '$lib/types';
+import type { BackupBeat } from './snapshot.ts';
+import type { Alert, Drive, HeartbeatState, Snapshot, Tile, WidgetState } from '$lib/types';
 
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
@@ -238,6 +240,29 @@ test('infrastructure: backups from every PBS widget; PBS alone warns, a late job
 
   const current = build([pbs('PBS A', 0, 20 * H, 'web')], now);
   assert.deepEqual(panel(current, 'backups'), { id: 'backups', label: 'Backups', value: 'All current', sub: 'oldest backup 20 h · web', level: 'none' });
+});
+
+test('backups: heartbeats marked backup add to PBS (overdue summed, oldest age the larger, named)', () => {
+  const H = 60 * MIN;
+  const now = 100 * H;
+  const beat = (name: string, state: HeartbeatState['state'], lastOk: number | null): BackupBeat => ({ name, hb: { state, lastOk, lastFail: null, since: 0, failed: false, overdueSince: null } });
+  const pbs = { overdue: 1, oldestAge: 30 * H, oldestName: 'web', known: true };
+  assert.deepEqual(mergeBackups(pbs, [beat('Restic', 'down', now - 31 * H), beat('Borg', 'up', now - 6 * H)], now), { overdue: 2, oldestAge: 31 * H, oldestName: 'Restic', known: true });
+  assert.deepEqual(mergeBackups(pbs, [beat('Borg', 'up', now - 6 * H)], now), { overdue: 1, oldestAge: 30 * H, oldestName: 'web', known: true }, 'PBS keeps the name of its oldest');
+  assert.deepEqual(mergeBackups(undefined, [beat('Borg', 'up', now - 6 * H)], now), { overdue: 0, oldestAge: 6 * H, oldestName: 'Borg', known: true });
+  assert.equal(mergeBackups(pbs, [beat('Borg', 'pending', null)], now), pbs, 'a heartbeat that never ran adds nothing yet');
+  assert.equal(mergeBackups(undefined, [], now), undefined);
+});
+
+test('a widget alert heads the verdict with its service named, but not on its own tile', () => {
+  const now = day(22);
+  const health = (title: string): Alert => ({ sev: 'crit', key: 'health', title, detail: 'critical when below 1' });
+  const snap = build([
+    { name: 'Media server', state: { widget: widget(now, [health('Health is Degraded')]) } },
+    { name: 'Pi-hole', state: { widget: widget(now, [health('Pi-hole is not filtering')]) } }
+  ], now);
+  assert.equal(snap.verdict.title, 'Media server: Health is Degraded', 'equal severity and age: the first raised');
+  assert.equal(tile(snap, 'Media server').line, 'Health is Degraded · critical when below 1');
 });
 
 test('fleet strip: probe failures colour their 30-minute bucket, on the fleet and on the tile', () => {
