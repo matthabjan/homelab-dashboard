@@ -104,9 +104,10 @@ export function seedHistory(services: Service[]) {
     // last night's guest backups and the latest host backup, from the PBS service, as the integration reports them
     const pbs = services.find((s) => s.widget?.type === 'proxmoxbackupserver')?.id ?? null;
     insertEvent(now - 42 * 60_000, 'ok', pbs, 'Host backups completed', 'pve · main');
+    const pve = services.find((s) => s.widget?.type === 'proxmox')?.id ?? null;
     if (calm()) {
       insertEvent(now - 13 * 3600_000, 'ok', pbs, 'Backups completed', 'adguard, docker-apps, homeassistant and 3 more · main');
-      insertEvent(now - 5 * 3600_000, 'info', null, '12 updates available on pve', 'apt packages pending');
+      insertEvent(now - 5 * 3600_000, 'info', pve, '12 updates available on pve', 'apt packages pending');
     } else {
       insertEvent(now - 68 * 60_000, 'crit', 'entertainment-musicassistant', 'MusicAssistant went down', 'Connection refused');
       insertEvent(now - 13 * 3600_000, 'ok', pbs, 'Backups completed', 'adguard, docker-apps, homeassistant and 2 more · main');

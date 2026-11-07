@@ -217,21 +217,8 @@ test('Portainer looks up a restart policy once per container', async () => {
   assert.equal(again.containers?.failed, 2);
 });
 
-test('Docker refuses a socket path; Portainer and Docker on one engine count its containers once', async () => {
-  const run = (type: string, shared: Shared, table = TABLES[type]) => INTEGRATIONS[type].collect({ type, ...WIDGETS[type] },
-    createContext({ transport: fixtureTransport(table, { scenario: 'calm' }), kv: memoryKv(), settings: DEFAULT_SETTINGS, now: Date.now(), shared }));
+test('Docker refuses a socket path', async () => {
   await assert.rejects(INTEGRATIONS.docker.collect({ type: 'docker', url: 'unix:///var/run/docker.sock' }, createContext({ kv: memoryKv(), settings: DEFAULT_SETTINGS, now: Date.now() })), /http\(s\)/);
-
-  const two: Shared = {};
-  await run('portainer', two);
-  await run('docker', two);
-  assert.deepEqual(Object.keys(two.containers ?? {}).sort(), ['DEMO:DOCKER02:ENGINE', 'DEMO:PORTAINER:ENGINE']);
-
-  // the docker widget pointed at the engine Portainer manages
-  const one: Shared = {};
-  await run('portainer', one);
-  await run('docker', one, { ...FIXTURES.docker, 'GET /info': () => ({ ID: 'DEMO:PORTAINER:ENGINE' }) });
-  assert.deepEqual(Object.keys(one.containers ?? {}), ['DEMO:PORTAINER:ENGINE']);
 });
 
 test('Pi-hole v6 logs in once and reuses the session, logging in again after a 401', async () => {

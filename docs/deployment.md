@@ -30,7 +30,7 @@ In Portainer, open **Stacks → Add stack → Web editor** and paste:
 ```yaml
 services:
   dashboard:
-    image: matthabjan/homelab-dashboard:0.2.9  # pin a release; see Updating
+    image: matthabjan/homelab-dashboard:0.2.10  # pin a release; see Updating
     container_name: dashboard
     restart: unless-stopped
     environment:
@@ -121,7 +121,7 @@ Then:
 
 ### Docker socket proxy
 
-The [`docker` widget](integrations.md#docker) reads a Docker host through a socket proxy, never the socket itself. Add the proxy to the stack on each host you want to watch, with only read access to containers and engine info:
+The [`docker` widget](integrations.md#docker) reads a Docker host through a socket proxy, never the socket itself. Add the proxy to the stack on each host you want to watch, with only read access to containers:
 
 ```yaml
 services:
@@ -130,7 +130,6 @@ services:
     restart: unless-stopped
     environment:
       CONTAINERS: 1   # GET /containers/... (list and inspect)
-      INFO: 1         # GET /info (engine ID, so a host seen twice counts once)
       POST: 0         # read-only: no start, stop or create
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro

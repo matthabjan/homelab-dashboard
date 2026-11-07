@@ -107,7 +107,7 @@ export class Engine extends EventEmitter {
       throw e;
     }
     this.cfg = withDiscovered(this.base, this.discovered);
-    this.shared = {}; // hand-offs (container counts per engine, guest ids) refill on the next widget round, without removed services
+    this.shared = {}; // hand-offs (guest ids) refill on the next widget round, without removed services
     this.forgetRemoved();
     this.sources.seed(this.cfg.services);
     this.publish();

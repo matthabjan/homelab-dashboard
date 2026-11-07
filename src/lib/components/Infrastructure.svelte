@@ -5,6 +5,8 @@
   import Reading from './Reading.svelte';
 
   interface Props {
+    /** the card's panels: each but Backups is a tab, with its level and line */
+    panels: Snapshot['infrastructure'];
     host: Snapshot['host'];
     storage: Snapshot['storage'];
     drives: Snapshot['drives'];
@@ -15,7 +17,7 @@
     /** the panel to open with (a sheet opened from its card); without it, the one this browser last chose */
     initial?: 'system' | 'storage' | 'drives' | 'network';
   }
-  let { host, storage, drives, network, target, now, initial }: Props = $props();
+  let { panels: summaries, host, storage, drives, network, target, now, initial }: Props = $props();
 
   /** a tab of the card: its panel id, its name and the dot it shows */
   interface Panel {
@@ -25,30 +27,8 @@
     meta?: string;
   }
 
-  /** the worst problem among the levels, for the dot on a tab: a hidden panel must not hide one */
-  const worst = (levels: string[]): Level | null => (levels.includes('crit') ? 'crit' : levels.includes('warn') ? 'warn' : null);
-  const count = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
-
-  const panels = $derived.by(() => {
-    const list: Panel[] = [];
-    if (host) list.push({ id: 'system', name: 'System', level: worst(host.gauges.map((g) => g.level)) });
-    if (storage.length) {
-      const off = storage.filter((s) => s.level === 'off').length;
-      // a red bar raises a warning, not a critical alert: the tab shows that, like the row on the main page
-      list.push({ id: 'storage', name: 'Storage', level: worst(storage.map((s) => (s.level === 'crit' ? 'warn' : s.level))), meta: count(storage.length, 'storage') + (off ? ` · ${off} offline` : '') });
-    }
-    if (drives.length) {
-      const failing = drives.filter((d) => d.status === 'failing').length;
-      const check = drives.filter((d) => d.status === 'check').length;
-      const smart = failing ? `${failing} failing` : check ? `${check} to check` : drives.every((d) => d.status === 'ok') ? 'SMART ok' : '';
-      list.push({ id: 'drives', name: 'Drives', level: worst(drives.flatMap((d) => [d.level, d.lifeLevel])), meta: count(drives.length, 'drive') + (smart ? ` · ${smart}` : '') });
-    }
-    if (network) {
-      // each tile's axis says how far back it goes
-      list.push({ id: 'network', name: 'Network', level: null });
-    }
-    return list;
-  });
+  // the dot on a tab: a hidden panel must not hide a problem
+  const panels: Panel[] = $derived(summaries.flatMap((p) => (p.id === 'backups' ? [] : [{ id: p.id, name: p.label, level: p.level === 'none' || p.level === 'ok' ? null : p.level, meta: p.meta }])));
 
   // which panel is open. Remembered per browser as a convenience, so storage errors are ignored
   // svelte-ignore state_referenced_locally — the panel it opens with; the tabs change it from there

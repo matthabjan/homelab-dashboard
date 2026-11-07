@@ -236,8 +236,6 @@ export interface Kv {
 export interface Shared {
   /** per Proxmox widget (API URL and node): guest id → name, so several PVE hosts each add theirs */
   guests?: Record<string, Record<string, string>>;
-  /** per Docker engine id (from /info), so Portainer and a docker widget on one engine count it once */
-  containers?: Record<string, ContainerCounts>;
 }
 
 /** Everything an integration may use. Built by createContext in integrations/index.ts. */
@@ -619,7 +617,7 @@ export interface AttentionItem {
   ts: number;
 }
 
-/** A row of the feed: an attention item, or a recent event. */
+/** A row of the feed: a note, or a recent event. */
 export type FeedItem = AttentionItem | (FeedEvent & { service?: undefined });
 
 export interface FeedEvent {
@@ -696,6 +694,24 @@ export interface Gauge {
   warn?: number | null;
 }
 
+/** One area of the infrastructure card, said once for its row and its tab. */
+export interface InfraPanel {
+  id: 'system' | 'storage' | 'drives' | 'network' | 'backups';
+  label: string;
+  /** beside the label: the host's name */
+  where?: string;
+  value: string;
+  unit?: string;
+  /** the line of context under the figure */
+  sub: string;
+  /** figures shown instead of `value` where one can't say it, each with its label */
+  stats?: { k: string; v: string; level: Level | 'none' }[];
+  /** as bad as what is raised for the area: a marker always has an alert behind it */
+  level: Level | 'none';
+  /** the line under the panel's tab in the Infrastructure sheet */
+  meta?: string;
+}
+
 export interface Snapshot {
   generatedAt: number;
   demo: boolean;
@@ -712,18 +728,15 @@ export interface Snapshot {
   verdict: { level: Level; tag: string; title: string; sub: string; action: { label: string; href: string } | null };
   /** when the newest event happened, for "last change 2 h ago" */
   lastChange: number | null;
-  /** recent events (went down, recovered, backups completed …), newest first, whatever needs attention */
-  events: FeedItem[];
   /** heartbeat services: jobs that report when they ran, with their schedule */
   jobs: Job[];
   /** guest backups per PBS server, shown with the jobs */
   guestBackups: GuestBackups[];
   /** PBS backups and backup heartbeats together; null when there are none */
   backups: BackupStatus | null;
-  facts: Fact[];
   attention: AttentionItem[];
   needCount: number;
-  /** what the attention section lists: see attention.ts */
+  /** what Activity lists: the notes (info alerts), then recent events (went down, recovered, backups completed …), newest first */
   feed: FeedItem[];
   /** 48 half-hour buckets, oldest first */
   fleet: (Level | 'none')[];
@@ -746,6 +759,8 @@ export interface Snapshot {
     /** % of rated endurance left, drawn as a bar; null when the drive doesn't report it */
     life: number | null;
     lifeLevel: Level;
+    /** °C, for the card's hottest drive */
+    tempC: number | null;
     facts: Fact[];
   }[];
   network: (Traffic & {
@@ -753,6 +768,8 @@ export interface Snapshot {
     lan: Traffic | null;
     dns: (DnsStats & { href: string | null; name: string }) | null;
   }) | null;
+  /** the infrastructure card's rows, which are also the Infrastructure sheet's tabs (all but Backups) */
+  infrastructure: InfraPanel[];
   /** most-opened services, by open count with a half-life of `settings.mostUsed.halfLifeDays` */
   mostUsed: Tile[];
   groups: { name: string; summary: string; services: Tile[] }[];

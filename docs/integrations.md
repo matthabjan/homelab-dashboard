@@ -242,9 +242,9 @@ widget:
   url: http://socket-proxy:2375   # a docker-socket-proxy, see Deployment
 ```
 
-**Why a socket proxy.** Mounting `/var/run/docker.sock` into a container gives it root on the host, even read-only: the API can start a privileged container. So the widget only takes an `http(s)://` URL. A `unix://` URL or a socket path is reported as a config problem. Put [tecnativa/docker-socket-proxy](https://github.com/Tecnativa/docker-socket-proxy) in front of the socket, allow only `CONTAINERS` and `INFO`, and keep it on an internal network. See [Deployment → Docker socket proxy](deployment.md#docker-socket-proxy).
+**Why a socket proxy.** Mounting `/var/run/docker.sock` into a container gives it root on the host, even read-only: the API can start a privileged container. So the widget only takes an `http(s)://` URL. A `unix://` URL or a socket path is reported as a config problem. Put [tecnativa/docker-socket-proxy](https://github.com/Tecnativa/docker-socket-proxy) in front of the socket, allow only `CONTAINERS`, and keep it on an internal network. See [Deployment → Docker socket proxy](deployment.md#docker-socket-proxy).
 
-**Counting.** The *containers up* figure adds up all Docker hosts. A host that both Portainer and a `docker` widget see (same engine ID from `/info`) is counted once, and a label-discovered service appears once.
+**Counting.** A label-discovered service appears once, however many widgets see its container.
 
 **Alerts:** as for [Portainer](#portainer).
 
