@@ -30,7 +30,7 @@ In Portainer, open **Stacks → Add stack → Web editor** and paste:
 ```yaml
 services:
   dashboard:
-    image: matthabjan/homelab-dashboard:0.2.15  # pin a release; see Updating
+    image: matthabjan/homelab-dashboard:0.2.16  # pin a release; see Updating
     container_name: dashboard
     restart: unless-stopped
     environment:
@@ -44,7 +44,7 @@ services:
       XFF_DEPTH: 1
       # NODE_EXTRA_CA_CERTS: /certs/ca.pem   # trust your own CA for widget APIs
     # Credentials arrive as files in /run/secrets, so they don't show up in `docker inspect`
-    secrets: [pve_token_secret, pbs_token_secret, opnsense_key, opnsense_secret, omv_password, adguard_password, pihole_app_password, portainer_key]
+    secrets: [pve_token_secret, pbs_token_secret, opnsense_key, opnsense_secret, omv_password, adguard_password, pihole_app_password, portainer_key, wud_password, ha_token]
     volumes:
       - /opt/docker/dashboard/config:/config:ro   # services/settings/bookmarks + icons; reloads automatically
       - data:/data                                # uptime history (SQLite)
@@ -96,6 +96,8 @@ secrets:
   adguard_password: { environment: ADGUARD_PASSWORD }
   pihole_app_password: { environment: PIHOLE_APP_PASSWORD }
   portainer_key: { environment: PORTAINER_KEY }
+  wud_password: { environment: WUD_PASSWORD }
+  ha_token: { environment: HA_TOKEN }
 
 volumes:
   data:
@@ -239,7 +241,7 @@ The service's status line shows *Stats unavailable*, the reason is a note in **A
 | `Host not found` / `DNS lookup failed` | The container uses the Docker host's DNS server, which may not know your local names. Set `dns:` to your AdGuard / Pi-hole IP. |
 | `Connection refused` / `Timed out` | Check the port and firewall from inside the container: `docker exec dashboard wget -qO- --no-check-certificate <url>`. |
 | `HTTP 401` | Wrong credentials, or the secret didn't load (look for `[config] NAME is not set` in the log). |
-| `HTTP 403` | The account lacks a privilege. See [Integrations](integrations.md). |
+| `HTTP 403` | The account lacks a privilege (see [Integrations](integrations.md)), or the widget URL goes through a reverse proxy whose IP allowlist doesn't include the container. A 403 for a wrong login too means the proxy refused it: point the widget at the service's own address instead. |
 | `DEPTH_ZERO_SELF_SIGNED_CERT`, `UNABLE_TO_VERIFY_LEAF_SIGNATURE` | See [TLS for widget APIs](#tls-for-widget-apis). |
 
 If config changes don't take effect, the bind mount may not pass file-change events into the container (Docker Desktop on Windows, network shares). Restart the container.
