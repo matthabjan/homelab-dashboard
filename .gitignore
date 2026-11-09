@@ -40,3 +40,6 @@ certs/
 # Vite temp files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Claude Code local settings (approved commands may contain secrets)
+.claude/settings.local.json
