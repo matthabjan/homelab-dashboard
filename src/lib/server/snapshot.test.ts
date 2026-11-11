@@ -13,7 +13,7 @@ process.env.CONFIG_DIR = tmp;
 delete process.env.DEMO;
 const { createSnapshot } = await import('./snapshot.ts');
 const { snapshotInput } = await import('./test-helpers.ts');
-const { insertProbe, insertMetric } = await import('./db.ts');
+const { insertProbe, insertMetric, insertEvent } = await import('./db.ts');
 const { fmtClock } = await import('./format.ts');
 const { record } = await import('./check.ts');
 const { heartbeatState } = await import('./heartbeat.ts');
@@ -24,6 +24,7 @@ import type { Alert, Drive, PbsBackups, Snapshot, StorageRow, Tile, WidgetState 
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
 const MIN = 60_000;
+const H = 60 * MIN;
 const D = 86_400_000;
 // the fleet strip reads every service's history: each test gets its own day, far from the others
 const day = (n: number) => Date.UTC(2026, 0, 1) + n * 10 * D;
@@ -306,4 +307,33 @@ test('history is read once a minute: a rebuild within it reuses the strip, the n
   insertProbe('g-cached', now - 4 * MIN, false, null);
   assert.equal(builder(input, now + 30_000).fleet[47], 'ok', 'within the minute');
   assert.equal(builder(input, now + 61_000).fleet[47], 'crit', 'after it');
+});
+
+test('Activity: outages under minOutageMinutes are left out, and each row says which sheet it opens', () => {
+  const now = day(40);
+  const pbs: TestService = { name: 'PBS', widget: { type: 'proxmoxbackupserver', url: 'https://pbs.home.arpa:8007' }, state: { widget: { ok: true, ts: now, lastOk: now, stats: [], line: null, alerts: [{ sev: 'info', key: 'detached-offsite', title: 'offsite detached for 140 d' }] } } };
+  const input = snapshotInput({ services: [probed('Blip', now), probed('Long', now), probed('Fresh', now), pbs] });
+  const [blip, long, fresh, pbsSvc] = input.cfg.services;
+  // a reading every 30 s: down at the second failure, back at the first success
+  const outage = (s: typeof blip, from: number, upAt: number | null) => {
+    for (let t = from; t < (upAt ?? now); t += 30_000) record(s, input.state(s.id), { ok: false, ms: null, code: 'ECONNREFUSED' }, t);
+    if (upAt != null) record(s, input.state(s.id), { ok: true, ms: 12, code: 200 }, upAt);
+  };
+  outage(blip, now - 3 * H, now - 3 * H + 2 * MIN);
+  outage(long, now - 2 * H, now - 2 * H + 10 * MIN);
+  outage(fresh, now - 2 * MIN, null);
+  insertEvent(now - H, 'ok', pbsSvc.id, 'Backups completed', 'web · main');
+
+  const feed = createSnapshot()(input, now).feed;
+  const row = (title: string) => feed.find((f) => f.title === title);
+  assert.ok(!feed.some((f) => f.title.startsWith('Blip')), 'a two-minute outage stays out');
+  assert.ok(!row('Fresh went down'), 'one still younger than the limit too: its alert says it');
+  assert.deepEqual(row('Long went down')?.open, { kind: 'service', id: long.id });
+  assert.deepEqual(row('Long recovered')?.open, { kind: 'service', id: long.id });
+  assert.deepEqual(row('Backups completed')?.open, { kind: 'backups' }, 'what a backup service reports opens Backups');
+  assert.deepEqual(row('PBS: offsite detached for 140 d')?.open, { kind: 'backups' });
+  assert.ok(!feed.some((f) => 'outage' in f), 'the outage column stays on the server');
+
+  const every = createSnapshot()(snapshotInput({ services: [], settings: { ...input.cfg.settings, thresholds: { ...input.cfg.settings.thresholds, minOutageMinutes: 0 } } }), now).feed;
+  assert.ok(every.some((f) => f.title === 'Blip went down'), '0 shows every outage');
 });

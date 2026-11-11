@@ -63,7 +63,8 @@ export const DEFAULT_SETTINGS: Settings = {
     tempMinC: 30,
     tempWarnC: 75,
     driveLifeWarnPct: 10, // warn when a drive has this much of its rated endurance left
-    driveTempWarnC: 70
+    driveTempWarnC: 70,
+    minOutageMinutes: 5 // a service down for less than this (and back) stays out of Activity; its sheet still lists it
   },
   retentionDays: 30
 };

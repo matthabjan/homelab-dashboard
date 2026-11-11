@@ -22,6 +22,13 @@ const guests: [number, string, 'qemu' | 'lxc'][] = [[100, 'opnsense', 'qemu'], [
 const storage = (name: string, plugintype: string, content: string, used: number, total: number, extra: Partial<PveStorage> = {}): PveStorage =>
   ({ type: 'storage', node: 'pve', storage: name, plugintype, content, status: 'available', shared: 0, disk: used, maxdisk: total, ...extra });
 
+// what a node a few weeks behind has pending
+const APT: PveAptUpdate[] = [
+  ['pve-manager', '8.2.4', '8.2.7'], ['proxmox-kernel-6.8', '6.8.8-2', '6.8.12-1'], ['qemu-server', '8.2.1', '8.2.4'], ['pve-qemu-kvm', '9.0.0-6', '9.0.2-2'],
+  ['libpve-storage-perl', '8.2.3', '8.2.4'], ['pve-container', '5.1.12', '5.2.0'], ['proxmox-backup-client', '3.2.3-1', '3.2.7-1'], ['zfsutils-linux', '2.2.4-pve1', '2.2.6-pve1'],
+  ['openssh-server', '1:9.2p1-2+deb12u2', '1:9.2p1-2+deb12u3'], ['libc6', '2.36-9+deb12u7', '2.36-9+deb12u8'], ['curl', '7.88.1-10+deb12u6', '7.88.1-10+deb12u7'], ['tzdata', '2024a-0+deb12u1', '2024b-0+deb12u1']
+].map(([Package, OldVersion, Version]) => ({ Package, OldVersion, Version }));
+
 export default {
   'GET /api2/json/cluster/resources': ({ now, scenario }): PveResponse<PveResource[]> => ({
     data: [
@@ -65,5 +72,5 @@ export default {
             ]
           }
         },
-  'GET /api2/json/nodes/:node/apt/update': (): PveResponse<PveAptUpdate[]> => ({ data: Array.from({ length: 12 }, (_, i) => ({ Package: `pkg-${i}` })) })
+  'GET /api2/json/nodes/:node/apt/update': (): PveResponse<PveAptUpdate[]> => ({ data: APT })
 } satisfies Fixtures;

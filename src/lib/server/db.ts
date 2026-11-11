@@ -7,6 +7,8 @@ import type { WidgetEvent } from '$lib/types';
 
 // One row of each query as SQLite returns it: INTEGER and REAL columns both come back as numbers.
 export interface EventRow { ts: number; sev: WidgetEvent['sev']; sid: string | null; title: string; detail: string | null }
+/** `outage`: when the outage began, on a check's "went down" and "recovered" events (null on all others) */
+export interface FeedRow extends EventRow { outage: number | null }
 export interface ProbeRow { ts: number; ok: 0 | 1; ms: number | null }
 /** probes per service and bucket: `b` is the bucket index from `since` */
 export interface ProbeBucketRow { sid: string; b: number; fails: number; n: number; maxms: number | null }
@@ -27,7 +29,7 @@ export function openDb(): DatabaseSync {
     CREATE INDEX IF NOT EXISTS probes_ts ON probes (ts);
     CREATE TABLE IF NOT EXISTS metrics (key TEXT NOT NULL, ts INTEGER NOT NULL, v REAL NOT NULL);
     CREATE INDEX IF NOT EXISTS metrics_key_ts ON metrics (key, ts);
-    CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, sev TEXT NOT NULL, sid TEXT, title TEXT NOT NULL, detail TEXT);
+    CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, sev TEXT NOT NULL, sid TEXT, title TEXT NOT NULL, detail TEXT, outage INTEGER);
     CREATE INDEX IF NOT EXISTS events_ts ON events (ts);
     CREATE INDEX IF NOT EXISTS events_sid_ts ON events (sid, ts);
     CREATE TABLE IF NOT EXISTS opens (sid TEXT PRIMARY KEY, n INTEGER NOT NULL DEFAULT 0, last INTEGER, score REAL NOT NULL DEFAULT 0);
@@ -37,6 +39,8 @@ export function openDb(): DatabaseSync {
   if (!db.prepare('PRAGMA table_info(opens)').all().some((c) => c.name === 'score')) {
     db.exec('ALTER TABLE opens ADD COLUMN score REAL NOT NULL DEFAULT 0; UPDATE opens SET score = n');
   }
+  // databases from before outages were marked: their old events count as no outage
+  if (!db.prepare('PRAGMA table_info(events)').all().some((c) => c.name === 'outage')) db.exec('ALTER TABLE events ADD COLUMN outage INTEGER');
   return db;
 }
 
@@ -54,10 +58,11 @@ const one = <T>(sql: string, ...params: SQLInputValue[]) => stmt(sql).get(...par
 
 export const insertProbe = (sid: string, ts: number, ok: boolean, ms: number | null | undefined) => stmt('INSERT INTO probes (sid, ts, ok, ms) VALUES (?, ?, ?, ?)').run(sid, ts, ok ? 1 : 0, ms ?? null);
 export const insertMetric = (key: string, ts: number, v: number | null | undefined) => Number.isFinite(v) && v != null && stmt('INSERT INTO metrics (key, ts, v) VALUES (?, ?, ?)').run(key, ts, v);
-export const insertEvent = (ts: number, sev: WidgetEvent['sev'], sid: string | null | undefined, title: string, detail?: string | null) => stmt('INSERT INTO events (ts, sev, sid, title, detail) VALUES (?, ?, ?, ?, ?)').run(ts, sev, sid ?? null, title, detail ?? null);
+/** `outage`: when the outage began, for a check's "went down" and "recovered" events */
+export const insertEvent = (ts: number, sev: WidgetEvent['sev'], sid: string | null | undefined, title: string, detail?: string | null, outage?: number | null) => stmt('INSERT INTO events (ts, sev, sid, title, detail, outage) VALUES (?, ?, ?, ?, ?, ?)').run(ts, sev, sid ?? null, title, detail ?? null, outage ?? null);
 
 export function recentEvents(since: number, limit = 6) {
-  return all<EventRow>('SELECT ts, sev, sid, title, detail FROM events WHERE ts >= ? ORDER BY ts DESC LIMIT ?', since, limit);
+  return all<FeedRow>('SELECT ts, sev, sid, title, detail, outage FROM events WHERE ts >= ? ORDER BY ts DESC LIMIT ?', since, limit);
 }
 
 /** The events of several services, newest first: the Backups sheet's recent list. */

@@ -4,12 +4,12 @@ import { resolveIcon, assetUrl } from './config.ts';
 import { probeStats, uptimeSince, probeBuckets, series, recentEvents, openScores } from './db.ts';
 import { fmtHours, fmtSize, plural } from './format.ts';
 import { hostService, hostSource } from './local.ts';
-import { heartbeatStatus, kindOf, status as checkStatus } from './check.ts';
+import { heartbeatStatus, kindOf, status as checkStatus, withoutBlips } from './check.ts';
 import { createAttention, type Raised } from './attention.ts';
 import { infrastructure } from './infrastructure.ts';
 import { backups as backupsOf } from './backups.ts';
 import { storage as storageOf } from './storage.ts';
-import type { Backups, ConfigProblem, Drive, Fact, Gauge, Job, Level, NetworkReading, Settings, Severity, Snapshot, Tile, Traffic, Trend } from '$lib/types';
+import type { AttentionItem, Backups, ConfigProblem, Drive, Fact, Gauge, Job, Level, NetworkReading, Settings, Severity, SheetRef, Snapshot, Tile, Traffic, Trend } from '$lib/types';
 import type { Engine } from './engine.ts';
 
 const RANK: Record<Severity | Level, number> = { crit: 3, warn: 2, info: 1, ok: 0 };
@@ -134,6 +134,24 @@ function configAlerts(engine: SnapshotInput, round: Round) {
       href: '/config#problems'
     });
   }
+}
+
+const isBackupService = (s: SnapshotInput['cfg']['services'][number]) => !!s.heartbeat?.backup || s.widget?.type === 'proxmoxbackupserver';
+
+/**
+ * The sheet an event's row in Activity opens: what a backup service reported (backups completed) the Backups sheet,
+ * anything else about a service (an outage, an update) that service's sheet.
+ */
+function feedTarget(engine: SnapshotInput, sid: string | null, reported: boolean): SheetRef | null {
+  const s = sid ? engine.cfg.services.find((x) => x.id === sid) : undefined;
+  if (!s) return null;
+  return reported && isBackupService(s) ? { kind: 'backups' } : { kind: 'service', id: s.id };
+}
+
+/** The same for a note: a PBS widget's (an offsite disk detached) the Backups sheet, the host's the System tab. */
+function noteTarget(engine: SnapshotInput, a: AttentionItem): SheetRef | null {
+  if (a.sid) return feedTarget(engine, a.sid, a.key.startsWith(`${a.sid}|widget-`));
+  return a.key.startsWith('host|') ? { kind: 'infra', tab: 'system' } : null;
 }
 
 /** A tile per service, from its check, certificate and widget; raises what is wrong with each. */
@@ -425,8 +443,11 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
   const storage = disks.rows;
   const drives = drivesPanel(engine, th, round);
 
-  const events = recentEvents(now - 24 * H, 20).map((e) => ({ ...e, href: (e.sid && engine.cfg.services.find((s) => s.id === e.sid)?.href) ?? null }));
+  // short outages stay out of Activity, so more are read than are shown
+  const events = withoutBlips(recentEvents(now - 24 * H, 60), now, th.minOutageMinutes * 60_000).slice(0, 20)
+    .map(({ outage, ...e }) => ({ ...e, href: (e.sid && engine.cfg.services.find((s) => s.id === e.sid)?.href) ?? null, open: feedTarget(engine, e.sid, outage == null) }));
   const att = round.close(events);
+  for (const f of att.feed) if ('key' in f) f.open = noteTarget(engine, f);
   applyWorst(tiles, att);
   const all = [...tiles.values()];
   const widgets = widgetsOf(engine);

@@ -48,6 +48,7 @@ export interface Settings {
     tempWarnC: number;
     driveLifeWarnPct: number;
     driveTempWarnC: number;
+    minOutageMinutes: number;
   };
   retentionDays: number;
 }
@@ -262,6 +263,8 @@ export interface Alert {
   detail?: string;
   /** identifies the alert across polls, unique within one result: titles may carry readings (a count, a percentage) */
   key: string;
+  /** what the alert is about, one line each (pending packages with their versions); the sheets list them under it */
+  items?: string[];
 }
 
 /** Written to the events table and shown in the feed. */
@@ -633,10 +636,13 @@ export interface AttentionItem {
   href?: string | null;
   /** when it first appeared */
   ts: number;
+  items?: string[];
+  /** the sheet that tells more, for its row in Activity; null when there is none */
+  open?: SheetRef | null;
 }
 
 /** A row of the feed: a note, or a recent event. */
-export type FeedItem = AttentionItem | (FeedEvent & { service?: undefined });
+export type FeedItem = AttentionItem | (FeedEvent & { service?: undefined; items?: undefined });
 
 export interface FeedEvent {
   ts: number;
@@ -646,6 +652,8 @@ export interface FeedEvent {
   title: string;
   detail: string | null;
   href: string | null;
+  /** the sheet that tells more, for its row in Activity; null when there is none */
+  open?: SheetRef | null;
 }
 
 export interface Tile {

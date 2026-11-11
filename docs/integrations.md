@@ -60,7 +60,7 @@ pveum acl modify / --tokens 'dashboard@pve!dashboard' --roles PVEAuditor
 | critical | The node isn't `online`. |
 | warning | A PVE storage is unavailable, such as a missing mount. |
 | warning | `host.storage` names a storage that doesn't exist. |
-| info | apt updates are pending. |
+| info | apt updates are pending. The service's sheet lists the packages with their installed and new versions. |
 
 PBS storages attached to PVE are left out here; the PBS widget reports them.
 

@@ -128,6 +128,7 @@ A value below the minimum is raised to it, and one that isn't a number falls bac
 | `tempWarnC` | `75` | Warn at this CPU temperature; at +10 °C it is critical. NVMe drives warn at 70 °C. |
 | `driveLifeWarnPct` | `10` | Warn when a drive has this much of its rated endurance left (SMART wear). |
 | `driveTempWarnC` | `70` | Warn when a drive in **Drives** reaches this temperature. |
+| `minOutageMinutes` | `5` | An outage shorter than this, which is already over, stays out of **Activity**; the service's sheet still lists it, and the uptime and strips count it. A *went down* shows in Activity once the outage has lasted this long (the problem card shows it right away). `0` shows every outage. |
 
 CPU and memory gauges use fixed limits: CPU warns at 75% and is critical at 90%, memory at 80% and 92%.
 

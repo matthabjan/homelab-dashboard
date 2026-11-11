@@ -124,6 +124,8 @@
   let backupEvents = $state<FeedItem[]>([]);
   // the latest few, the rest of the week on request; each time the sheet opens it starts short
   const RECENT = 5;
+  // the lines a note shows under it (pending packages) before "N more"
+  const ITEMS = 5;
   let recentAll = $state(false);
   $effect(() => { if (sheet?.kind !== 'backups') recentAll = false; });
   // the same for a service's activity: short again for every service opened
@@ -249,11 +251,25 @@
 {#snippet arrow()}<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8" /></svg>{/snippet}
 
 <!-- one event or alert in a list: what happened, about which service, and when -->
-{#snippet event(a: FeedItem)}
+<!-- a row of Activity (`tap`: it opens the sheet that tells more, when there is one) or of a sheet's events (`full`:
+     with what the note is about, e.g. the pending packages) -->
+{#snippet event(a: FeedItem, { tap = false, full = false } = {})}
+  {@const to = tap ? a.open : null}
   <li class="ev lv-{a.sev}">
-    <span class="ev-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={ICONS[a.sev] ?? ICONS.info} /></svg></span>
-    <span class="txt"><span class="t">{a.title}</span>{#if a.detail}<span class="d muted">{a.detail}</span>{/if}</span>
-    <span class="num muted small when">{ago(a.ts, now)}</span>
+    <svelte:element this={to ? 'button' : 'div'} class="ev-row" class:tap={!!to} onclick={to ? () => show($state.snapshot(to)) : undefined} role={to ? undefined : 'group'}>
+      <span class="ev-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={ICONS[a.sev] ?? ICONS.info} /></svg></span>
+      <span class="txt"><span class="t">{a.title}</span>{#if a.detail}<span class="d muted">{a.detail}</span>{/if}</span>
+      <span class="num muted small when">{ago(a.ts, now)}</span>
+      {#if to}<svg class="ev-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>{/if}
+    </svelte:element>
+    {#if full && a.items?.length}
+      <ul class="ev-items mono">
+        {#each a.items.slice(0, ITEMS) as line, i (i)}<li>{line}</li>{/each}
+      </ul>
+      {#if a.items.length > ITEMS}
+        <details class="ev-more"><summary class="link-btn">{a.items.length - ITEMS} more</summary><ul class="ev-items mono">{#each a.items.slice(ITEMS) as line, i (i)}<li>{line}</li>{/each}</ul></details>
+      {/if}
+    {/if}
   </li>
 {/snippet}
 
@@ -446,7 +462,7 @@
       <section class="card sec activity" aria-labelledby="h-activity">
         <div class="sec-head"><h2 id="h-activity">Activity</h2>{#if snap.feed.length > 5}<button class="link-btn" onclick={() => show({ kind: 'activity' })}>Show all</button>{/if}</div>
         {#if snap.feed.length}
-          <ul class="evs">{#each snap.feed.slice(0, 5) as a (a.ts + a.title)}{@render event(a)}{/each}</ul>
+          <ul class="evs">{#each snap.feed.slice(0, 5) as a (a.ts + a.title)}{@render event(a, { tap: true })}{/each}</ul>
         {:else}
           <p class="muted small">No changes in the last 24 hours.</p>
         {/if}
@@ -523,7 +539,7 @@
       <div class="sh-block">
         <div class="sh-row"><span class="st">Activity</span><span class="muted small">Last 7 days</span></div>
         {#if sheetActivity.length}
-          <ul class="evs" id="svc-activity">{#each svcAll ? sheetActivity : sheetActivity.slice(0, RECENT) as a (a.ts + a.title)}{@render event(a)}{/each}</ul>
+          <ul class="evs" id="svc-activity">{#each svcAll ? sheetActivity : sheetActivity.slice(0, RECENT) as a (a.ts + a.title)}{@render event(a, { full: true })}{/each}</ul>
           {#if sheetActivity.length > RECENT}
             <button class="link-btn" aria-expanded={svcAll} aria-controls="svc-activity" onclick={() => (svcAll = !svcAll)}>{svcAll ? 'Show fewer' : `Show all ${sheetActivity.length}`}</button>
           {/if}
@@ -568,7 +584,7 @@
         <div class="sh-row"><span class="st">All services</span><span class="muted small">{pctTxt(snap.fleetAvail)} uptime</span></div>
         <Beats beats={snap.fleet} end={snap.generatedAt} label="Availability of all services over the last 24 hours" />
       </div>
-      <ul class="evs">{#each snap.feed as a (a.ts + a.title)}{@render event(a)}{/each}</ul>
+      <ul class="evs">{#each snap.feed as a (a.ts + a.title)}{@render event(a, { tap: true })}{/each}</ul>
     {/if}
   </Sheet>
 
@@ -690,6 +706,13 @@
     .iico :global(svg) { width: 15px; height: 15px; }
     .fig .v, .fig .isv { font-size: 20px; }
     .chev { display: none; }
+    /* a row of several figures (System: CPU, RAM, temperature) gets the room to keep them on one line */
+    .irow:has(.ist + .ist + .ist) { flex-grow: 1.5; }
+    .irow:has(.ist) .fig { gap: 0 10px; }
+  }
+  /* narrow desktop: a size smaller, so they still fit */
+  @container infra-sum (min-width: 860px) and (max-width: 1180px) {
+    .irow:has(.ist + .ist + .ist) .fig .isv { font-size: 17px; }
   }
 
   /* services and activity */
@@ -715,8 +738,21 @@
   .sbeats { width: 150px; flex: none; --beats-h: 12px; }
   .up { width: 5.5ch; text-align: right; flex: none; }
   .evs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
-  .ev { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); }
+  .ev { padding: 12px 0; border-top: 1px solid var(--line); }
   .ev:first-child { border-top: 0; }
+  .ev-row { display: flex; align-items: center; gap: 12px; width: 100%; min-width: 0; }
+  /* a row that opens a sheet: the whole row is the button, its hover reaching a little past the text */
+  .ev:has(.tap) { padding: 4px 0; }
+  .ev-row.tap { margin: 0 -8px; width: calc(100% + 16px); padding: 8px; border: 0; border-radius: 12px; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; transition: background-color 0.15s; }
+  .ev-row.tap:hover { background: var(--surface-2); }
+  .ev-row.tap:focus-visible { outline: 2px solid var(--acc); outline-offset: -2px; }
+  .ev-chev { flex: none; margin-left: -4px; color: var(--muted); }
+  .ev-items { list-style: none; margin: 8px 0 0 44px; padding: 0; display: flex; flex-direction: column; gap: 3px; font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; }
+  .ev-more { margin-left: 44px; }
+  .ev-more summary { margin-top: 6px; list-style: none; cursor: pointer; font-size: 13px; }
+  .ev-more summary::-webkit-details-marker { display: none; }
+  .ev-more[open] summary { display: none; }
+  .ev-more .ev-items { margin-left: 0; }
   .ev.lv-ok .ev-ico { background: var(--surface-2); color: var(--muted); }
   .when { flex: none; }
   .link-btn { border: 0; background: none; padding: 6px 0; color: var(--acc); font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; align-self: flex-start; }

@@ -60,5 +60,6 @@ thresholds:
   tempWarnC: 75
   driveLifeWarnPct: 10       # drive with this much rated endurance left → warning
   driveTempWarnC: 70
+  minOutageMinutes: 5        # shorter outages (already over) stay out of Activity; the service sheet lists them
 
 retentionDays: 30

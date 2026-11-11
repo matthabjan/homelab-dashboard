@@ -51,7 +51,7 @@ export function record(s: Service, st: ServiceState, reading: ProbeResult | Cont
 function apply(s: Service, c: CheckState, now: number, reason: string | null, failuresToDown: number) {
   c.checked = now;
   if (reason == null) {
-    if (c.down) insertEvent(now, 'ok', s.id, `${s.name} recovered`, `was down since ${fmtClock(c.since)}`);
+    if (c.down) insertEvent(now, 'ok', s.id, `${s.name} recovered`, `was down since ${fmtClock(c.since)}`, c.since);
     Object.assign(c, { fails: 0, down: false, since: null, reason: null });
     return;
   }
@@ -60,8 +60,20 @@ function apply(s: Service, c: CheckState, now: number, reason: string | null, fa
   c.reason = reason;
   if (c.fails >= failuresToDown && !c.down) {
     c.down = true;
-    insertEvent(now, 'crit', s.id, `${s.name} went down`, reason);
+    insertEvent(now, 'crit', s.id, `${s.name} went down`, reason, c.since);
   }
+}
+
+/**
+ * `events` without the outages shorter than `minMs`: the "went down" and "recovered" of one that is over, and the
+ * "went down" of one still that young (the live alert says it meanwhile). Activity shows the rest; a service's sheet
+ * lists every outage.
+ */
+export function withoutBlips<E extends { sev: string; sid: string | null; ts: number; outage: number | null }>(events: E[], now: number, minMs: number): E[] {
+  if (minMs <= 0) return events;
+  const ended = new Map<string, number>();
+  for (const e of events) if (e.outage != null && e.sev === 'ok') ended.set(`${e.sid}|${e.outage}`, e.ts);
+  return events.filter((e) => e.outage == null || (ended.get(`${e.sid}|${e.outage}`) ?? now) - e.outage >= minMs);
 }
 
 /**
