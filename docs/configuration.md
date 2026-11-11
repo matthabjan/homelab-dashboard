@@ -15,7 +15,7 @@ config/
 
 **Mistakes.** A file with a YAML syntax error or the wrong structure keeps its last version that loaded, and the dashboard raises `services.yaml has an error` with the line and reason (the full error is in the container log). A malformed group or entry is skipped and reported the same way; the rest of the file loads. Several problems in one file are one alert (`services.yaml has 3 problems`), listed on **Setup**. Fixing the file clears the alert on save.
 
-**Checking what loaded.** **Setup** (`/config`, from the sliders button in the header, the footer, the command palette or any config alert) shows whether your configuration is right, read-only. How the services are doing stays on the dashboard.
+**Checking what loaded.** **Setup** (`/config`, from the sliders button in the header, the command palette or any config alert) shows whether your configuration is right, read-only. How the services are doing stays on the dashboard.
 
 - **Summary:** problems in the files, how many services loaded (from `services.yaml` and from labels), how many widgets connect, how many settings you changed; each links to its section.
 - **Problems:** files with errors, skipped entries, secrets that aren't set (by name), heartbeats without a token, a `docker` widget on a socket path. Only shown when there are any.
@@ -35,7 +35,7 @@ Every key is optional. Anything you leave out keeps its default, and nested obje
 | Key | Default | Description |
 |---|---|---|
 | `title` | `Homelab` | Page title and the default name of the installed app. |
-| `theme` | `system` | Default theme for new visitors: `system`, `light` or `dark`. Each viewer can switch it (in the header on desktop, on Setup on phones), and the choice is remembered per device. |
+| `theme` | `system` | Default theme for new visitors: `system`, `light` or `dark`. Each viewer can switch it on Setup, under Settings, and the choice is remembered per device. |
 | `accent` | `#4F8DF7` | Accent colour as a hex value (`#rgb` to `#rrggbbaa`). An invalid value falls back to the default. |
 | `linkTarget` | `_blank` | Where service links open: `_blank` (a new tab) or `_self`. |
 | `tlsVerify` | `true` | Verify TLS certificates when calling widget APIs. You can override it per service. See [TLS for widget APIs](deployment.md#tls-for-widget-apis). |

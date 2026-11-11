@@ -3,6 +3,8 @@
   import { invalidateAll } from '$app/navigation';
   import type { CheckKind, ConfigView, Level } from '$lib/types';
   import Icon from '$lib/components/Icon.svelte';
+  import AppHeader from '$lib/components/AppHeader.svelte';
+  import TabBar from '$lib/components/TabBar.svelte';
   import ThemeToggle from '$lib/components/ThemeToggle.svelte';
   import type { PageProps } from './$types';
   import { ago } from '$lib/ago.ts';
@@ -11,6 +13,7 @@
   // connect. How the services are doing is the dashboard's job, not this page's.
   let { data }: PageProps = $props();
   const view = $derived(data.view);
+  const shell = $derived(data.shell);
   let now = $state(Date.now());
   let filter = $state<'all' | 'fix'>('all');
 
@@ -81,17 +84,11 @@
 </svelte:head>
 
 <div class="page">
-  <header class="top">
-    <a class="back lift" href="/">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 6-6 6 6 6" /></svg>
-      Dashboard
-    </a>
-    <div class="ttl">
-      <h1>Setup</h1>
-      <p class="muted">What {view.title} loaded from your config, read-only. Credentials, tokens and URL paths are never shown.{#if view.demo} <span class="demo">demo</span>{/if}</p>
-    </div>
-    <div class="right"><ThemeToggle /></div>
-  </header>
+  <AppHeader title={view.title} logo={shell.logo} demo={view.demo} current="setup" deepLink={shell.deepLink} target={shell.linkTarget} configProblems={view.problems.length} />
+  <div class="ttl">
+    <h1>Setup</h1>
+    <p class="muted">What {view.title} loaded from your config, read-only. Credentials, tokens and URL paths are never shown.</p>
+  </div>
 
   <!-- is the config right? four answers, each opening its section -->
   <nav class="summary" aria-label="Summary">
@@ -190,7 +187,10 @@
   </section>
 
   <section class="card sec" id="settings" aria-labelledby="h-settings">
-    <h2 id="h-settings">Settings</h2>
+    <div class="sec-head">
+      <h2 id="h-settings">Settings</h2>
+      <div class="theme"><span class="muted">Theme</span><ThemeToggle /></div>
+    </div>
     {#if changed.length}
       <p class="muted intro">Changed in <code>settings.yaml</code>; everything else keeps its default.</p>
       <table class="kv changed">
@@ -222,15 +222,14 @@
   </section>
 </div>
 
+<TabBar needCount={shell.needCount} level={shell.level} />
+
 <style>
-  .page { max-width: 1200px; margin: 0 auto; padding: max(20px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 64px max(16px, env(safe-area-inset-left)); display: flex; flex-direction: column; gap: 16px; }
-  .top { display: flex; align-items: center; gap: 16px 20px; flex-wrap: wrap; }
-  .back { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 14px 0 10px; border-radius: 10px; background: var(--surface); box-shadow: var(--shadow); font-size: 13px; font-weight: 500; }
-  .ttl { flex: 1 1 320px; min-width: 0; }
+  .page { max-width: 1240px; margin: 0 auto; padding: max(20px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 64px max(16px, env(safe-area-inset-left)); display: flex; flex-direction: column; gap: 16px; }
+  .ttl { min-width: 0; padding-top: 4px; }
   .ttl h1 { font-size: 26px; font-weight: 600; letter-spacing: -0.02em; }
   .ttl p { margin: 2px 0 0; font-size: 13px; }
-  .right { margin-left: auto; }
-  .demo { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; padding: 2px 6px; border-radius: 5px; background: var(--surface-3); color: var(--text); }
+  .theme { display: flex; align-items: center; gap: 10px; font-size: 13px; }
 
   /* summary: four answers */
   .summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
@@ -303,9 +302,7 @@
   }
   /* phones: each service a small card of labelled lines */
   @media (max-width: 760px) {
-    .page { gap: 14px; }
-    .top { gap: 12px; }
-    .ttl { order: 3; flex-basis: 100%; }
+    .page { gap: 14px; padding-bottom: calc(86px + env(safe-area-inset-bottom)); }
     .ttl h1 { font-size: 22px; }
     .stat { padding: 12px 14px; }
     .stat .v { font-size: 16px; }

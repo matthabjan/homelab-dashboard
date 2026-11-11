@@ -1,12 +1,13 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { pushState } from '$app/navigation';
+  import { afterNavigate, pushState, replaceState } from '$app/navigation';
   import { page } from '$app/state';
   import type { FeedItem, InfraPanel, SheetRef, Snapshot } from '$lib/types';
   import type { PageProps } from './$types';
   import Icon from '$lib/components/Icon.svelte';
   import Infrastructure from '$lib/components/Infrastructure.svelte';
-  import ThemeToggle from '$lib/components/ThemeToggle.svelte';
+  import AppHeader from '$lib/components/AppHeader.svelte';
+  import TabBar from '$lib/components/TabBar.svelte';
   import Palette from '$lib/components/Palette.svelte';
   import Beats from '$lib/components/Beats.svelte';
   import Sheet from '$lib/components/Sheet.svelte';
@@ -22,7 +23,6 @@
   let paletteOpen = $state(false);
 
   const allServices = $derived(snap ? snap.groups.flatMap((g) => g.services) : []);
-  const configLabel = $derived(!snap?.configProblems ? 'Setup' : `Setup, ${snap.configProblems} config problem${snap.configProblems === 1 ? '' : 's'}`);
   const stale = $derived(snap && now - snap.generatedAt > snap.staleAfter);
   // the stream has been down past a short grace (a server restart is a blip), or the device is offline
   let lost = $state(false);
@@ -54,10 +54,8 @@
   const pctTxt = (v: number | null, d = 2) => (v == null ? '—' : v >= 99.995 ? '100%' : v.toFixed(d) + '%');
   /** "2 h ago", "just now" */
   const since = (ts: number | null) => (ts == null ? 'never' : ago(ts, now) === 'now' ? 'just now' : `${ago(ts, now)} ago`);
-  const today = $derived.by(() => {
-    const d = new Date(now);
-    return `${d.toLocaleDateString('en-GB', { weekday: 'long' })}, ${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`;
-  });
+  // the header's live state: the stream down, the data old, or current
+  const liveState = $derived<'live' | 'reconnecting' | 'stale'>(live === 'reconnecting' ? 'reconnecting' : stale ? 'stale' : 'live');
 
   // ---- what the page shows, from the snapshot ----
   // under the hero: the other warnings and critical items (notes, such as pending updates, are the activity card's)
@@ -193,7 +191,7 @@
     addEventListener('online', net);
     addEventListener('offline', net);
     net();
-    now = Date.now(); // the server rendered the date in its own timezone
+    now = Date.now();
     return () => {
       es?.close(); clearInterval(tick); clearTimeout(retry); clearTimeout(grace); clearTimeout(unflash);
       document.removeEventListener('visibilitychange', vis); removeEventListener('online', net); removeEventListener('offline', net);
@@ -206,6 +204,13 @@
     document.title = n ? `(${n}) ${snap?.title}` : (snap?.title ?? document.title);
     const nav: Navigator & { setAppBadge?: (n?: number) => Promise<void>; clearAppBadge?: () => Promise<void> } = navigator;
     (n ? nav.setAppBadge?.(n) : nav.clearAppBadge?.())?.catch(() => {});
+  });
+
+  // Search on another page's header or tab bar leads here as /#search: open the palette and drop the hash
+  afterNavigate(() => {
+    if (location.hash !== '#search') return;
+    paletteOpen = true;
+    try { replaceState('/', page.state); } catch {}
   });
 
   function onKey(e: KeyboardEvent) {
@@ -236,8 +241,6 @@
 
 <svelte:window onkeydown={onKey} />
 
-<!-- setup: the header button and the footer link -->
-{#snippet sliders()}<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1" /><circle cx="15" cy="6" r="2" /><circle cx="9" cy="12" r="2" /><circle cx="17" cy="18" r="2" /></svg>{/snippet}
 <!-- one glyph per infrastructure area, so a row is found without reading it -->
 {#snippet areaIcon(id: InfraPanel['id'])}
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -277,34 +280,10 @@
   <main class="boot"><p class="muted">Starting up…</p></main>
 {:else}
   <div class="page" id="top">
-    <header class="top">
-      <a class="brand" href="/" aria-label="{snap.title} — home">
-        {#if snap.logo}<img src={snap.logo} alt="" width="34" height="34" />{/if}
-        <span class="btxt"><span class="date muted">{today}</span><span class="bname">{snap.title}</span></span>
-      </a>
-      <button class="search card" onclick={() => (paletteOpen = true)} aria-label="Search or jump to a service" aria-keyshortcuts="/ Control+K Meta+K">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
-        <span class="ph">Open a service…</span>
-        <kbd class="mono">/</kbd>
-      </button>
-      <div class="right">
-        <span class="live" class:warn={stale || live === 'reconnecting'} role="status">
-          <span class="pulse"></span>
-          {#if live === 'reconnecting'}<span class="only-desktop">Reconnecting…</span><span class="only-phone">Retrying</span>{:else if stale}<span class="only-desktop">Data {ago(snap.generatedAt, now)} old</span><span class="only-phone">Stale</span>{:else}<span class="live-word">Live</span>{/if}
-          {#if snap.demo}<span class="demo">demo</span>{/if}
-        </span>
-        {#if snap.deepLink?.href}
-          <a class="deep lift" href={snap.deepLink.href} target={target} rel="noopener">{snap.deepLink.name ?? 'Monitoring'} {@render arrow()}</a>
-        {/if}
-        <button class="hbtn only-phone" onclick={() => (paletteOpen = true)} aria-label="Open a service"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg></button>
-        <a class="hbtn cfg" href="/config" aria-label={configLabel} title={configLabel}>
-          {@render sliders()}
-          {#if snap.configProblems}<span class="cfg-badge mono" aria-hidden="true">{snap.configProblems}</span>{/if}
-        </a>
-        <!-- phones: the theme is on the Setup page, so the header keeps room for the title -->
-        <span class="only-desktop"><ThemeToggle /></span>
-      </div>
-    </header>
+    <AppHeader
+      title={snap.title} logo={snap.logo} demo={snap.demo} current="home" live={{ state: liveState, age: ago(snap.generatedAt, now) }}
+      deepLink={snap.deepLink} {target} configProblems={snap.configProblems} onsearch={() => (paletteOpen = true)}
+    />
 
     {#if degraded}
       {@const age = ago(snap.generatedAt, now)}
@@ -319,7 +298,7 @@
     {/if}
 
     <!-- the answer first: one sentence; while something needs attention, the way to it -->
-    <section class="card hero lv-{degraded ? 'none' : snap.verdict.level}" class:alert={!degraded && isProblem(snap.verdict.level)} class:flash={flash.has('verdict')} aria-label="Overall status">
+    <section id="attention" class="card hero lv-{degraded ? 'none' : snap.verdict.level}" class:alert={!degraded && isProblem(snap.verdict.level)} class:flash={flash.has('verdict')} aria-label="Overall status">
       <div class="state">
         <span class="mark" aria-hidden="true">
           {#if snap.verdict.level === 'ok'}<svg viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5" /></svg>{:else}<svg viewBox="0 0 24 24"><path d="M12 7v6M12 17h.01" /></svg>{/if}
@@ -405,7 +384,7 @@
     {/if}
 
     <div class="lower">
-      <section class="card sec services" aria-labelledby="h-services">
+      <section id="services" class="card sec services" aria-labelledby="h-services">
         <div class="sec-head">
           <h2 id="h-services">Services</h2>
           <div class="seg" role="group" aria-label="Show services as">
@@ -492,10 +471,6 @@
     {/if}
 
     <footer class="foot">
-      <a class="foot-cfg" href="/config">
-        {@render sliders()}
-        <span><span class="t">Setup</span><span class="d muted">{snap.configProblems ? `${snap.configProblems} problem${snap.configProblems === 1 ? '' : 's'} in your config` : 'What loaded, which widgets connect'}</span></span>
-      </a>
       <span class="muted small ver">
         <a href="https://github.com/matthabjan/homelab-dashboard/tree/main/docs" target="_blank" rel="noopener">Documentation</a>
         {#if snap.version}<span class="mono">v{snap.version}</span>{/if}
@@ -588,12 +563,16 @@
     {/if}
   </Sheet>
 
+  <TabBar current="home" needCount={snap.needCount} level={snap.verdict.level} onsearch={() => (paletteOpen = true)} />
+
   <Palette bind:open={paletteOpen} services={allServices} bookmarks={snap.bookmarks} mostUsed={snap.mostUsed} {target} onopen={opened} />
 {/if}
 
 <style>
   .boot { min-height: 100vh; display: grid; place-items: center; }
   .page { max-width: 1240px; margin: 0 auto; padding: max(20px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 56px max(16px, env(safe-area-inset-left)); display: flex; flex-direction: column; gap: 20px; }
+  /* the tab bar's links land on these, clear of the top edge */
+  .hero, .services { scroll-margin-top: 12px; }
   .small { font-size: 13px; }
   h2 { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
   h2.k, .k { font-size: 13px; font-weight: 500; color: var(--muted); letter-spacing: 0; }
@@ -603,28 +582,6 @@
   .txt .t { font-size: 15px; font-weight: 500; }
   .txt .d { font-size: 13.5px; overflow-wrap: anywhere; }
   .hl { color: color-mix(in srgb, var(--lv) 85%, var(--text)); }
-
-  /* header */
-  .top { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; }
-  .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
-  .brand img { width: 40px; height: 40px; border-radius: 12px; }
-  .btxt { display: flex; flex-direction: column; min-width: 0; }
-  .date { font-size: 12.5px; font-weight: 500; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .bname { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .search { flex: 1 1 260px; max-width: 420px; margin-left: auto; display: flex; align-items: center; gap: 10px; min-height: 42px; padding: 0 12px 0 14px; border: 0; border-radius: 12px; color: var(--muted); cursor: pointer; text-align: left; }
-  .search:hover { color: var(--text); }
-  .search .ph { flex: 1; }
-  kbd { font-size: 11px; padding: 2px 7px; border-radius: 6px; background: var(--surface-2); }
-  .right { display: flex; align-items: center; gap: 8px; }
-  .live { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); white-space: nowrap; }
-  .pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 4px var(--ok-soft); animation: breathe 3s ease-in-out infinite; }
-  .live.warn .pulse { background: var(--warn); box-shadow: 0 0 0 4px var(--warn-soft); }
-  .demo { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; padding: 2px 6px; border-radius: 5px; background: var(--surface-3); color: var(--text); }
-  .hbtn { position: relative; display: flex; align-items: center; justify-content: center; width: 42px; height: 42px; border: 0; border-radius: 12px; background: var(--surface); box-shadow: var(--shadow); color: var(--text); cursor: pointer; }
-  .hbtn svg, .foot-cfg svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
-  .cfg-badge { position: absolute; top: -4px; right: -4px; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 9px; background: var(--warn); color: var(--bg); font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center; }
-  .deep { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; padding: 0 14px; min-height: 42px; border-radius: 12px; background: var(--surface); box-shadow: var(--shadow); }
-  @keyframes breathe { 50% { box-shadow: 0 0 0 7px transparent; } }
 
   /* hero: the sentence, the way to what needs attention, the most used services */
   .hero { padding: 28px 30px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 22px 32px; align-items: center; }
@@ -767,13 +724,7 @@
   .links .an { display: block; white-space: nowrap; }
 
   /* footer */
-  .foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; padding-top: 18px; border-top: 1px solid var(--line); }
-  .foot-cfg { display: flex; align-items: center; gap: 12px; min-height: 44px; padding-right: 8px; border-radius: 12px; }
-  .foot-cfg > svg { box-sizing: content-box; padding: 9px; border-radius: 11px; background: var(--surface-2); color: var(--muted); }
-  .foot-cfg > span { display: flex; flex-direction: column; }
-  .foot-cfg .t { font-size: 15px; font-weight: 500; }
-  .foot-cfg .d { font-size: 13px; }
-  .foot-cfg:hover .t { color: var(--acc); }
+  .foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 12px 24px; padding-top: 18px; border-top: 1px solid var(--line); }
   .ver { display: flex; align-items: center; gap: 14px; }
   .ver a { text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--line); }
 
@@ -820,17 +771,9 @@
     .activity { position: static; }
     .sbeats { width: 110px; }
   }
-  /* phones: the same order, tighter; search and setup in the header (the theme switch is on the Setup page) */
+  /* phones: the same order, tighter, above the tab bar */
   @media (max-width: 760px) {
-    .page { gap: 14px; }
-    .search, .deep, .live :global(.demo) { display: none; }
-    .top { flex-wrap: nowrap; gap: 8px; }
-    .brand { flex: 1 1 auto; gap: 10px; }
-    .right { margin-left: auto; gap: 6px; }
-    .live { min-width: 28px; min-height: 28px; justify-content: center; }
-    .live-word { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-    .hbtn { width: 44px; height: 44px; border-radius: 14px; }
-    .bname { font-size: 19px; }
+    .page { gap: 14px; padding-bottom: calc(86px + env(safe-area-inset-bottom)); }
     .hero { padding: 20px; border-radius: 22px; gap: 18px; }
     /* phones: the mark sits beside the headline like a status icon; the detail and the action go full width below */
     .state { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px 12px; }
