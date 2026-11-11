@@ -1,6 +1,6 @@
 import type { LayoutServerLoad } from './$types';
 import { getEngine } from '$lib/server/engine.ts';
-import { assetUrl } from '$lib/server/config.ts';
+import { assetUrl, darkAssetUrl } from '$lib/server/config.ts';
 
 export const load: LayoutServerLoad = () => {
   const { settings } = getEngine().cfg;
@@ -9,6 +9,7 @@ export const load: LayoutServerLoad = () => {
       title: settings.title,
       accent: /^#[0-9a-f]{3,8}$/i.test(settings.accent) ? settings.accent : '#4F8DF7',
       favicon: assetUrl(settings.pwa.favicon),
+      faviconDark: darkAssetUrl(settings.pwa, 'favicon'),
       appleTouchIcon: assetUrl(settings.pwa.appleTouchIcon)
     }
   };

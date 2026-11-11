@@ -6,6 +6,8 @@
   interface Props {
     title: string;
     logo: string | null;
+    /** the logo for the dark theme; without it `logo` shows in both */
+    logoDark?: string | null;
     demo?: boolean;
     /** the page it sits on: Setup's button is pressed there and leads back to the dashboard */
     current: 'home' | 'setup';
@@ -19,7 +21,7 @@
     /** opens the palette in place; without it search is a link to the dashboard's palette */
     onsearch?: () => void;
   }
-  let { title, logo, demo = false, current, section = '', live, deepLink = null, target = '_blank', configProblems = 0, onsearch }: Props = $props();
+  let { title, logo, logoDark = null, demo = false, current, section = '', live, deepLink = null, target = '_blank', configProblems = 0, onsearch }: Props = $props();
 
   const setupLabel = $derived(
     current === 'setup' ? 'Close Setup' : !configProblems ? 'Setup' : `Setup, ${configProblems} config problem${configProblems === 1 ? '' : 's'}`
@@ -34,7 +36,8 @@
 
 <header class="top">
   <a class="brand" href="/" aria-label="{title} — home">
-    {#if logo}<img src={logo} alt="" width="36" height="36" />{/if}
+    {#if logo}<img class="on-light" class:has-dark={!!logoDark} src={logo} alt="" width="36" height="36" />{/if}
+    {#if logo && logoDark}<img class="on-dark" src={logoDark} alt="" width="36" height="36" />{/if}
     <span class="bname">{title}{#if section}<span class="bsec only-phone">&nbsp;· {section}</span>{/if}</span>
   </a>
   {#if onsearch}

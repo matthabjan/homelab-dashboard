@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- The mark alone, for dark surfaces (the header in the dark theme, a dark browser tab strip): no tile, larger. -->
+  <g fill="#e8ecf1">
+    <rect x="76" y="76" width="164" height="164" rx="44"/>
+    <rect x="272" y="76" width="164" height="164" rx="44"/>
+    <rect x="76" y="272" width="164" height="164" rx="44"/>
+  </g>
+  <circle cx="354" cy="354" r="78" fill="#2fd28f"/>
+</svg>

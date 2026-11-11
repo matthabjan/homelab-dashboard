@@ -8,6 +8,6 @@ export const load: PageServerLoad = ({ setHeaders }) => {
   const engine = getEngine();
   const snap = engine.snapshot;
   // what the shared header and tab bar show; all of it is on the dashboard for every viewer already
-  const shell = { logo: snap?.logo ?? null, deepLink: snap?.deepLink ?? null, linkTarget: snap?.linkTarget ?? '_blank', needCount: snap?.needCount ?? 0, level: snap?.verdict.level ?? 'ok' };
+  const shell = { logo: snap?.logo ?? null, logoDark: snap?.logoDark ?? null, deepLink: snap?.deepLink ?? null, linkTarget: snap?.linkTarget ?? '_blank', needCount: snap?.needCount ?? 0, level: snap?.verdict.level ?? 'ok' };
   return { view: buildConfigView(engine), shell };
 };

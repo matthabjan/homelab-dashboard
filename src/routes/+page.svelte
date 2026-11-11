@@ -324,7 +324,7 @@
 {:else}
   <div class="page" id="top" data-view={view}>
     <AppHeader
-      title={snap.title} logo={snap.logo} demo={snap.demo} current="home" section={VIEW_NAME[view]} live={{ state: liveState, age: ago(snap.generatedAt, now) }}
+      title={snap.title} logo={snap.logo} logoDark={snap.logoDark} demo={snap.demo} current="home" section={VIEW_NAME[view]} live={{ state: liveState, age: ago(snap.generatedAt, now) }}
       deepLink={snap.deepLink} {target} configProblems={snap.configProblems} onsearch={() => (paletteOpen = true)}
     />
 

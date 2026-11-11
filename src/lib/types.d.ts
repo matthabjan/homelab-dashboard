@@ -21,7 +21,11 @@ export interface Settings {
     icon512: string;
     appleTouchIcon: string;
     favicon: string;
+    /** the favicon while the browser is in its dark theme; null: the app's own mark with its own icon, else `favicon` */
+    faviconDark: string | null;
     logo: string;
+    /** the header logo in the dark theme; null: the app's own mark with its own icon, else `logo` */
+    logoDark: string | null;
     background: string;
   };
   host: {
@@ -757,6 +761,8 @@ export interface Snapshot {
   linkTarget: string;
   deepLink: Settings['deepLink'];
   logo: string | null;
+  /** the logo for the dark theme, when there is one */
+  logoDark: string | null;
   staleAfter: number;
   /** the hero: the state in one sentence; while something needs attention, its top item and how to get to it */
   verdict: { level: Level; tag: string; title: string; sub: string; action: { label: string; href: string } | null };

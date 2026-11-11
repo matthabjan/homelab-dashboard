@@ -95,7 +95,7 @@
 </svelte:head>
 
 <div class="page">
-  <AppHeader title={view.title} logo={shell.logo} demo={view.demo} current="setup" deepLink={shell.deepLink} target={shell.linkTarget} configProblems={view.problems.length} />
+  <AppHeader title={view.title} logo={shell.logo} logoDark={shell.logoDark} demo={view.demo} current="setup" deepLink={shell.deepLink} target={shell.linkTarget} configProblems={view.problems.length} />
   <div class="ttl">
     <h1>Setup</h1>
     <p class="muted">What {view.title} loaded from your config, read-only. Credentials, tokens and URL paths are never shown.</p>

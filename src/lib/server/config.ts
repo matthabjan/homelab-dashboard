@@ -3,6 +3,7 @@
 // Secrets: write {{HOMEPAGE_VAR_NAME}} or ${NAME}. Values come from the environment variable NAME,
 // the file named in NAME_FILE, or the Docker secret /run/secrets/name (lowercase).
 import fs from 'node:fs';
+import { builtinFor } from './default-images.ts';
 import path from 'node:path';
 import YAML from 'yaml';
 import { dockerUrlOk } from './integrations/docker.ts';
@@ -31,7 +32,9 @@ export const DEFAULT_SETTINGS: Settings = {
     icon512: 'images/android-chrome-512x512.png',
     appleTouchIcon: 'images/apple-touch-icon.png',
     favicon: 'images/favicon.ico',
+    faviconDark: null,
     logo: 'images/android-chrome-192x192.png',
+    logoDark: null,
     background: '#0A0D12'
   },
   host: {
@@ -354,6 +357,16 @@ export function resolveIcon(icon: string | null | undefined, name: string): stri
   const ext = (icon.match(/\.(png|svg|webp)$/i)?.[1] ?? 'png').toLowerCase();
   const n = icon.replace(/\.(png|svg|webp)$/i, '');
   return `${CDN_DASHBOARD}/${ext}/${n}.${ext}`;
+}
+
+/**
+ * The dark-theme variant of the logo or the favicon: the one set, else the app's own mark while the light one is the
+ * app's own icon too. A logo of your own without a dark variant is used in both themes.
+ */
+export function darkAssetUrl(pwa: Settings['pwa'], key: 'logo' | 'favicon'): string | null {
+  const set = key === 'logo' ? pwa.logoDark : pwa.faviconDark;
+  if (set) return assetUrl(set);
+  return builtinFor(CONFIG_DIR, pwa[key]) ? assetUrl(key === 'logo' ? 'images/logo-dark.png' : 'images/favicon-dark.ico') : null;
 }
 
 /** Resolve a path inside CONFIG_DIR (e.g. "images/logo.png") to a public URL. */

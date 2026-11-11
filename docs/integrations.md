@@ -1,13 +1,13 @@
 # Integrations
 
-A widget adds live data to a service: its status line and stats, rows of the infrastructure card, and alerts. Configure it under the service's `widget:` key in `services.yaml`. The fields match [gethomepage](https://gethomepage.dev/widgets/), so existing widget blocks work as they are.
+A widget adds live data to a service: its status line and stats, cells of the infrastructure strip, and alerts. Configure it under the service's `widget:` key in `services.yaml`. The fields match [gethomepage](https://gethomepage.dev/widgets/), so existing widget blocks work as they are.
 
 **General rules**
 
 - **Use a dedicated read-only account** wherever the product supports one. Don't reuse an admin login.
 - **Use `https://` URLs.** Over `http://`, credentials cross the network in plain text.
 - **Pass credentials as secrets** (`${NAME}`). See [Configuration → Secrets](configuration.md#secrets-and-variables).
-- A widget's facts appear twice: the first two as the service's **status line** (the Status view, attention items, the service sheet's header) and all of them as **stats** in its sheet. A problem the widget sees, such as overdue backups or a stopped container, comes first.
+- A widget's facts appear twice: the first two as the service's **status line** (its tile, the service sheet's header) and all of them as **stats** in its sheet. A problem the widget sees, such as overdue backups or a stopped container, comes first.
 - In the attention list, an alert starts with its service's name ("Pi-hole: Blocking is disabled") unless it already names it; on the service itself it doesn't.
 - A service is as bad as the worst alert raised for it: from its widget, a certificate, a full storage or a drive it reports. With a Proxmox host, CPU and NVMe temperatures count against the Proxmox service.
 - Each widget has 25 s per poll. If it fails, the status line shows *Stats unavailable*, the sheet keeps the last stats, the reason is a note in Activity, and the full error goes to the container log.
@@ -68,7 +68,7 @@ PBS storages attached to PVE are left out here; the PBS widget reports them.
 
 ## Proxmox Backup Server
 
-Provides the PBS rows in **Storage**, **backup age** for each guest (a *Guest backups* row among the jobs in the **Backups** sheet: guests, last run, overdue), a *Backups completed* event per job run (once no new backup has landed for 15 minutes, naming the guests by their Proxmox name), and disks passed into the PBS VM (such as a removable offsite disk while it's plugged in) in [**Drives**](#drives). The status line shows how long ago the **last backup** finished and how full the first **datastore** is; while backups are overdue, how many comes first.
+Provides the PBS rows in **Storage**, **backup age** for each guest (a *Guest backups* row among the jobs in the **Backups** tab of the Infrastructure sheet: guests, last run, overdue), a *Backups completed* event per job run (once no new backup has landed for 15 minutes, naming the guests by their Proxmox name), and disks passed into the PBS VM (such as a removable offsite disk while it's plugged in) in [**Drives**](#drives). The status line shows how long ago the **last backup** finished and how full the first **datastore** is; while backups are overdue, how many comes first.
 
 ```yaml
 widget:
@@ -99,7 +99,7 @@ proxmox-backup-manager acl update /system/disks Audit --auth-id 'dashboard@pbs!d
 
 **Which backups are checked.** If a Proxmox VE widget is configured, the guests that currently exist in PVE are checked, along with every `host` backup. Without PVE, any backup group that had a backup in the last 14 days is checked. Deleted guests therefore don't cause permanent alerts.
 
-**Guest and host backups.** Guests (VMs and containers, backed up by vzdump) and hosts (`host` groups, backed up with `proxmox-backup-client`) usually run on different schedules, so they are reported apart. The *last backup* stat and the Backups sheet's *Guest backups* row cover guests only, *host backup* and a *Host backups* row cover hosts. Activity gets a *Backups completed* event once a run's backups stop landing for 15 minutes, and a separate *Host backups completed* for host backups. Each backup group is compared with the last backup seen for it, so a backup that started before another but finished after it is still reported. A datastore that is read for the first time (just added to the widget) is a baseline: its existing backups aren't reported as new.
+**Guest and host backups.** Guests (VMs and containers, backed up by vzdump) and hosts (`host` groups, backed up with `proxmox-backup-client`) usually run on different schedules, so they are reported apart. The *last backup* stat and the Backups tab's *Guest backups* row cover guests only, *host backup* and a *Host backups* row cover hosts. Activity gets a *Backups completed* event once a run's backups stop landing for 15 minutes, and a separate *Host backups completed* for host backups. Each backup group is compared with the last backup seen for it, so a backup that started before another but finished after it is still reported. A datastore that is read for the first time (just added to the widget) is a baseline: its existing backups aren't reported as new.
 
 **Removable datastores** (PBS 3.3 and later, such as an offsite USB disk) are expected to be detached most of the time. They show greyed out as *detached …* (time since last attached), with the bar at how full the disk was then, are left out of the backup-age checks, and raise an info reminder after `thresholds.offsiteMaxDetachedDays`. The last time the disk was attached is stored in the database, so it survives restarts.
 
@@ -408,7 +408,7 @@ If the response isn't JSON (a login page, for example), the status line shows *S
 
 ## Drives
 
-The **Drives** row of the infrastructure card, and the **Drives** tab of its sheet, sit next to **Storage**: Storage shows how full each storage is, Drives how healthy the physical disks are. Both appear as soon as a widget reports drives, grouped by the host or service that reports them; a drive to check turns it amber.
+The **Drives** cell of the infrastructure strip, and the **Drives** tab of its sheet, sit next to **Storage**: Storage shows how full each storage is, Drives how healthy the physical disks are. Both appear as soon as a widget reports drives, grouped by the host or service that reports them; a drive to check turns it amber.
 
 | Source | Drives |
 |---|---|

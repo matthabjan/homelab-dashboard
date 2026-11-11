@@ -1,6 +1,6 @@
 // Turns engine state + history into the JSON the browser renders.
 import fs from 'node:fs';
-import { resolveIcon, assetUrl } from './config.ts';
+import { resolveIcon, assetUrl, darkAssetUrl } from './config.ts';
 import { probeStats, uptimeSince, probeBuckets, probeDays, eventsOf, series, recentEvents, openScores } from './db.ts';
 import { fmtHours, fmtSize, plural } from './format.ts';
 import { hostService, hostSource } from './local.ts';
@@ -478,6 +478,7 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
     linkTarget: settings.linkTarget,
     deepLink: settings.deepLink,
     logo: assetUrl(settings.pwa.logo),
+    logoDark: darkAssetUrl(settings.pwa, 'logo'),
     staleAfter: Math.max(settings.intervals.widgets, settings.intervals.probe) * 2.5 * 1000,
     verdict,
     lastChange: events[0]?.ts ?? null,
