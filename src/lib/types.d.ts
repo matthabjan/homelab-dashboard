@@ -433,10 +433,15 @@ export interface Backups {
   oldestName: string | null;
   /** PBS rows first (they run daily, so they change most), then the jobs by when they are due */
   rows: BackupRow[];
+  /**
+   * The last 7 days, a day each ending now, oldest first: the worst that was recorded that day (a backup job found
+   * late is critical, a backup service's event as it was raised), 'ok' when only good news was, 'none' for no record.
+   */
+  days: (Level | 'none')[];
 }
 
 /** What a sheet shows: one level of the sheet stack (the page keeps it in history state). */
-export type SheetRef = { kind: 'service'; id: string } | { kind: 'infra'; tab: 'system' | 'storage' | 'drives' | 'network' } | { kind: 'backups' } | { kind: 'activity' };
+export type SheetRef = { kind: 'service'; id: string } | { kind: 'infra'; tab: InfraPanel['id'] } | { kind: 'activity' };
 
 export interface ContainerCounts {
   running: number;
@@ -795,7 +800,7 @@ export interface Snapshot {
     lan: Traffic | null;
     dns: (DnsStats & { href: string | null; name: string }) | null;
   }) | null;
-  /** the infrastructure card's rows, which are also the Infrastructure sheet's tabs (all but Backups) */
+  /** the infrastructure strip's cells, which are also the Infrastructure sheet's tabs */
   infrastructure: InfraPanel[];
   /** most-opened services, by open count with a half-life of `settings.mostUsed.halfLifeDays` */
   mostUsed: Tile[];

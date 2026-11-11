@@ -1,13 +1,13 @@
 // Turns engine state + history into the JSON the browser renders.
 import fs from 'node:fs';
 import { resolveIcon, assetUrl } from './config.ts';
-import { probeStats, uptimeSince, probeBuckets, series, recentEvents, openScores } from './db.ts';
+import { probeStats, uptimeSince, probeBuckets, probeDays, eventsOf, series, recentEvents, openScores } from './db.ts';
 import { fmtHours, fmtSize, plural } from './format.ts';
 import { hostService, hostSource } from './local.ts';
 import { heartbeatStatus, kindOf, status as checkStatus, withoutBlips } from './check.ts';
 import { createAttention, type Raised } from './attention.ts';
 import { infrastructure } from './infrastructure.ts';
-import { backups as backupsOf } from './backups.ts';
+import { backups as backupsOf, DAYS } from './backups.ts';
 import { storage as storageOf } from './storage.ts';
 import type { AttentionItem, Backups, ConfigProblem, Drive, Fact, Gauge, Job, Level, NetworkReading, Settings, Severity, SheetRef, Snapshot, Tile, Traffic, Trend } from '$lib/types';
 import type { Engine } from './engine.ts';
@@ -145,7 +145,7 @@ const isBackupService = (s: SnapshotInput['cfg']['services'][number]) => !!s.hea
 function feedTarget(engine: SnapshotInput, sid: string | null, reported: boolean): SheetRef | null {
   const s = sid ? engine.cfg.services.find((x) => x.id === sid) : undefined;
   if (!s) return null;
-  return reported && isBackupService(s) ? { kind: 'backups' } : { kind: 'service', id: s.id };
+  return reported && isBackupService(s) ? { kind: 'infra', tab: 'backups' } : { kind: 'service', id: s.id };
 }
 
 /** The same for a note: a PBS widget's (an offsite disk detached) the Backups sheet, the host's the System tab. */
@@ -456,7 +456,16 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
   const ups = all.map((t) => t.uptime24).filter((x) => x != null);
   const fleetAvail = ups.length ? ups.reduce((a, b) => a + b, 0) / ups.length : null;
   const jobs = jobList(engine, now);
-  const { sheet: backups, panel: backupsPanel } = backupsOf(widgets.flatMap(({ s, w }) => (w.backups ? [{ id: s.id, name: s.name, backups: w.backups }] : [])), jobs, now);
+  // the week behind the Backups strip: the backup jobs' checks per day, and what the backup services reported
+  const backupHistory = perMinute(mem, now, 'backup days', () => {
+    const since = now - DAYS * 24 * H;
+    const services = engine.cfg.services;
+    return {
+      checks: probeDays(services.filter((s) => s.heartbeat?.backup).map((s) => s.id), since, 24 * H),
+      events: eventsOf(services.filter((s) => s.heartbeat?.backup || s.widget?.type === 'proxmoxbackupserver').map((s) => s.id), since, 500)
+    };
+  });
+  const { sheet: backups, panel: backupsPanel } = backupsOf(widgets.flatMap(({ s, w }) => (w.backups ? [{ id: s.id, name: s.name, backups: w.backups }] : [])), jobs, now, backupHistory);
   const verdict = verdictOf(engine, all, jobs, backups, att);
   const mostUsed = mostUsedRow(all, settings, now);
 

@@ -93,6 +93,15 @@ export function uptimeSince(sid: string, since: number): number | null {
   return r?.n ? r.up : null;
 }
 
+/** Probes of several services per bucket from `since`, and how many failed: the days of the Backups strip. */
+export function probeDays(sids: string[], since: number, bucketMs: number) {
+  if (!sids.length) return [];
+  return all<{ b: number; n: number; fails: number }>(
+    `SELECT CAST((ts - ?) / ? AS INTEGER) AS b, COUNT(*) AS n, SUM(1 - ok) AS fails FROM probes WHERE sid IN (${sids.map(() => '?').join(', ')}) AND ts >= ? GROUP BY b`,
+    since, bucketMs, ...sids, since
+  );
+}
+
 /** Per-bucket failure ratio for every service, used for the fleet availability strip. */
 export function probeBuckets(since: number, bucketMs: number) {
   return all<ProbeBucketRow>(

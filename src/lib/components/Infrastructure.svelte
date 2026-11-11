@@ -1,11 +1,11 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, type Snippet } from 'svelte';
   import type { Level, Snapshot, Traffic, Trend } from '$lib/types';
   import Gauge from './Gauge.svelte';
   import Reading from './Reading.svelte';
 
   interface Props {
-    /** the card's panels: each but Backups is a tab, with its level and line */
+    /** the strip's panels: each is a tab, with its level and line */
     panels: Snapshot['infrastructure'];
     host: Snapshot['host'];
     storage: Snapshot['storage'];
@@ -15,20 +15,22 @@
     /** when the snapshot was made: the right edge of every history */
     now: number;
     /** the panel to open with (a sheet opened from its card); without it, the one this browser last chose */
-    initial?: 'system' | 'storage' | 'drives' | 'network';
+    initial?: Panel['id'];
+    /** the Backups tab's content: the page's, since its rows open service sheets */
+    backups?: Snippet;
   }
-  let { panels: summaries, host, storage, drives, network, target, now, initial }: Props = $props();
+  let { panels: summaries, host, storage, drives, network, target, now, initial, backups }: Props = $props();
 
   /** a tab of the card: its panel id, its name and the dot it shows */
   interface Panel {
-    id: 'system' | 'storage' | 'drives' | 'network';
+    id: Snapshot['infrastructure'][number]['id'];
     name: string;
     level: Level | null;
     meta?: string;
   }
 
   // the dot on a tab: a hidden panel must not hide a problem
-  const panels: Panel[] = $derived(summaries.flatMap((p) => (p.id === 'backups' ? [] : [{ id: p.id, name: p.label, level: p.level === 'none' || p.level === 'ok' ? null : p.level, meta: p.meta }])));
+  const panels: Panel[] = $derived(summaries.flatMap((p) => (p.id === 'backups' && !backups ? [] : [{ id: p.id, name: p.label, level: p.level === 'none' || p.level === 'ok' ? null : p.level, meta: p.id === 'backups' ? p.sub : p.meta }])));
 
   // which panel is open. Remembered per browser as a convenience, so storage errors are ignored
   // svelte-ignore state_referenced_locally — the panel it opens with; the tabs change it from there
@@ -201,6 +203,8 @@
               />
             {/if}
           </div>
+        {:else if p.id === 'backups'}
+          <div class="backups">{@render backups?.()}</div>
         {/if}
       </div>
     {/each}
@@ -284,15 +288,16 @@
 
   /* network: WAN, LAN and DNS as tiles like System's, stacked in the sheet, side by side when the card is wide */
   .span { margin: 0 0 10px; font-size: 12px; color: var(--muted); }
+  .backups { display: flex; flex-direction: column; gap: 16px; }
   .net { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: 12px; }
 
   @container infra (max-width: 519.98px) {
-    /* phones: four equal segments across the card */
+    /* phones: equal segments across the card */
     .tabs { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); flex: 1 1 100%; }
-    .tabs button { padding: 8px 2px; gap: 4px; }
+    .tabs button { padding: 8px 0; gap: 3px; font-size: 13px; }
   }
   /* the smallest phones: a label and its dot must still fit a quarter of the card */
-  @container infra (max-width: 299.98px) { .tabs button { font-size: 13px; padding-inline: 0; gap: 3px; } }
+  @container infra (max-width: 339.98px) { .tabs button { font-size: 12px; gap: 2px; } }
   @media (max-width: 760px) {
     .infra-card { gap: 14px; }
     /* phones: each panel only as tall as it needs */

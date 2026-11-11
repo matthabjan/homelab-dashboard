@@ -2,7 +2,7 @@
 // each job is judged where it is read (pbs.ts against backupMaxAgeHours, check.ts for heartbeats); this adds them up.
 import { ago, until } from '../ago.ts';
 import { plural, worst } from './format.ts';
-import type { BackupRow, Backups, InfraPanel, Job, PbsBackups } from '$lib/types';
+import type { BackupRow, Backups, InfraPanel, Job, Level, PbsBackups, Severity } from '$lib/types';
 
 /** One PBS service's backups. */
 export interface PbsSource {
@@ -49,11 +49,33 @@ function panel(sheet: Backups, pbs: PbsSource[], jobs: Job[], now: number): Infr
   };
 }
 
+const DAY = 86_400_000;
+export const DAYS = 7;
+
+/**
+ * What was recorded about backups over the last `DAYS` days: the backup jobs' checks per day (`b` counts days from
+ * `now - DAYS` days; `fails` is how many found a job late) and what the backup services reported.
+ */
+export interface BackupHistory {
+  checks: { b: number; n: number; fails: number }[];
+  events: { ts: number; sev: Severity | 'ok' }[];
+}
+
+/** A day each, oldest first: critical when a job was found late or something critical was reported, and so on down. */
+export function days(history: BackupHistory, now: number): Backups['days'] {
+  const rank = { none: 0, ok: 1, warn: 2, crit: 3 } as const;
+  const out: (Level | 'none')[] = Array.from({ length: DAYS }, () => 'none');
+  const put = (b: number, level: Level) => { if (b >= 0 && b < DAYS && rank[level] > rank[out[b]]) out[b] = level; };
+  for (const c of history.checks) if (c.n) put(c.b, c.fails ? 'crit' : 'ok');
+  for (const e of history.events) if (e.sev !== 'info') put(Math.floor((e.ts - (now - DAYS * DAY)) / DAY), e.sev);
+  return out;
+}
+
 /**
  * The Backups sheet and the card's row from every PBS widget and every job. Only PBS servers that judged a group count;
  * a job that never ran adds nothing yet. The panel is null when there is nothing to show.
  */
-export function backups(pbs: PbsSource[], jobs: Job[], now: number): { sheet: Backups; panel: InfraPanel | null } {
+export function backups(pbs: PbsSource[], jobs: Job[], now: number, history: BackupHistory = { checks: [], events: [] }): { sheet: Backups; panel: InfraPanel | null } {
   const known = pbs.filter((p) => p.backups.known);
   const ran = jobs.filter((j) => j.backup && j.state !== 'pending');
   const lateBackups = ran.filter((j) => j.state === 'down');
@@ -67,7 +89,8 @@ export function backups(pbs: PbsSource[], jobs: Job[], now: number): { sheet: Ba
     level: worst([...known.filter((p) => overdueOf(p.backups)).map((p) => p.backups.overdueSev), ...lateBackups.map((j) => j.level)]),
     oldestAge: oldest?.age ?? null,
     oldestName: oldest?.name ?? null,
-    rows: [...known.flatMap(pbsRows), ...[...jobs].sort((a, b) => a.due - b.due).map(jobRow)]
+    rows: [...known.flatMap(pbsRows), ...[...jobs].sort((a, b) => a.due - b.due).map(jobRow)],
+    days: days(history, now)
   };
   return { sheet, panel: known.length || jobs.length ? panel(sheet, known, jobs, now) : null };
 }

@@ -330,8 +330,8 @@ test('Activity: outages under minOutageMinutes are left out, and each row says w
   assert.ok(!row('Fresh went down'), 'one still younger than the limit too: its alert says it');
   assert.deepEqual(row('Long went down')?.open, { kind: 'service', id: long.id });
   assert.deepEqual(row('Long recovered')?.open, { kind: 'service', id: long.id });
-  assert.deepEqual(row('Backups completed')?.open, { kind: 'backups' }, 'what a backup service reports opens Backups');
-  assert.deepEqual(row('PBS: offsite detached for 140 d')?.open, { kind: 'backups' });
+  assert.deepEqual(row('Backups completed')?.open, { kind: 'infra', tab: 'backups' }, 'what a backup service reports opens Backups');
+  assert.deepEqual(row('PBS: offsite detached for 140 d')?.open, { kind: 'infra', tab: 'backups' });
   assert.ok(!feed.some((f) => 'outage' in f), 'the outage column stays on the server');
 
   const every = createSnapshot()(snapshotInput({ services: [], settings: { ...input.cfg.settings, thresholds: { ...input.cfg.settings.thresholds, minOutageMinutes: 0 } } }), now).feed;

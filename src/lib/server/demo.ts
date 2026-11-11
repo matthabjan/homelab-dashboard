@@ -83,6 +83,8 @@ export function seedHistory(services: Service[]) {
       const lastOk = now - (s.heartbeat.every > 86_400_000 ? s.heartbeat.every * 0.4 : (calm() ? 6 : 27) * 3600_000);
       const due = lastOk + s.heartbeat.every + s.heartbeat.grace;
       kvSet(kvKey(s.heartbeat.id), { since: now - 7 * 86_400_000, lastOk, lastFail: null });
+      // the week before, thinly: the Backups strip shows seven days
+      for (let ts = now - 7 * 86_400_000; ts < now - 86_400_000; ts += 1800_000) insertProbe(s.id, ts, true, null);
       for (let ts = now - 86_400_000; ts < now; ts += 120_000) insertProbe(s.id, ts, ts <= due, null);
       if (due < now) insertEvent(due, 'crit', s.id, `${s.name} went down`, 'Missed its run', due);
     }

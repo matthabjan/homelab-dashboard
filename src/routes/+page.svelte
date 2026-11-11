@@ -10,11 +10,13 @@
   import TabBar from '$lib/components/TabBar.svelte';
   import Palette from '$lib/components/Palette.svelte';
   import Beats from '$lib/components/Beats.svelte';
+  import Sparkline from '$lib/components/Sparkline.svelte';
   import Sheet from '$lib/components/Sheet.svelte';
   import { ago, until, validFor } from '$lib/ago.ts';
 
-  // The page answers "is everything fine?" at a glance and gets you to a service in one tap. Everything else (strips,
-  // charts, readings) is one tap deeper, in a sheet.
+  // The page answers "is everything fine?" at a glance and gets you to a service in one tap: the sentence, what needs
+  // attention listed once, a strip of the infrastructure, and a tile per service that both launches it and says how
+  // it is. Everything else (strips, charts, readings) is one tap deeper, in a sheet.
   let { data }: PageProps = $props();
   // svelte-ignore state_referenced_locally — only the first snapshot comes from load; the stream replaces it
   let snap = $state(data.snapshot);
@@ -58,12 +60,24 @@
   const liveState = $derived<'live' | 'reconnecting' | 'stale'>(live === 'reconnecting' ? 'reconnecting' : stale ? 'stale' : 'live');
 
   // ---- what the page shows, from the snapshot ----
-  // under the hero: the other warnings and critical items (notes, such as pending updates, are the activity card's)
-  const also = $derived(snap?.needCount ? snap.attention.slice(1).filter((a) => a.sev !== 'info') : []);
-  let alsoAll = $state(false);
-  const ALSO = 3;
-  // the launcher: only what can be opened (jobs and services without href live in the Status view and the sheets)
-  const launch = $derived(snap ? snap.groups.map((g) => ({ name: g.name, services: g.services.filter((t) => t.href) })).filter((g) => g.services.length) : []);
+  // what needs attention, the top item first: every warning and critical item (notes, such as pending updates, are
+  // Activity's). Listed once, here; the strip and the tiles only mark what is theirs
+  const problems = $derived(snap?.needCount ? snap.attention.filter((a) => a.sev !== 'info') : []);
+  const nCrit = $derived(problems.filter((a) => a.sev === 'crit').length);
+  let sev = $state<'all' | 'crit' | 'warn'>('all');
+  const listed = $derived(problems.filter((a) => sev === 'all' || a.sev === sev));
+  // wide screens show the first few; the phone's Alerts view lists them all
+  const TRIAGE = 5;
+  let triageAll = $state(false);
+  $effect(() => { if (!problems.some((a) => a.sev === sev)) sev = 'all'; });
+
+  // the services: every service and job in its group, or only those with a problem
+  let only = $state<'all' | 'problems'>('all');
+  const nBad = $derived(allServices.filter((t) => isProblem(t.level)).length);
+  $effect(() => { if (!nBad) only = 'all'; });
+  const groups = $derived(
+    (snap?.groups ?? []).map((g) => ({ ...g, services: g.services.filter((t) => only === 'all' || isProblem(t.level)) })).filter((g) => g.services.length)
+  );
   // the Links card: bookmarks by group, in bookmarks.yaml order
   const linkGroups = $derived.by(() => {
     const groups: { name: string; links: Snapshot['bookmarks'] }[] = [];
@@ -75,31 +89,28 @@
   });
   const jobById = $derived(new Map((snap?.jobs ?? []).map((j) => [j.id, j])));
 
-  // the infrastructure card: one row per area, worded and judged on the server (the same panels are the sheet's tabs)
+  // the infrastructure strip: a cell per area, worded and judged on the server (the same panels are the sheet's tabs),
+  // each with a small picture of its figure drawn from what the sheet charts
   const cards = $derived(snap?.infrastructure ?? []);
+  const fullest = $derived(Math.max(0, ...(snap?.storage ?? []).filter((r) => r.level !== 'off').map((r) => r.pct ?? 0)));
 
-  /** a card's figure as words: "19% CPU · 64% RAM · 49°C TEMP", "90% full", "2 overdue" */
-  const figText = (c: InfraPanel) => (c.stats ? c.stats.map((x) => (x.k ? `${x.v} ${x.k}` : x.v)).join(' · ') : [c.value, c.unit].filter(Boolean).join(' '));
-  // the infrastructure card's header and its phone summary: what needs attention, or, when nothing does, the key figures
-  const infraProblems = $derived(cards.filter((c) => isProblem(c.level)));
-  const infraStatus = $derived(infraProblems.length ? `${infraProblems.length} need${infraProblems.length === 1 ? 's' : ''} attention` : 'All healthy');
-  const infraSay = $derived.by(() => {
-    if (infraProblems.length) return infraProblems.map((c) => ({ k: c.label, v: figText(c) }));
-    const sys = cards.find((c) => c.id === 'system'), sto = cards.find((c) => c.id === 'storage');
-    return [sys && { k: '', v: figText(sys) }, sto && { k: 'Storage', v: figText(sto) }].filter((x) => !!x);
-  });
+  // Activity: what happened first; the notes (pending updates and the like) fold into one row under it
+  const notes = $derived((snap?.feed ?? []).filter((a) => 'key' in a && a.sev === 'info'));
+  const happened = $derived((snap?.feed ?? []).filter((a) => !('key' in a && a.sev === 'info')));
+  const FEED = 5;
 
   // ---- sheets: details on demand ----
   // A stack: a sheet opened from inside another (Backups → a job) is a level deeper, with a back button to the one
   // below. Each level is a history entry (shallow routing), so the browser's and Android's back go up one level, and
-  // closing (✕, the backdrop, a swipe down) pops them all.
+  // closing (✕ or the phone's handle, the backdrop, a swipe down) pops them all.
   const stack = $derived<SheetRef[]>(page.state.sheets ?? []);
   const sheet = $derived(stack.at(-1) ?? null);
   const sheetOpen = $derived(stack.length > 0);
   const show = (s: SheetRef) => pushState('', { ...page.state, sheets: [...stack, s] });
   const back = () => history.back();
   const closeSheets = () => { if (stack.length) history.go(-stack.length); };
-  const openCard = (c: InfraPanel) => show(c.id === 'backups' ? { kind: 'backups' } : { kind: 'infra', tab: c.id });
+  const openCard = (c: InfraPanel) => show({ kind: 'infra', tab: c.id });
+  const details = (id: string) => show({ kind: 'service', id });
   const sheetId = $derived(sheet?.kind === 'service' ? sheet.id : null);
   const sheetTile = $derived(sheetId ? allServices.find((t) => t.id === sheetId) ?? null : null);
   const sheetJob = $derived(sheetId ? jobById.get(sheetId) ?? null : null);
@@ -118,20 +129,20 @@
       .catch(() => {});
     return () => ctl.abort();
   });
-  // the Backups sheet's recent list: the last 7 days of PBS and backup-job events, refreshed when something changes
+  // the Backups tab's recent list: the last 7 days of PBS and backup-job events, refreshed when something changes
   let backupEvents = $state<FeedItem[]>([]);
   // the latest few, the rest of the week on request; each time the sheet opens it starts short
   const RECENT = 5;
   // the lines a note shows under it (pending packages) before "N more"
   const ITEMS = 5;
   let recentAll = $state(false);
-  $effect(() => { if (sheet?.kind !== 'backups') recentAll = false; });
+  $effect(() => { if (sheet?.kind !== 'infra') recentAll = false; });
   // the same for a service's activity: short again for every service opened
   let svcAll = $state(false);
   $effect(() => { void sheetId; svcAll = false; });
   $effect(() => {
     void snap?.lastChange;
-    if (sheet?.kind !== 'backups' || !sheetOpen) return;
+    if (sheet?.kind !== 'infra' || !sheetOpen) return;
     const ctl = new AbortController();
     fetch('/api/events?backups', { signal: ctl.signal })
       .then((r) => (r.ok ? r.json() : []))
@@ -146,26 +157,49 @@
     return [...raised, ...past];
   });
   const titleOf = (s: SheetRef | null | undefined) =>
-    !s ? '' : s.kind === 'service' ? allServices.find((t) => t.id === s.id)?.name ?? '' : s.kind === 'infra' ? 'Infrastructure' : s.kind === 'backups' ? 'Backups' : 'Activity';
+    !s ? '' : s.kind === 'service' ? allServices.find((t) => t.id === s.id)?.name ?? '' : s.kind === 'infra' ? 'Infrastructure' : 'Activity';
   const sheetTitle = $derived(titleOf(sheet));
   const backTo = $derived(stack.length > 1 ? titleOf(stack.at(-2)) : undefined);
   const sheetSub = $derived(
     sheet?.kind === 'service' ? [sheetTile?.group, sheetTile?.host].filter(Boolean).join(' · ')
-    : sheet?.kind === 'backups' ? cards.find((c) => c.id === 'backups')?.sub ?? ''
     : sheet?.kind === 'activity' ? 'Last 24 hours' : ''
   );
 
-  // ---- services: launch (plain icons) or status (every service with its state and 24 h strip) ----
-  let mode = $state<'launch' | 'status'>('launch');
-  function setMode(m: 'launch' | 'status') {
-    mode = m;
-    try { localStorage.setItem('servicesView', m); } catch {}
+  // A long press on a tile opens its details (touch and pen; the button at the tile's end does the same for everyone).
+  // The click that follows the press is swallowed, so the service isn't launched as well.
+  function longpress(node: HTMLElement, open: () => void) {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let fired = false, touch = false, x = 0, y = 0;
+    const down = (e: PointerEvent) => {
+      touch = e.pointerType !== 'mouse';
+      fired = false;
+      if (!touch) return;
+      x = e.clientX; y = e.clientY;
+      timer = setTimeout(() => { fired = true; open(); }, 450);
+    };
+    const move = (e: PointerEvent) => { if (Math.hypot(e.clientX - x, e.clientY - y) > 10) clearTimeout(timer); };
+    const cancel = () => clearTimeout(timer);
+    const click = (e: MouseEvent) => { if (fired) { e.preventDefault(); fired = false; } };
+    // the browser's own long-press menu would cover the sheet
+    const menu = (e: Event) => { if (touch) e.preventDefault(); };
+    node.addEventListener('pointerdown', down);
+    node.addEventListener('pointermove', move);
+    node.addEventListener('pointerup', cancel);
+    node.addEventListener('pointercancel', cancel);
+    node.addEventListener('click', click);
+    node.addEventListener('contextmenu', menu);
+    return {
+      destroy() {
+        clearTimeout(timer);
+        node.removeEventListener('pointerdown', down); node.removeEventListener('pointermove', move); node.removeEventListener('pointerup', cancel);
+        node.removeEventListener('pointercancel', cancel); node.removeEventListener('click', click); node.removeEventListener('contextmenu', menu);
+      }
+    };
   }
 
   /** (re)open the stream now: the banner's Retry, coming back online. Set once mounted */
   let connect = () => {};
   onMount(() => {
-    try { const m = localStorage.getItem('servicesView'); if (m === 'status' || m === 'launch') mode = m; } catch {}
     let es: EventSource | undefined;
     let retry: ReturnType<typeof setTimeout> | undefined;
     let grace: ReturnType<typeof setTimeout> | undefined;
@@ -260,16 +294,6 @@
 
 <svelte:window onkeydown={onKey} />
 
-<!-- one glyph per infrastructure area, so a row is found without reading it -->
-{#snippet areaIcon(id: InfraPanel['id'])}
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-    {#if id === 'system'}<rect x="5" y="5" width="14" height="14" rx="2" /><rect x="9" y="9" width="6" height="6" rx="1" /><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3" />
-    {:else if id === 'storage'}<ellipse cx="12" cy="5" rx="8" ry="3" /><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5" /><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3" />
-    {:else if id === 'drives'}<path d="M22 12H2" /><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" /><path d="M6 16h.01M10 16h.01" />
-    {:else if id === 'network'}<circle cx="12" cy="12" r="10" /><path d="M2 12h20" /><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-    {:else}<rect x="2" y="3" width="20" height="5" rx="1" /><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" /><path d="M10 12h4" />{/if}
-  </svg>
-{/snippet}
 {#snippet arrow()}<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8" /></svg>{/snippet}
 
 <!-- one event or alert in a list: what happened, about which service, and when -->
@@ -316,52 +340,77 @@
       </div>
     {/if}
 
-    <!-- the answer first: one sentence; while something needs attention, the way to it -->
-    <section data-v="home alerts" class="card hero lv-{degraded ? 'none' : snap.verdict.level}" class:alert={!degraded && isProblem(snap.verdict.level)} class:flash={flash.has('verdict')} aria-label="Overall status">
-      <div class="state">
-        <span class="mark" aria-hidden="true">
-          {#if snap.verdict.level === 'ok'}<svg viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5" /></svg>{:else}<svg viewBox="0 0 24 24"><path d="M12 7v6M12 17h.01" /></svg>{/if}
-        </span>
-        <div class="say">
-          {#if degraded}<span class="tag">Last known state</span>{/if}
-          <h1>{snap.verdict.title}</h1>
-          {#if snap.verdict.sub || snap.lastChange}
-            <p class="muted">{[snap.verdict.sub, !snap.needCount && snap.lastChange ? `last change ${since(snap.lastChange)}` : ''].filter(Boolean).join(' · ')}</p>
-          {/if}
+    <!-- the answer first: one sentence. While something needs attention, what to do about the top item, and beside it
+         everything that needs attention, once; otherwise the most used services -->
+    <section data-v="home alerts" class="card top lv-{degraded ? 'none' : snap.verdict.level}" class:calm={!problems.length} class:flash={flash.has('verdict')} aria-label="Overall status">
+      <div class="verdict" data-v="home">
+        <div class="vrow">
+          <span class="mark" aria-hidden="true">
+            {#if snap.verdict.level === 'ok'}<svg viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5" /></svg>{:else}<svg viewBox="0 0 24 24"><path d="M12 7v6M12 17h.01" /></svg>{/if}
+          </span>
+          <div class="say">
+            {#if degraded}<span class="tag">Last known state</span>{/if}
+            <h1>{snap.verdict.title}</h1>
+            {#if snap.verdict.sub || snap.lastChange}
+              <p class="muted">{[snap.verdict.sub, !snap.needCount && snap.lastChange ? `last change ${since(snap.lastChange)}` : ''].filter(Boolean).join(' · ')}</p>
+            {/if}
+          </div>
         </div>
-        {#if snap.verdict.action}
-          <a class="primary lift" href={snap.verdict.action.href} target={linkTarget(snap.verdict.action.href)} rel="noopener">{snap.verdict.action.label} {@render arrow()}</a>
+        {#if problems.length || snap.verdict.action}
+          {@const first = problems[0]}
+          <div class="acts">
+            <!-- phones lead to the whole list when there is more than one problem; wide screens have it beside this -->
+            {#if problems.length > 1}<button class="btn primary only-phone" onclick={() => setView('alerts')}>Review all {problems.length} problems</button>{/if}
+            {#if first?.sid}{@const sid = first.sid}<button class="btn primary" class:only-desktop={problems.length > 1} onclick={() => details(sid)}>See details</button>{/if}
+            {#if snap.verdict.action}
+              <a class="btn" class:primary={!first?.sid} href={snap.verdict.action.href} target={linkTarget(snap.verdict.action.href)} rel="noopener">{snap.verdict.action.label} {@render arrow()}</a>
+            {/if}
+          </div>
         {/if}
       </div>
 
-      {#if also.length}
-        <!-- phones: Home names the top problem and leads to the rest; the Alerts view lists them all -->
-        <button class="review only-phone" data-v="home" onclick={() => setView('alerts')}>Review all {also.length + 1} problems</button>
-        <div class="also" data-v="alerts">
-          <h2 class="k">Also needs attention · {also.length}</h2>
-          <ul class="probs" id="also">
-            {#each also as a, i (a.key)}
-              <li class="prob lv-{a.sev}" class:extra={i >= ALSO && !alsoAll} class:flash={!!a.sid && flash.has(a.sid)}>
-                <!-- the card opens the service's details; Open goes straight to the service -->
-                <svelte:element this={a.sid ? 'button' : 'div'} class="pbody" onclick={() => a.sid && show({ kind: 'service', id: a.sid })} role={a.sid ? undefined : 'group'}>
-                  <span class="ev-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={ICONS[a.sev] ?? ICONS.info} /></svg></span>
-                  <span class="txt"><span class="t">{a.title}</span>{#if a.detail}<span class="d muted">{a.detail}</span>{/if}</span>
+      {#if problems.length}
+        <div class="triage" data-v="alerts">
+          <div class="thead">
+            <h2>Needs attention</h2>
+            {#if nCrit && nCrit < problems.length}
+              <div class="chips" role="group" aria-label="Show">
+                <button class="chip" aria-pressed={sev === 'all'} onclick={() => (sev = 'all')}>All {problems.length}</button>
+                <button class="chip" aria-pressed={sev === 'crit'} onclick={() => (sev = 'crit')}><span class="dot lv-crit" aria-hidden="true"></span>{nCrit} critical</button>
+                <button class="chip" aria-pressed={sev === 'warn'} onclick={() => (sev = 'warn')}><span class="dot lv-warn" aria-hidden="true"></span>{problems.length - nCrit} warning{problems.length - nCrit === 1 ? '' : 's'}</button>
+              </div>
+            {:else}
+              <span class="muted small num">{problems.length}</span>
+            {/if}
+          </div>
+          <ul class="rows" id="triage">
+            {#each listed as a, i (a.key)}
+              <li class="lv-{a.sev}" class:extra={i >= TRIAGE && !triageAll} class:flash={!!a.sid && flash.has(a.sid)}>
+                <!-- a row opens the service's details; one that isn't about a service (the config) leads where it says -->
+                <svelte:element
+                  this={a.sid ? 'button' : a.href ? 'a' : 'div'} class="arow" class:tap={!!a.sid || !!a.href}
+                  href={!a.sid && a.href ? a.href : undefined} target={!a.sid ? linkTarget(a.href) : undefined}
+                  onclick={a.sid ? () => details(a.sid ?? '') : undefined} role={a.sid || a.href ? undefined : 'group'}
+                >
+                  <span class="dot lv-{a.sev}" aria-hidden="true"></span>
+                  <span class="t"><span class="sr">{a.sev === 'crit' ? 'Critical: ' : 'Warning: '}</span>{a.title}</span>
+                  <span class="w num">{ago(a.ts, now)}</span>
+                  {#if a.detail}<span class="d">{a.detail}</span>{/if}
                 </svelte:element>
-                {#if a.href}<a class="ghost" href={a.href} target={linkTarget(a.href)} rel="noopener" aria-label="Open {a.service ?? 'service'}">Open {@render arrow()}</a>{/if}
               </li>
             {/each}
           </ul>
-          {#if also.length > ALSO}
-            <button class="link-btn more" aria-expanded={alsoAll} aria-controls="also" onclick={() => (alsoAll = !alsoAll)}>{alsoAll ? 'Show fewer' : `Show ${also.length - ALSO} more`}</button>
+          {#if listed.length > TRIAGE}
+            <button class="link-btn more" aria-expanded={triageAll} aria-controls="triage" onclick={() => (triageAll = !triageAll)}>{triageAll ? 'Show fewer' : `Show all ${listed.length}`}</button>
           {/if}
         </div>
       {:else}
-        <p class="muted quiet only-phone" data-v="alerts">{snap.needCount ? 'Nothing else needs attention.' : 'Nothing needs attention.'}</p>
+        <p class="muted quiet only-phone" data-v="alerts">Nothing needs attention.</p>
       {/if}
 
-      <!-- wide: while something needs attention the hero holds only that. Phones: Home always has the most used -->
+      <!-- wide: while something needs attention the card holds only that. Phones: Home always has the most used -->
       {#if snap.mostUsed.length}
-        <div class="most" class:need={snap.needCount > 0} data-v="home">
+        <div class="most" class:need={problems.length > 0} data-v="home">
           <h2 class="k">Most used</h2>
           <div class="apps">
             {#each snap.mostUsed as t (t.id)}
@@ -376,19 +425,13 @@
     </section>
 
     {#if cards.length}
-      <!-- infrastructure and backups in one card: a row per area, side by side when wide; on phones collapsed to the area
-           icons and one sentence. Each area opens its sheet -->
-      <section class="card infra" data-v="home" aria-labelledby="h-infra" style="--n: {cards.length}">
-        <div class="ihead">
-          <h2 id="h-infra">Infrastructure</h2>
-          <span class="muted small" class:hl={infraProblems.length > 0}>{infraStatus}</span>
-        </div>
-        <div class="irows">
+      <!-- infrastructure and backups in one strip: a cell per area with its figure, a small picture of it and a line of
+           context. A problem colours the figure and adds its shape; the cell opens the area's tab of the sheet -->
+      <section class="card infra" data-v="home" aria-labelledby="h-infra">
+        <h2 id="h-infra" class="sr">Infrastructure</h2>
         {#each cards as c (c.id)}
-          <button class="irow lv-{c.level}" class:alert={isProblem(c.level)} onclick={() => openCard(c)}>
-            <span class="iico">{@render areaIcon(c.id)}</span>
-            <!-- a problem: its shape beside the label as well as the tint, so colour is never the only sign -->
-            <span class="k">{c.label}{#if c.where}<span class="kw">{c.where}</span>{/if}{#if isProblem(c.level)}<span class="dot lv-{c.level}" aria-hidden="true"></span><span class="vh">, {c.level === 'crit' ? 'critical' : 'warning'}</span>{/if}</span>
+          <button class="cell lv-{c.level}" class:alert={isProblem(c.level)} onclick={() => openCard(c)}>
+            <span class="clab">{c.label}{#if c.where}<span class="kw">{c.where}</span>{/if}{#if isProblem(c.level)}<span class="dot lv-{c.level}" aria-hidden="true"></span><span class="sr">, {c.level === 'crit' ? 'critical' : 'warning'}</span>{/if}</span>
             <span class="fig">
               {#if c.stats}
                 {#each c.stats as st, i (i)}<span class="ist"><span class="isv" class:hl={isProblem(st.level)} style:--lv={isProblem(st.level) ? `var(--${st.level})` : undefined}>{st.v}</span>{#if st.k}<span class="isk">{st.k}</span>{/if}</span>{/each}
@@ -396,102 +439,104 @@
                 <span class="v">{c.value}</span>{#if c.unit}<span class="u">{c.unit}</span>{/if}
               {/if}
             </span>
+            <span class="viz" aria-hidden="true">
+              {#if c.id === 'system'}
+                <Sparkline values={snap.host?.gauges[0]?.series} area minSpan={30} height={28} />
+              {:else if c.id === 'storage'}
+                <span class="meter"><span style:width="{Math.min(100, fullest)}%"></span></span>
+              {:else if c.id === 'drives'}
+                <span class="pips">{#each snap.drives.slice(0, 10) as d, i (i)}<span class="lv-{d.level}" class:bad={isProblem(d.level)}></span>{/each}</span>
+              {:else if c.id === 'network'}
+                <Sparkline values={snap.network?.seriesDown ?? snap.network?.lan?.seriesDown} area minSpan={10} height={28} />
+              {:else}
+                <span class="days">{#each snap.backups.days as d, i (i)}<span class="lv-{d}" class:none={d === 'none'} class:bad={isProblem(d)}></span>{/each}</span>
+              {/if}
+            </span>
             {#if c.sub}<span class="s">{c.sub}</span>{/if}
-            <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
           </button>
         {/each}
-        </div>
-        <!-- phones: the figures the collapsed rows leave out; only what needs attention when something does -->
-        <p class="isay">{#each infraSay as x, i (i)}{#if i}{' · '}{/if}{#if x.k}<b>{x.k}</b>{' '}{/if}{x.v}{/each}</p>
       </section>
     {/if}
 
     <div class="lower">
+      <!-- one tile per service and job: it opens the service, and its line says how it is. The button at its end (and a
+           long press) opens the details; what has nothing to open opens its details at once -->
       <section data-v="services" class="card sec services" aria-labelledby="h-services">
-        <div class="sec-head">
+        <div class="thead">
           <h2 id="h-services">Services</h2>
-          <div class="seg" role="group" aria-label="Show services as">
-            <button aria-pressed={mode === 'launch'} onclick={() => setMode('launch')}>Launch</button>
-            <button aria-pressed={mode === 'status'} onclick={() => setMode('status')}>Status</button>
-          </div>
+          {#if nBad}
+            <div class="chips" role="group" aria-label="Show">
+              <button class="chip" aria-pressed={only === 'all'} onclick={() => (only = 'all')}>All {allServices.length}</button>
+              <button class="chip" aria-pressed={only === 'problems'} onclick={() => (only = 'problems')}><span class="dot lv-warn" aria-hidden="true"></span>Problems {nBad}</button>
+            </div>
+          {/if}
         </div>
+        {#each groups as g (g.name)}
+          <div class="sgroup">
+            <h3>{g.name}</h3>
+            <ul class="tiles">
+              {#each g.services as t (t.id)}
+                {@const bad = isProblem(t.level)}
+                <li class="tile lv-{t.level}" class:alert={bad} class:flash={flash.has(t.id)}>
+                  {#snippet inner()}
+                    <span class="ic"><Icon src={t.icon} dark={t.iconDark} name={t.name} size={24} /></span>
+                    <span class="tx"><span class="t">{t.name}</span><span class="d" class:hl={isProblem(t.lineLevel ?? '')}>{t.line || t.status}</span></span>
+                  {/snippet}
+                  {#if t.href}
+                    <a class="tmain" href={t.href} target={target} rel="noopener" onclick={() => opened(t.id)} use:longpress={() => details(t.id)}>{@render inner()}</a>
+                  {:else}
+                    <button class="tmain" onclick={() => details(t.id)}>{@render inner()}</button>
+                  {/if}
+                  <button class="inf" onclick={() => details(t.id)} aria-label="Details of {t.name}{bad ? `, ${t.status}` : ''}" title="Details">
+                    {#if bad}<span class="dot lv-{t.level}" aria-hidden="true"></span>
+                    {:else}<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 16v-4M12 8h.01" /></svg>{/if}
+                  </button>
+                </li>
+              {/each}
+            </ul>
+          </div>
+        {:else}
+          <p class="muted">No services in <code>services.yaml</code> yet.</p>
+        {/each}
+      </section>
 
-        {#if mode === 'launch'}
-          <div class="launch">
-            {#each launch as g (g.name)}
+      <div class="side">
+        <section class="card sec activity" data-v="home" aria-labelledby="h-activity">
+          <div class="thead"><h2 id="h-activity">Activity</h2>{#if happened.length > FEED}<button class="link-btn" onclick={() => show({ kind: 'activity' })}>Show all</button>{:else}<span class="muted small">Last 24 hours</span>{/if}</div>
+          {#if happened.length}
+            <ul class="evs">{#each happened.slice(0, FEED) as a (a.ts + a.title)}{@render event(a, { tap: true })}{/each}</ul>
+          {:else}
+            <p class="muted small">No changes in the last 24 hours.</p>
+          {/if}
+          {#if notes.length}
+            <!-- pending updates and other notes: one row, opened on request, so they don't crowd out what happened -->
+            <details class="notes">
+              <summary><span class="ev-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={ICONS.info} /></svg></span><span class="t">{notes.length} note{notes.length === 1 ? '' : 's'}</span><span class="muted small">updates and the like</span><svg class="nchev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg></summary>
+              <ul class="evs">{#each notes as a (a.ts + a.title)}{@render event(a, { tap: true })}{/each}</ul>
+            </details>
+          {/if}
+        </section>
+
+        {#if snap.bookmarks.length}
+          <!-- a compact card: each link its icon beside its name, groups with their label -->
+          <section class="card sec links" data-v="home" aria-labelledby="h-links">
+            <h2 id="h-links">Links</h2>
+            {#each linkGroups as g (g.name)}
               <div class="lgroup">
-                <h3>{g.name}</h3>
-                <div class="apps">
-                  {#each g.services as t (t.id)}
-                    <a class="app lift" class:flash={flash.has(t.id)} href={t.href} target={target} rel="noopener" onclick={() => opened(t.id)} aria-label="{t.name}{isProblem(t.level) ? `, ${t.status}` : ''}">
-                      <span class="ic lv-{t.level}"><Icon src={t.icon} dark={t.iconDark} name={t.name} size={24} />{#if isProblem(t.level)}<span class="pmark" aria-hidden="true"></span>{/if}</span>
-                      <span class="an" class:one={!/\s/.test(t.name)}>{t.name}</span>
+                {#if g.name && linkGroups.length > 1}<h3>{g.name}</h3>{/if}
+                <div class="chipsrow">
+                  {#each g.links as b (b.href + b.name)}
+                    <a class="lnk" href={b.href} target={target} rel="noopener">
+                      <span class="ic"><Icon src={b.icon} dark={b.iconDark} name={b.name} size={20} /></span>{b.name}
                     </a>
                   {/each}
                 </div>
               </div>
-            {:else}
-              <p class="muted">No service has a link (<code>href</code>) yet.</p>
             {/each}
-          </div>
-        {:else}
-          <!-- the density view: every service and job, with its state, status line and 24 h strip; a row opens its sheet -->
-          <div class="fleet">
-            <span class="muted small">All services, last 24 h · {pctTxt(snap.fleetAvail)} uptime</span>
-            <Beats beats={snap.fleet} end={snap.generatedAt} label="Availability of all services over the last 24 hours" />
-          </div>
-          {#each snap.groups as g (g.name)}
-            <div class="sgroup">
-              <h3>{g.name} <span class="num muted small">{g.summary}</span></h3>
-              <ul class="srows">
-                {#each g.services as t (t.id)}
-                  <li>
-                    <button class="srow lv-{t.level}" class:flash={flash.has(t.id)} onclick={() => show({ kind: 'service', id: t.id })}>
-                      <span class="ic"><Icon src={t.icon} dark={t.iconDark} name={t.name} size={22} /></span>
-                      <span class="txt"><span class="t">{t.name}</span><span class="d" class:hl={isProblem(t.lineLevel ?? '')}>{t.line}</span></span>
-                      {#if t.beats}<span class="sbeats" aria-hidden="true"><Beats beats={t.beats} end={snap.generatedAt} label="" /></span>{/if}
-                      <span class="num small muted up">{pctTxt(t.uptime24, 1)}</span>
-                      <span class="dot lv-{t.level}" title={t.status}></span>
-                    </button>
-                  </li>
-                {/each}
-              </ul>
-            </div>
-          {/each}
+          </section>
         {/if}
-      </section>
-
-      <section class="card sec activity" data-v="home" aria-labelledby="h-activity">
-        <div class="sec-head"><h2 id="h-activity">Activity</h2>{#if snap.feed.length > 5}<button class="link-btn" onclick={() => show({ kind: 'activity' })}>Show all</button>{/if}</div>
-        {#if snap.feed.length}
-          <ul class="evs">{#each snap.feed.slice(0, 5) as a (a.ts + a.title)}{@render event(a, { tap: true })}{/each}</ul>
-        {:else}
-          <p class="muted small">No changes in the last 24 hours.</p>
-        {/if}
-      </section>
+      </div>
     </div>
-
-    {#if snap.bookmarks.length}
-      <!-- a compact row: each link its icon beside its name, groups with their label -->
-      <section class="card sec links" data-v="home" aria-labelledby="h-links">
-        <div class="sec-head"><h2 id="h-links">Links</h2></div>
-        <div class="launch">
-          {#each linkGroups as g (g.name)}
-            <div class="lgroup">
-              {#if g.name && linkGroups.length > 1}<h3>{g.name}</h3>{/if}
-              <div class="apps">
-                {#each g.links as b (b.href + b.name)}
-                  <a class="app lift" href={b.href} target={target} rel="noopener">
-                    <span class="ic"><Icon src={b.icon} dark={b.iconDark} name={b.name} size={24} /></span>
-                    <span class="an" class:one={!/\s/.test(b.name)}>{b.name}</span>
-                  </a>
-                {/each}
-              </div>
-            </div>
-          {/each}
-        </div>
-      </section>
-    {/if}
 
     <footer class="foot" data-v="home">
       <span class="muted small ver">
@@ -501,7 +546,42 @@
     </footer>
   </div>
 
-  <Sheet open={sheetOpen} depth={stack.length} title={sheetTitle} sub={sheetSub} {backTo} onback={back} onclose={closeSheets}>
+  <!-- the Backups tab of the Infrastructure sheet: here, since its rows open service sheets -->
+  {#snippet backupsTab()}
+    {#if snap}
+      {#if snap.backups.oldestAge != null}
+        <div class="facts">
+          <div class="fact"><span class="muted k">Oldest backup</span><span class="fv">{ago(now - snap.backups.oldestAge, now)}</span>{#if snap.backups.oldestName}<span class="muted small">{snap.backups.oldestName}</span>{/if}</div>
+          <div class="fact lv-{snap.backups.level}"><span class="muted k">Overdue</span><span class="fv" class:hl={!!snap.backups.overdue}>{snap.backups.overdue}</span></div>
+        </div>
+      {/if}
+      {#if snap.backups.rows.length}
+        <ul class="jobs">
+          {#each snap.backups.rows as r (r.id + r.title)}
+            <li>
+              <button class="job" onclick={() => details(r.id)}>
+                <span class="txt"><span class="t">{r.title}</span><span class="d muted">{r.detail} · last run {since(r.last)}</span></span>
+                <span class="jr"><span class="state-w lv-{r.level}"><span class="dot lv-{r.level}" aria-hidden="true"></span>{r.state}</span><span class="muted small">{r.due != null ? `next ${until(r.due, now)}` : r.source}</span></span>
+              </button>
+            </li>
+          {/each}
+        </ul>
+      {/if}
+      <div class="sh-block">
+        <div class="sh-row"><span class="st">Recent</span><span class="muted small">Last 7 days</span></div>
+        {#if backupEvents.length}
+          <ul class="evs" id="backup-recent">{#each recentAll ? backupEvents : backupEvents.slice(0, RECENT) as a (a.ts + a.title)}{@render event(a)}{/each}</ul>
+          {#if backupEvents.length > RECENT}
+            <button class="link-btn" aria-expanded={recentAll} aria-controls="backup-recent" onclick={() => (recentAll = !recentAll)}>{recentAll ? 'Show fewer' : `Show all ${backupEvents.length}`}</button>
+          {/if}
+        {:else}
+          <p class="muted small">No backup events in the last 7 days.</p>
+        {/if}
+      </div>
+    {/if}
+  {/snippet}
+
+  <Sheet open={sheetOpen} depth={stack.length} title={sheetTitle} sub={sheetSub} {backTo} tall={sheet?.kind === 'infra'} onback={back} onclose={closeSheets}>
     {#if sheet?.kind === 'service' && sheetTile}
       {@const t = sheetTile}
       {@const j = sheetJob}
@@ -546,37 +626,7 @@
         {/if}
       </div>
     {:else if sheet?.kind === 'infra'}
-      <Infrastructure panels={snap.infrastructure} host={snap.host} storage={snap.storage} drives={snap.drives} network={snap.network} {target} now={snap.generatedAt} initial={sheet.tab} />
-    {:else if sheet?.kind === 'backups'}
-      {#if snap.backups.oldestAge != null}
-        <div class="facts">
-          <div class="fact"><span class="muted k">Oldest backup</span><span class="fv">{ago(now - snap.backups.oldestAge, now)}</span>{#if snap.backups.oldestName}<span class="muted small">{snap.backups.oldestName}</span>{/if}</div>
-          <div class="fact lv-{snap.backups.level}"><span class="muted k">Overdue</span><span class="fv" class:hl={!!snap.backups.overdue}>{snap.backups.overdue}</span></div>
-        </div>
-      {/if}
-      {#if snap.backups.rows.length}
-        <ul class="jobs">
-          {#each snap.backups.rows as r (r.id + r.title)}
-            <li>
-              <button class="job" onclick={() => show({ kind: 'service', id: r.id })}>
-                <span class="txt"><span class="t">{r.title}</span><span class="d muted">{r.detail} · last run {since(r.last)}</span></span>
-                <span class="jr"><span class="state-w lv-{r.level}"><span class="dot lv-{r.level}" aria-hidden="true"></span>{r.state}</span><span class="muted small">{r.due != null ? `next ${until(r.due, now)}` : r.source}</span></span>
-              </button>
-            </li>
-          {/each}
-        </ul>
-      {/if}
-      <div class="sh-block">
-        <div class="sh-row"><span class="st">Recent</span><span class="muted small">Last 7 days</span></div>
-        {#if backupEvents.length}
-          <ul class="evs" id="backup-recent">{#each recentAll ? backupEvents : backupEvents.slice(0, RECENT) as a (a.ts + a.title)}{@render event(a)}{/each}</ul>
-          {#if backupEvents.length > RECENT}
-            <button class="link-btn" aria-expanded={recentAll} aria-controls="backup-recent" onclick={() => (recentAll = !recentAll)}>{recentAll ? 'Show fewer' : `Show all ${backupEvents.length}`}</button>
-          {/if}
-        {:else}
-          <p class="muted small">No backup events in the last 7 days.</p>
-        {/if}
-      </div>
+      <Infrastructure panels={snap.infrastructure} host={snap.host} storage={snap.storage} drives={snap.drives} network={snap.network} {target} now={snap.generatedAt} initial={sheet.tab} backups={backupsTab} />
     {:else if sheet?.kind === 'activity'}
       <div class="sh-block">
         <div class="sh-row"><span class="st">All services</span><span class="muted small">{pctTxt(snap.fleetAvail)} uptime</span></div>
@@ -593,132 +643,126 @@
 
 <style>
   .boot { min-height: 100vh; display: grid; place-items: center; }
-  .page { max-width: 1240px; margin: 0 auto; padding: max(20px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 56px max(16px, env(safe-area-inset-left)); display: flex; flex-direction: column; gap: 20px; }
+  .page { max-width: 1240px; margin: 0 auto; padding: max(20px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 56px max(16px, env(safe-area-inset-left)); display: flex; flex-direction: column; gap: 16px; }
   .small { font-size: 13px; }
-  h2 { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
+  h2 { font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
   h2.k, .k { font-size: 13px; font-weight: 500; color: var(--muted); letter-spacing: 0; }
-  h3 { font-size: 13px; font-weight: 600; color: var(--muted); }
-  .sec-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
+  h3 { font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; }
+  .thead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; }
   .txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
   .txt .t { font-size: 15px; font-weight: 500; }
   .txt .d { font-size: 13.5px; overflow-wrap: anywhere; }
   .hl { color: color-mix(in srgb, var(--lv) 85%, var(--text)); }
+  /* a filter: which of a list shows */
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { display: inline-flex; align-items: center; gap: 7px; min-height: 30px; padding: 0 11px; border: 0; border-radius: 999px; background: var(--surface-2); color: var(--muted); font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; transition: background-color 0.15s, color 0.15s; }
+  .chip:hover { color: var(--text); }
+  .chip[aria-pressed='true'] { background: var(--text); color: var(--bg); }
+  .chip[aria-pressed='true'] .dot { background: currentColor; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 42px; padding: 0 16px; border: 0; border-radius: 12px; background: var(--surface-2); color: var(--text); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+  .btn:hover { background: var(--surface-3); }
+  .btn.primary, .primary { background: var(--text); color: var(--bg); }
+  .primary.wide { display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%; box-sizing: border-box; min-height: 46px; border-radius: 12px; font-size: 14px; font-weight: 600; }
 
-  /* hero: the sentence, the way to what needs attention, the most used services */
-  .hero { padding: 28px 30px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 22px 32px; align-items: center; }
-  /* something needs attention: a faint tint of its colour and a quiet edge; the mark and the shapes carry the level */
-  .hero.alert { background: color-mix(in srgb, var(--lv) 5%, var(--surface)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--lv) 22%, transparent), var(--shadow); }
-  .state { display: flex; align-items: center; gap: 18px; min-width: 0; }
-  .hero:has(.also) .state, .hero:has(.also) .also { grid-column: 1 / -1; }
-  .mark { width: 54px; height: 54px; border-radius: 50%; background: var(--lv-soft); color: var(--lv); display: flex; align-items: center; justify-content: center; flex: none; }
-  .mark svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
-  .hero.lv-none .mark { color: var(--muted); }
+  /* top: the sentence and what to do, and beside it what needs attention (or, when calm, the most used services) */
+  .top { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); }
+  .top.calm { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+  .verdict { padding: 28px 30px; display: flex; flex-direction: column; justify-content: center; gap: 18px; min-width: 0; }
+  .vrow { display: flex; align-items: flex-start; gap: 16px; min-width: 0; }
+  .mark { width: 46px; height: 46px; margin-top: 1px; border-radius: 50%; background: var(--lv-soft); color: var(--lv); display: flex; align-items: center; justify-content: center; flex: none; }
+  .mark svg { width: 23px; height: 23px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+  .top.lv-none .mark { color: var(--muted); }
   .say { display: flex; flex-direction: column; gap: 6px; min-width: 0; flex: 1; }
   .tag { font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
-  h1 { font-size: clamp(28px, 3.4vw, 38px); line-height: 1.1; font-weight: 700; letter-spacing: -0.025em; text-wrap: balance; }
-  .say p { margin: 0; font-size: 15px; }
-  .primary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 18px; border-radius: 12px; background: var(--text); color: var(--bg); font-size: 14px; font-weight: 600; flex: none; }
-  .primary.wide { width: 100%; box-sizing: border-box; min-height: 46px; }
-  .also { display: flex; flex-direction: column; gap: 8px; }
-  .prob.extra { display: none; }
-  .review { width: 100%; min-height: 46px; border: 0; border-radius: 12px; background: var(--surface-2); color: var(--text); font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; }
-  .quiet { margin: 0; font-size: 14px; }
+  h1 { font-size: clamp(26px, 2.9vw, 34px); line-height: 1.1; font-weight: 700; letter-spacing: -0.025em; text-wrap: balance; }
+  .say p { margin: 0; font-size: 14.5px; }
+  .acts { display: flex; flex-wrap: wrap; gap: 8px; }
+  .triage { padding: 20px 22px 14px; border-left: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  .rows { list-style: none; margin: 0; padding: 0; }
+  .rows li + li { border-top: 1px solid var(--line); }
+  .rows li.extra { display: none; }
+  .rows li.flash { border-radius: 10px; }
+  /* a problem: its shape, what it is in full, how long it has been raised, and the detail under it */
+  .arow { width: 100%; box-sizing: border-box; display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; align-items: baseline; gap: 2px 10px; padding: 10px 6px; border: 0; border-radius: 10px; background: none; color: var(--text); font: inherit; text-align: left; }
+  .arow.tap { cursor: pointer; transition: background-color 0.15s; }
+  .arow.tap:hover { background: var(--surface-2); }
+  .arow.tap:focus-visible { outline: 2px solid var(--acc); outline-offset: -2px; }
+  .arow .dot { align-self: center; justify-self: center; }
+  .arow .t { font-size: 14.5px; font-weight: 500; overflow-wrap: anywhere; }
+  .arow .w { font-size: 12.5px; color: var(--muted); }
+  .arow .d { grid-column: 2; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+  .quiet { margin: 0; padding: 0 20px 20px; font-size: 14px; }
+  .most { display: flex; flex-direction: column; gap: 6px; padding: 20px 26px 20px 8px; }
+  .most .k { padding-left: 10px; }
   @media not all and (max-width: 760px) { .most.need { display: none; } }
-  .probs { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 10px; }
-  .prob { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 6px; border-radius: 16px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); min-width: 0; }
-  .pbody { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 6px; border: 0; border-radius: 12px; background: none; color: var(--text); font: inherit; text-align: left; }
-  button.pbody { cursor: pointer; }
-  button.pbody:hover .t { text-decoration: underline; text-underline-offset: 3px; }
-  .prob .t, .prob .d { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .ev-ico { width: 32px; height: 32px; border-radius: 10px; display: flex; align-items: center; justify-content: center; background: var(--lv-soft); color: var(--lv); flex: none; }
-  .prob .ev-ico { background: var(--lv-soft); }
-  .ghost { flex: none; min-height: 36px; padding: 0 12px; border: 0; border-radius: 10px; background: var(--surface-2); color: var(--text); font: inherit; font-size: 13px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
-  .most { display: flex; flex-direction: column; gap: 6px; }
   .apps { display: flex; flex-wrap: wrap; gap: 4px; }
-  .app { width: 96px; display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 10px 2px; border-radius: 14px; text-align: center; font-size: 13px; }
+  .app { width: 92px; display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 10px 2px; border-radius: 14px; text-align: center; font-size: 13px; }
   .app:hover { background: var(--surface-2); }
   /* a name wraps at its spaces onto two lines at most; a single word too long for the tile ends in an ellipsis, never split */
   .an { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: normal; word-break: normal; line-height: 1.25; max-width: 100%; }
   .an.one { display: block; white-space: nowrap; text-overflow: ellipsis; }
-  .ic { position: relative; width: 40px; height: 40px; border-radius: 12px; background: var(--surface-2); display: flex; align-items: center; justify-content: center; flex: none; }
+  .ic { position: relative; width: 38px; height: 38px; border-radius: 11px; background: var(--surface-2); display: flex; align-items: center; justify-content: center; flex: none; }
   .ic.big { width: 50px; height: 50px; border-radius: 15px; }
-  /* a service with a problem: one small marker, its colour from the level; the launcher shows nothing else */
+  /* a most used service with a problem: one small marker, its colour from the level */
   .pmark { position: absolute; top: -3px; right: -3px; width: 12px; height: 12px; border-radius: 50%; background: var(--lv); box-shadow: 0 0 0 2px var(--surface); }
 
-  /* infrastructure and backups: one card, a row per area: its icon, then label, figure and context stacked; a column
-     each when the card is wide, two tiles a row on phones */
-  .infra { container: infra-sum / inline-size; padding: 6px; }
-  .ihead { display: flex; align-items: baseline; justify-content: space-between; gap: 8px 16px; padding: 14px 16px 4px; }
-  .ihead .hl { color: var(--text); font-weight: 500; }
-  .isay { display: none; }
-  .irows { display: flex; flex-direction: column; gap: 2px; }
-  .irow {
-    display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; grid-template-areas: 'ic k chev' 'ic fig chev' 'ic s chev'; align-items: center; gap: 1px 14px;
-    padding: 12px 12px 12px 12px; border: 0; border-radius: 14px; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; min-width: 0;
-    position: relative; transition: background-color 0.15s;
-  }
-  .irow:hover { background: var(--surface-2); }
-  .irow:focus-visible { outline: 2px solid var(--acc); outline-offset: -2px; }
-  /* a rule between rows, from the text on, left out next to a tinted or hovered one */
-  .irow + .irow::before { content: ''; position: absolute; left: 62px; right: 12px; top: 0; border-top: 1px solid var(--line); }
-  .irow.alert::before, .irow.alert + .irow::before, .irow:hover::before, .irow:hover + .irow::before { display: none; }
-  .irow.alert { background: var(--lv-soft); }
-  .iico { grid-area: ic; align-self: start; width: 36px; height: 36px; border-radius: 11px; display: flex; align-items: center; justify-content: center; background: var(--surface-2); color: var(--muted); }
-  .irow.alert .iico { background: color-mix(in srgb, var(--lv) 16%, transparent); color: var(--lv); }
-  .irow .k { grid-area: k; display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 13px; color: var(--muted); }
-  .irow .kw::before { content: '·'; margin-right: 6px; }
-  .irow .k .dot { margin-left: 2px; }
-  .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-  .fig { grid-area: fig; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 12px; min-width: 0; }
-  .fig .v, .fig .isv { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; white-space: nowrap; font-variant-numeric: tabular-nums; }
-  .fig .u { margin-left: -7px; font-size: 13px; color: var(--muted); white-space: nowrap; }
+  /* infrastructure and backups: one strip, a cell per area: label, figure, a small picture of it, context */
+  .infra { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); padding: 6px; }
+  .cell { position: relative; display: flex; flex-direction: column; gap: 4px; min-width: 0; padding: 14px 16px; border: 0; border-radius: 14px; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; transition: background-color 0.15s; }
+  .cell:hover { background: var(--surface-2); }
+  .cell:focus-visible { outline: 2px solid var(--acc); outline-offset: -2px; }
+  /* a rule between cells, left out next to a hovered one */
+  .cell + .cell::before { content: ''; position: absolute; left: 0; top: 14px; bottom: 14px; border-left: 1px solid var(--line); }
+  .cell:hover::before, .cell:hover + .cell::before { display: none; }
+  /* a cell of several figures (System: CPU, RAM, temperature) gets the room to keep them on one line */
+  .cell:has(.ist + .ist + .ist) { grid-column: span 2; }
+  .clab { display: flex; align-items: center; gap: 7px; min-width: 0; font-size: 13px; color: var(--muted); }
+  .kw::before { content: '·'; margin-right: 7px; }
+  .fig { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 12px; min-width: 0; }
+  .fig .v, .fig .isv { font-size: 20px; font-weight: 600; letter-spacing: -0.015em; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .fig .u { margin-left: -6px; font-size: 13px; color: var(--muted); white-space: nowrap; }
   .ist { display: inline-flex; align-items: baseline; gap: 4px; white-space: nowrap; }
   .isk { font-size: 13px; color: var(--muted); }
-  .isv.hl { color: var(--lv); }
-  .irow .s { grid-area: s; font-size: 13px; color: var(--muted); min-width: 0; overflow-wrap: anywhere; }
-  .irow.alert .k, .irow.alert .fig .v { color: color-mix(in srgb, var(--lv) 80%, var(--text)); }
-  .irow.alert .s, .irow.alert .u { color: color-mix(in srgb, var(--lv) 60%, var(--text)); }
-  .chev { grid-area: chev; color: var(--muted); }
-  /* wide: the areas side by side, a vertical rule between them; the icon beside the label, the rest below */
-  @container infra-sum (min-width: 860px) {
-    .irows { flex-direction: row; }
-    .irow { flex: 1 1 0; grid-template-columns: 28px minmax(0, 1fr); grid-template-areas: 'ic k' 'fig fig' 's s'; align-content: start; gap: 6px 10px; padding: 14px 16px; }
-    .irow + .irow::before { left: 0; right: auto; top: 14px; bottom: 14px; border-top: 0; border-left: 1px solid var(--line); }
-    .iico { align-self: center; width: 28px; height: 28px; border-radius: 9px; }
-    .iico :global(svg) { width: 15px; height: 15px; }
-    .fig .v, .fig .isv { font-size: 20px; }
-    .chev { display: none; }
-    /* a row of several figures (System: CPU, RAM, temperature) gets the room to keep them on one line */
-    .irow:has(.ist + .ist + .ist) { flex-grow: 1.5; }
-    .irow:has(.ist) .fig { gap: 0 10px; }
-  }
-  /* narrow desktop: a size smaller, so they still fit */
-  @container infra-sum (min-width: 860px) and (max-width: 1180px) {
-    .irow:has(.ist + .ist + .ist) .fig .isv { font-size: 17px; }
-  }
+  .isv.hl, .cell.alert .fig .v { color: var(--lv); }
+  .viz { display: flex; align-items: flex-end; height: 28px; --fill: var(--acc); }
+  .cell.alert .viz { --fill: var(--lv); }
+  .meter { width: 100%; height: 6px; margin-bottom: 5px; border-radius: 3px; background: var(--track); overflow: hidden; }
+  .meter span { display: block; height: 100%; border-radius: 3px; background: var(--fill); }
+  /* a drive each: one that needs a look is outlined in its colour */
+  .pips { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 3px; }
+  .pips span { width: 22px; height: 14px; border-radius: 4px; background: var(--surface-3); }
+  .pips span.bad { box-shadow: inset 0 0 0 1.5px var(--lv); background: var(--lv-soft); }
+  /* the last seven days of backups, today on the right: a short bar where something was late or failed, a stub where
+     nothing was recorded */
+  .days { display: flex; align-items: flex-end; gap: 3px; width: 100%; margin-bottom: 3px; }
+  .days span { flex: 1; height: 14px; border-radius: 3px; background: var(--lv); opacity: 0.85; }
+  .days span.bad { height: 7px; }
+  .days span.none { height: 3px; background: var(--surface-3); opacity: 1; }
+  .cell .s { font-size: 12.5px; color: var(--muted); min-width: 0; overflow-wrap: anywhere; }
 
-  /* services and activity */
-  .lower { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 20px; align-items: start; }
-  /* beside a long Status list, Activity stays in view */
-  .activity { position: sticky; top: 16px; }
-  .sec { padding: 24px 26px; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
-  .seg { display: inline-flex; padding: 3px; border-radius: 10px; background: var(--surface-2); }
-  .seg button { min-height: 32px; padding: 0 12px; border: 0; border-radius: 8px; background: none; color: var(--muted); font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; }
-  .seg button[aria-pressed='true'] { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
-  .launch { display: flex; flex-wrap: wrap; gap: 14px 26px; }
-  .lgroup { display: flex; flex-direction: column; gap: 2px; }
-  .lgroup h3 { padding-left: 10px; }
-  .fleet { display: flex; flex-direction: column; gap: 6px; --beats-h: 12px; }
+  /* services, and beside them activity and links */
+  .lower { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+  .side { display: flex; flex-direction: column; gap: 16px; min-width: 0; position: sticky; top: 16px; }
+  .sec { padding: 20px 22px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
   .sgroup { display: flex; flex-direction: column; gap: 4px; }
-  .sgroup h3 { display: flex; gap: 8px; align-items: baseline; padding-top: 4px; }
-  .srows { list-style: none; margin: 0; padding: 0; }
-  .srow { width: 100%; display: flex; align-items: center; gap: 12px; padding: 11px 8px; border: 0; border-radius: 12px; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
-  .srow:hover { background: var(--surface-2); }
-  .srow .d { color: var(--muted); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; line-clamp: 1; overflow: hidden; }
-  .srow .d.hl { color: color-mix(in srgb, var(--lv) 85%, var(--text)); }
-  /* tall enough that a healthy day reads as a ribbon, not a rule */
-  .sbeats { width: 150px; flex: none; --beats-h: 12px; }
-  .up { width: 5.5ch; text-align: right; flex: none; }
+  .sgroup h3 { padding: 6px 8px 2px; }
+  .tiles { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 2px 8px; }
+  /* a tile: the service to open, with its line, and at its end the way to its details */
+  .tile { display: flex; align-items: center; min-width: 0; border-radius: 12px; transition: background-color 0.15s; }
+  .tile:hover, .tile:focus-within { background: var(--surface-2); }
+  .tmain { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 9px 2px 9px 8px; border: 0; border-radius: 12px; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; -webkit-touch-callout: none; user-select: none; }
+  .tmain:focus-visible { outline: 2px solid var(--acc); outline-offset: -2px; }
+  .tx { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+  .tx .t { font-size: 14.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tx .d { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tx .d.hl { color: color-mix(in srgb, var(--lv) 85%, var(--text)); }
+  .inf { flex: none; width: 36px; height: 36px; margin-right: 4px; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 10px; background: none; color: var(--muted); cursor: pointer; }
+  .inf:hover { background: var(--surface-3); color: var(--text); }
+  /* the details button of a healthy tile shows when the tile is pointed at or focused; a problem's shape always */
+  .inf svg { opacity: 0; transition: opacity 0.15s; }
+  .tile:hover .inf svg, .inf:focus-visible svg { opacity: 1; }
+  @media (hover: none) { .inf svg { opacity: 1; } }
+
   .evs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
   .ev { padding: 12px 0; border-top: 1px solid var(--line); }
   .ev:first-child { border-top: 0; }
@@ -728,6 +772,7 @@
   .ev-row.tap { margin: 0 -8px; width: calc(100% + 16px); padding: 8px; border: 0; border-radius: 12px; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; transition: background-color 0.15s; }
   .ev-row.tap:hover { background: var(--surface-2); }
   .ev-row.tap:focus-visible { outline: 2px solid var(--acc); outline-offset: -2px; }
+  .ev-ico { width: 32px; height: 32px; border-radius: 10px; display: flex; align-items: center; justify-content: center; background: var(--lv-soft); color: var(--lv); flex: none; }
   .ev-chev { flex: none; margin-left: -4px; color: var(--muted); }
   .ev-items { list-style: none; margin: 8px 0 0 44px; padding: 0; display: flex; flex-direction: column; gap: 3px; font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; }
   .ev-more { margin-left: 44px; }
@@ -737,16 +782,23 @@
   .ev-more .ev-items { margin-left: 0; }
   .ev.lv-ok .ev-ico { background: var(--surface-2); color: var(--muted); }
   .when { flex: none; }
-  .link-btn { border: 0; background: none; padding: 6px 0; color: var(--acc); font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; align-self: flex-start; }
+  .link-btn { border: 0; background: none; padding: 6px; color: var(--acc); font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; align-self: flex-start; }
+  /* the notes, folded: one row that opens them */
+  .notes { border-top: 1px solid var(--line); margin-top: -6px; }
+  .notes summary { display: flex; align-items: center; gap: 12px; margin: 4px -8px 0; padding: 8px; border-radius: 12px; list-style: none; cursor: pointer; --lv: var(--acc); --lv-soft: var(--surface-2); }
+  .notes summary::-webkit-details-marker { display: none; }
+  .notes summary:hover { background: var(--surface-2); }
+  .notes summary .t { font-size: 15px; font-weight: 500; }
+  .notes summary .small { flex: 1; }
+  .nchev { flex: none; color: var(--muted); transition: transform 0.15s; }
+  .notes[open] .nchev { transform: rotate(180deg); }
 
-  /* links: one compact row, each link its icon beside its name */
-  .links { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 10px 24px; padding-block: 14px; }
-  .links .launch { align-items: center; gap: 8px 24px; }
-  .links .lgroup { flex-direction: row; align-items: center; gap: 8px; }
-  .links .lgroup h3 { padding-left: 0; }
-  .links .app { width: auto; flex-direction: row; gap: 10px; padding: 6px 12px 6px 6px; font-size: 14px; text-align: left; }
-  .links .ic { width: 32px; height: 32px; border-radius: 10px; }
-  .links .an { display: block; white-space: nowrap; }
+  /* links: each link its icon beside its name */
+  .lgroup { display: flex; flex-direction: column; gap: 4px; }
+  .chipsrow { display: flex; flex-wrap: wrap; gap: 4px 6px; margin: 0 -6px; }
+  .lnk { display: inline-flex; align-items: center; gap: 9px; padding: 6px 12px 6px 6px; border-radius: 12px; font-size: 14px; }
+  .lnk:hover { background: var(--surface-2); }
+  .lnk .ic { width: 30px; height: 30px; border-radius: 9px; }
 
   /* footer */
   .foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 12px 24px; padding-top: 18px; border-top: 1px solid var(--line); }
@@ -769,6 +821,7 @@
   .kv dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
   .jobs { list-style: none; margin: 0; padding: 0; }
   .job { width: 100%; display: flex; align-items: center; gap: 12px; padding: 12px 0; border: 0; border-top: 1px solid var(--line); background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+  .jobs li:first-child .job { border-top: 0; }
   .job:hover .t { color: var(--acc); }
   .jr { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex: none; }
   .jr .state-w { font-size: 13px; font-weight: 500; }
@@ -784,71 +837,59 @@
   .banner .t { font-weight: 600; }
   .banner .d { font-size: 13px; color: var(--muted); }
   .banner button { min-height: 36px; padding: 0 14px; border: 0; border-radius: 10px; background: var(--surface); box-shadow: var(--shadow); font-weight: 500; cursor: pointer; }
-  .page:has(.banner) :is(.hero, .infra, .lower) { filter: grayscale(0.7); opacity: 0.8; transition: filter 0.3s, opacity 0.3s; }
+  .page:has(.banner) :is(.top, .infra, .lower) { filter: grayscale(0.7); opacity: 0.8; transition: filter 0.3s, opacity 0.3s; }
   @keyframes drop { from { opacity: 0; transform: translateY(-6px); } }
   /* a status that just changed: one soft ring in its new colour */
   .flash { animation: flash 2.4s ease-out; }
   @keyframes flash { 0%, 30% { box-shadow: 0 0 0 3px var(--lv), var(--shadow); } }
 
+  /* narrower: the list goes under the sentence, activity under the services; the strip wraps to three across */
   @media (max-width: 1000px) {
-    .hero { grid-template-columns: minmax(0, 1fr); }
+    .top, .top.calm { grid-template-columns: minmax(0, 1fr); }
+    .triage { border-left: 0; border-top: 1px solid var(--line); }
+    .most { padding: 0 22px 20px; }
     .lower { grid-template-columns: minmax(0, 1fr); }
-    .activity { position: static; }
-    .sbeats { width: 110px; }
+    .side { position: static; }
+    .infra { grid-auto-flow: row; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .cell:has(.ist + .ist + .ist) { grid-column: 1 / -1; }
+    .cell + .cell::before { display: none; }
   }
-  /* phones: the same order, tighter, above the tab bar */
+  /* phones: one view at a time, above the tab bar */
   @media (max-width: 760px) {
-    .page { gap: 14px; padding-bottom: calc(86px + env(safe-area-inset-bottom)); }
-    /* one view at a time: a section shows in the views its data-v names */
+    .page { gap: 12px; padding-bottom: calc(86px + env(safe-area-inset-bottom)); }
+    /* a section shows in the views its data-v names */
     .page[data-view='home'] [data-v]:not([data-v~='home']),
     .page[data-view='services'] [data-v]:not([data-v~='services']),
     .page[data-view='alerts'] [data-v]:not([data-v~='alerts']) { display: none !important; }
-    /* the Alerts view lists every problem */
-    .prob.extra { display: flex; }
-    .more { display: none; }
-    .hero { padding: 20px; border-radius: 22px; gap: 18px; }
-    /* phones: the mark sits beside the headline like a status icon; the detail and the action go full width below */
-    .state { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px 12px; }
-    .say { display: contents; }
-    .tag { grid-column: 1 / -1; order: -1; }
-    .say p, .state .primary { grid-column: 1 / -1; }
-    .mark { width: 36px; height: 36px; }
+    .top { border-radius: 22px; }
+    .verdict { padding: 20px; gap: 16px; }
+    .mark { width: 36px; height: 36px; margin-top: 0; }
     .mark svg { width: 19px; height: 19px; }
+    .vrow { gap: 12px; }
     h1 { font-size: 26px; }
     .say p { font-size: 14px; }
-    .primary { width: 100%; min-height: 48px; font-size: 15px; }
-    .probs { grid-template-columns: minmax(0, 1fr); }
-    .prob .t, .prob .d { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
-    .prob .ghost { min-height: 44px; padding: 0 12px; }
+    .acts { flex-direction: column; }
+    .btn { min-height: 46px; font-size: 15px; }
+    /* the Alerts view is the list, whole */
+    .triage { border-top: 0; padding: 16px 14px; }
+    .rows li.extra { display: block; }
+    .more { display: none; }
+    .arow { padding: 13px 6px; }
+    .chip { min-height: 36px; }
+    .most { padding: 0 12px 14px; }
     .apps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
     .app { width: auto; }
-    /* phones: one grid of four, in services.yaml order, without the group labels */
-    .launch { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
-    .lgroup, .lgroup .apps { display: contents; }
-    .lgroup h3 { display: none; }
-    .infra { border-radius: 22px; }
-    /* phones: collapsed. Each area is its icon and name in one row of cells (a problem's icon outlined in its colour,
-       its shape on the corner); the sentence below gives the figures. A tap opens the area's sheet */
-    .ihead { padding: 10px 10px 4px; }
-    .infra { padding: 6px 6px 14px; }
-    .irows { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 2px; padding-top: 4px; }
-    .irow { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px 0; text-align: center; }
-    .irow, .irow.alert, .irow:hover { background: none; }
-    .irow:active { background: var(--surface-2); }
-    .irow + .irow::before, .irow .fig, .irow .s, .irow .kw, .chev { display: none; }
-    .iico { align-self: center; width: 44px; height: 44px; border-radius: 14px; }
-    .irow.alert .iico { background: var(--lv-soft); box-shadow: inset 0 0 0 1.5px var(--lv); }
-    .irow .k { font-size: 12px; color: var(--text); }
-    .irow .k .dot { position: absolute; top: 5px; left: calc(50% + 17px); margin: 0; }
-    .isay { display: block; margin: 6px 10px 0; font-size: 14px; line-height: 1.45; color: var(--muted); }
-    .isay b { color: var(--text); font-weight: 600; }
-    .sec { padding: 18px; border-radius: 20px; }
-    .sbeats, .up { display: none; }
-    .seg button { min-height: 36px; }
+    .infra { border-radius: 22px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .cell { padding: 12px 14px; }
+    .fig .v, .fig .isv { font-size: 19px; }
+    /* an odd one left over takes the row */
+    .cell:last-child:nth-child(even) { grid-column: 1 / -1; }
+    .sec { padding: 16px 14px; border-radius: 20px; }
+    .tiles { grid-template-columns: minmax(0, 1fr); }
+    .tile { min-height: 56px; }
+    .tile:hover { background: none; }
+    .tile:active { background: var(--surface-2); }
+    .inf { width: 44px; height: 44px; margin: 0; }
     .banner button { min-height: 44px; min-width: 64px; }
-    /* links stay a wrapping row of chips, not the launcher's grid of four */
-    .links .launch, .links .lgroup .apps { display: flex; flex-wrap: wrap; gap: 6px; }
-    .links .lgroup { display: flex; }
-    .links .lgroup h3 { display: block; }
   }
 </style>

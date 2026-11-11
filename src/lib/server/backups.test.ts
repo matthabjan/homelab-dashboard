@@ -1,7 +1,7 @@
 // The Backups area through its interface: PBS results and jobs in; the sheet's figures and rows and the card's row out.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { backups } from './backups.ts';
+import { backups, days } from './backups.ts';
 import type { PbsSource } from './backups.ts';
 import type { Job, PbsBackups } from '$lib/types';
 
@@ -63,4 +63,18 @@ test('card: with nothing late the next job due, else the oldest backup; nothing 
   assert.deepEqual(backups([pbs('A', { oldestAge: 20 * H, oldestName: 'web' })], [], now).panel, { id: 'backups', label: 'Backups', value: 'All current', sub: 'oldest backup 20 h · web', level: 'none' });
   assert.equal(backups([pbs('A', { known: false })], [], now).panel, null, 'a PBS server that judged no group');
   assert.deepEqual(backups([pbs('A', { known: false })], [], now).sheet.rows, []);
+});
+
+test('days: a day each, oldest first; a job found late or a critical report makes the day critical, good news alone ok', () => {
+  const D = 24 * H;
+  const at = (daysAgo: number) => now - daysAgo * D + H;
+  const history = {
+    // day 0 (a week ago): checked, all on time; day 3: one check found a job late; day 6 (today): on time
+    checks: [{ b: 0, n: 48, fails: 0 }, { b: 3, n: 48, fails: 1 }, { b: 6, n: 700, fails: 0 }, { b: 9, n: 5, fails: 5 }],
+    // day 1: a warning beats the completed backup; day 2: a note is no record; day 6: completed
+    events: [{ ts: at(6), sev: 'ok' as const }, { ts: at(6), sev: 'warn' as const }, { ts: at(5), sev: 'info' as const }, { ts: at(1), sev: 'ok' as const }, { ts: now - 9 * D, sev: 'crit' as const }]
+  };
+  assert.deepEqual(days(history, now), ['ok', 'warn', 'none', 'crit', 'none', 'none', 'ok']);
+  assert.deepEqual(backups([], [], now).sheet.days, ['none', 'none', 'none', 'none', 'none', 'none', 'none'], 'no record without history');
+  assert.deepEqual(backups([pbs('A')], [], now, history).sheet.days[3], 'crit', 'the sheet carries them');
 });
