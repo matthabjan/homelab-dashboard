@@ -64,7 +64,12 @@ export interface PveRrdPoint {
 /** A pending package in /nodes/{node}/apt/update. */
 export interface PveAptUpdate {
   Package: string;
+  OldVersion?: string;
+  Version?: string;
 }
+
+/** "pve-manager 8.2.4 → 8.2.7", for the sheet's list under the updates note. */
+const aptLine = (u: PveAptUpdate) => [u.Package, u.OldVersion && u.Version ? `${u.OldVersion} → ${u.Version}` : u.Version].filter(Boolean).join(' ');
 
 /** A physical disk in /nodes/{node}/disks/list. */
 export interface PveDisk {
@@ -145,8 +150,9 @@ export async function collect(w: Widget, ctx: Context): Promise<WidgetResult> {
 
   const { storages, down, main, missing } = nodeStorages(res, node.node, ctx.settings.host);
 
-  let updates: number | null = null;
-  try { updates = (await ctx.getJson<PveResponse<PveAptUpdate[]>>(`${base}/nodes/${node.node}/apt/update`, opts)).data?.length ?? null; } catch { /* needs Sys.Modify, which PVEAuditor lacks */ }
+  let pending: PveAptUpdate[] | null = null;
+  try { pending = (await ctx.getJson<PveResponse<PveAptUpdate[]>>(`${base}/nodes/${node.node}/apt/update`, opts)).data ?? null; } catch { /* needs Sys.Modify, which PVEAuditor lacks */ }
+  const updates = pending?.length ?? null;
   // the host NIC: LAN traffic to and from the server (NAS, backups, apps). RRD points are bytes/s averages; the newest can still be empty
   let lan: NetworkReading | null = null;
   try {
@@ -168,7 +174,7 @@ export async function collect(w: Widget, ctx: Context): Promise<WidgetResult> {
 
   const alerts: Alert[] = [];
   if (node.status !== 'online') alerts.push({ sev: 'crit', key: 'node-offline', title: `Node ${node.node} is offline`, detail: 'Proxmox reports the node as ' + node.status });
-  if (updates) alerts.push({ sev: 'info', key: 'updates', title: `${updates} updates available on ${node.node}`, detail: 'apt packages pending' });
+  if (pending?.length) alerts.push({ sev: 'info', key: 'updates', title: `${pending.length} updates available on ${node.node}`, detail: 'apt packages pending', items: pending.map(aptLine).sort() });
   for (const s of down) alerts.push({ sev: 'warn', key: `storage-${s.storage}`, title: `${s.storage} is unavailable on ${node.node}`, detail: `Proxmox reports the storage as ${s.status ?? 'unknown'}` });
   if (missing) alerts.push({ sev: 'warn', key: 'host-storage', title: `host.storage "${missing}" not found on ${node.node}`, detail: 'The host gauge falls back to the guest-disk storage' });
 

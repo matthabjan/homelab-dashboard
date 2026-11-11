@@ -8,14 +8,14 @@ config/
 ├── services.yaml     # your services, in groups (gethomepage format)
 ├── bookmarks.yaml    # the Links card and the command palette
 ├── icons/            # your own service icons (optional)
-└── images/           # app icon, logo, favicon
+└── images/           # your own app icon, logo or favicon (optional)
 ```
 
 **Reloading.** Saving any `*.yaml` file reloads the config within a second, without a restart and keeping history. Files in `icons/` and `images/` are read on request (browsers cache them for up to 5 minutes).
 
 **Mistakes.** A file with a YAML syntax error or the wrong structure keeps its last version that loaded, and the dashboard raises `services.yaml has an error` with the line and reason (the full error is in the container log). A malformed group or entry is skipped and reported the same way; the rest of the file loads. Several problems in one file are one alert (`services.yaml has 3 problems`), listed on **Setup**. Fixing the file clears the alert on save.
 
-**Checking what loaded.** **Setup** (`/config`, from the sliders button in the header, the footer, the command palette or any config alert) shows whether your configuration is right, read-only. How the services are doing stays on the dashboard.
+**Checking what loaded.** **Setup** (`/config`, from the sliders button in the header, the command palette or any config alert) shows whether your configuration is right, read-only. How the services are doing stays on the dashboard.
 
 - **Summary:** problems in the files, how many services loaded (from `services.yaml` and from labels), how many widgets connect, how many settings you changed; each links to its section.
 - **Problems:** files with errors, skipped entries, secrets that aren't set (by name), heartbeats without a token, a `docker` widget on a socket path. Only shown when there are any.
@@ -35,7 +35,7 @@ Every key is optional. Anything you leave out keeps its default, and nested obje
 | Key | Default | Description |
 |---|---|---|
 | `title` | `Homelab` | Page title and the default name of the installed app. |
-| `theme` | `system` | Default theme for new visitors: `system`, `light` or `dark`. Each viewer can switch it (in the header on desktop, on Setup on phones), and the choice is remembered per device. |
+| `theme` | `system` | Default theme for new visitors: `system`, `light` or `dark`. Each viewer can switch it on Setup, under Settings, and the choice is remembered per device. |
 | `accent` | `#4F8DF7` | Accent colour as a hex value (`#rgb` to `#rrggbbaa`). An invalid value falls back to the default. |
 | `linkTarget` | `_blank` | Where service links open: `_blank` (a new tab) or `_self`. |
 | `tlsVerify` | `true` | Verify TLS certificates when calling widget APIs. You can override it per service. See [TLS for widget APIs](deployment.md#tls-for-widget-apis). |
@@ -57,10 +57,16 @@ Paths are relative to the config folder (served under `/assets/`), or full `http
 | `name` | `title` | Name of the installed app. |
 | `shortName` | `title` | Name under the icon on the home screen. |
 | `logo` | `images/android-chrome-192x192.png` | Logo in the header. |
+| `logoDark` | none | Logo in the header in the dark theme. Without it, `logo` is used in both themes. |
 | `icon192` | `images/android-chrome-192x192.png` | PNG app icon, 192×192. |
 | `icon512` | `images/android-chrome-512x512.png` | PNG app icon, 512×512. It is also used as the maskable icon, so keep the important parts inside the middle 80%. |
 | `appleTouchIcon` | `images/apple-touch-icon.png` | iOS home-screen icon (180×180). |
 | `favicon` | `images/favicon.ico` | Browser tab icon. |
+| `faviconDark` | none | Browser tab icon while the browser itself is in its dark theme (Chrome, Edge and Firefox pick by it; Safari uses `favicon`). |
+
+**The icon is built in.** The dashboard ships its own icon, so `config/images/` can stay empty. To use your own, put a file with the default name into `config/images/` (it then replaces the built-in one), or point the setting at any file there or at a URL. The built-in icon has a variant for dark surfaces, used for the header logo and the favicon as long as those are the built-in ones; once you set your own `logo` or `favicon`, set `logoDark` or `faviconDark` too if you want a different image in the dark. The app icons (`icon192`, `icon512`, `appleTouchIcon`) have one version: phones don't switch them by theme.
+
+Icon files that an earlier version copied into `config/images/` are recognised and replaced by the current built-in icon; a file you changed yourself is always kept.
 | `background` | `#0A0D12` | Splash-screen and title-bar colour of the installed app. |
 
 ### `host`: the System panel
@@ -97,7 +103,7 @@ CPU usage is measured between two polls, so the CPU gauge shows `—` for the fi
 
 ### `mostUsed`
 
-The *Most used* row, under the overall state, fills itself from how often you open each service from the dashboard or the command palette. Each open loses half its weight every `halfLifeDays`, so services you stopped using drop out over time.
+The *Most used* row, beside the overall state (under it on phones), fills itself from how often you open each service from the dashboard or the command palette. Each open loses half its weight every `halfLifeDays`, so services you stopped using drop out over time.
 
 | Key | Default | Description |
 |---|---|---|
@@ -122,12 +128,13 @@ A value below the minimum is raised to it, and one that isn't a number falls bac
 | `certWarnDays` | `14` | Warn when a certificate expires within this many days. Under 3 days is critical. |
 | `backupMaxAgeHours` | `26` | A guest's last backup older than this is *overdue*. |
 | `offsiteMaxDetachedDays` | `135` | Remind you when a removable PBS datastore hasn't been attached for this long. |
-| `storageAmberPct` | `70` | The storage bar and the *Disk* gauge turn amber (in the sheet only; the Storage row stays calm). It also colours OpenMediaVault's fullest-disk stat. |
+| `storageAmberPct` | `70` | The storage bar and the *Disk* gauge turn amber (in the sheet only; the Storage cell stays calm). It also colours OpenMediaVault's fullest-disk stat. |
 | `storageWarnPct` | `85` | The storage bar and the *Disk* gauge turn red and raise an alert, once per disk; the Storage row turns amber. |
 | `tempMinC` | `30` | Bottom of the temperature gauge's scale. |
 | `tempWarnC` | `75` | Warn at this CPU temperature; at +10 °C it is critical. NVMe drives warn at 70 °C. |
 | `driveLifeWarnPct` | `10` | Warn when a drive has this much of its rated endurance left (SMART wear). |
 | `driveTempWarnC` | `70` | Warn when a drive in **Drives** reaches this temperature. |
+| `minOutageMinutes` | `5` | An outage shorter than this, which is already over, stays out of **Activity**; the service's sheet still lists it, and the uptime and strips count it. A *went down* shows in Activity once the outage has lasted this long (the list of what needs attention shows it right away). `0` shows every outage. |
 
 CPU and memory gauges use fixed limits: CPU warns at 75% and is critical at 90%, memory at 80% and 92%.
 
@@ -153,7 +160,7 @@ A list of groups. Each group is a list of services. This is the [gethomepage for
 
 | Key | Description |
 |---|---|
-| `href` | Where the service opens. Only services with `href` appear in the launcher. |
+| `href` | Where the service opens when its tile is tapped. Without it, a tap opens the service's details, and it is left out of *Most used*. |
 | `description` | The status line when the widget has nothing more specific to show, and *About* in the service's sheet. |
 | `icon` | See [Icons](#icons). Without one, an icon is [picked automatically](#automatic-icons). |
 | `iconDark` | Icon used in dark mode. Without it, an `icon` from selfh.st or dashboard-icons that would barely show in one theme gets its variant there automatically. |
@@ -190,7 +197,7 @@ For jobs that run on a schedule (backups, cron jobs, scripts), the job reports t
 | `every` | Expected time between runs: a number with `s`, `m`, `h`, `d` or `w`, or a number of seconds. |
 | `grace` | How long after `every` a run may arrive before it counts as missed. Default: 10% of `every`, at least 5 minutes. |
 | `token` | Required. The job sends it with each call. Generate one with `openssl rand -hex 24`. |
-| `backup` | `true` adds the job to the backup figures next to Proxmox Backup Server's (*oldest backup* and *backups overdue*; the Backups sheet names what the oldest backup is), and its events to the Backups sheet's *Recent* list. That covers restic, borg, Kopia or anything else that can call a URL. Leave it off for jobs that don't make a backup, such as a PBS verify or prune job. |
+| `backup` | `true` adds the job to the backup figures next to Proxmox Backup Server's (*oldest backup* and *backups overdue*; the Backups tab names what the oldest backup is), and its events to the Backups tab's *Recent* list. That covers restic, borg, Kopia or anything else that can call a URL. Leave it off for jobs that don't make a backup, such as a PBS verify or prune job. |
 | `id` | The id in the URL. Default: the service id, made from the group and name. Each id may be used once. |
 
 The job calls `/api/heartbeat/<id>` (GET or POST) when it succeeded, and `/api/heartbeat/<id>/fail` when it failed. The token goes in `Authorization: Bearer <token>` or `?token=<token>`. The answer is `ok` (200). An unknown id and a wrong token both get 404, and more than one call per second for the same id gets 429.

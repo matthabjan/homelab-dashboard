@@ -4,7 +4,8 @@
 
   // Details on demand: a modal side panel on desktop, a bottom sheet on phones. The native <dialog> brings focus
   // handling, Esc, Android's back gesture and the backdrop; a click on the backdrop closes it too. On phones the
-  // sheet can also be swiped down; the close button stays, as the tap alternative to the drag (WCAG 2.5.7).
+  // sheet has no X: it opens part of the way up, drags up to the full height and down to shrink and then close, and
+  // its handle is a button that closes it, the tap alternative to the drag (WCAG 2.5.7).
   // Sheets stack: a deeper level slides in from the right with a back button to the one below. Esc and Android's back
   // gesture go up one level (`onback`); the close button, the backdrop and a swipe close them all (`onclose`).
   interface Props {
@@ -16,17 +17,23 @@
     sub?: string;
     /** the title of the level below, for the back button; unset on the first level */
     backTo?: string;
+    /** phones: open at the full height (a sheet with a lot in it) */
+    tall?: boolean;
     onback: () => void;
     onclose: () => void;
     children: Snippet;
   }
-  let { open, depth = 1, title, sub, backTo, onback, onclose, children }: Props = $props();
+  let { open, depth = 1, title, sub, backTo, tall = false, onback, onclose, children }: Props = $props();
+  // phones: at the full height, or part of the way up
+  let full = $state(false);
   let dialog: HTMLDialogElement | undefined = $state();
   let body: HTMLDivElement | undefined = $state();
 
   $effect(() => {
     if (!dialog) return;
     if (open && !dialog.open) {
+      full = untrack(() => tall);
+      dialog.style.height = '';
       dialog.style.transform = '';
       dialog.style.transition = '';
       dialog.showModal();
@@ -50,15 +57,17 @@
   });
   const reduce = () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  // swipe down to close (phones only): starts when the content is scrolled to the top, follows the finger, and
-  // closes past a quarter of the sheet's height or on a quick flick; otherwise the sheet snaps back
+  // dragging (phones only). Up, while part of the way up: the sheet grows with the finger and stays full past a short
+  // pull. Down, with the content scrolled to the top: it follows the finger; past a quarter of its height or on a quick
+  // flick a full sheet shrinks and a shrunk one closes, and a long pull closes either. Otherwise it snaps back
   $effect(() => {
     const d = dialog;
     if (!d) return;
     const phone = window.matchMedia('(max-width: 760px)');
     let start: { y: number; t: number } | null = null;
     let dy = 0;
-    let dragging = false;
+    let dragging: 'down' | 'up' | false = false;
+    let h0 = 0;
     const settle = (to: string, then?: () => void) => {
       const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       d.style.transition = reduce ? '' : 'transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1)';
@@ -75,20 +84,33 @@
       if (!start) return;
       dy = e.touches[0].clientY - start.y;
       if (!dragging) {
-        // a pull down from the top drags the sheet; anything else scrolls as usual
-        if (dy > 6 && (body?.scrollTop ?? 0) <= 0) dragging = true;
+        // a pull down from the top drags the sheet, a pull up grows one that isn't full; anything else scrolls as usual
+        if (dy > 6 && (body?.scrollTop ?? 0) <= 0) dragging = 'down';
+        else if (dy < -6 && !full) { dragging = 'up'; h0 = d.offsetHeight; }
         else if (Math.abs(dy) > 6) { start = null; return; }
         else return;
       }
       e.preventDefault();
-      d.style.transition = '';
-      d.style.transform = `translateY(${Math.max(0, dy)}px)`;
+      d.style.transition = 'none';
+      if (dragging === 'up') d.style.height = `${Math.min(window.innerHeight - 20, h0 - dy)}px`;
+      else d.style.transform = `translateY(${Math.max(0, dy)}px)`;
     };
     const up = (e: TouchEvent) => {
       if (!start || !dragging) { start = null; return; }
       const fast = dy / Math.max(1, e.timeStamp - start.t) > 0.5;
+      const was = dragging;
       start = null;
-      if (dy > d.offsetHeight / 4 || (fast && dy > 30)) settle('translateY(100%)', onclose);
+      dragging = false;
+      if (was === 'up') {
+        // let go: the height animates on to full, or back to where it was
+        d.style.transition = '';
+        d.style.height = '';
+        if (dy < -40) full = true;
+        return;
+      }
+      const far = dy > d.offsetHeight / 4 || (fast && dy > 30);
+      if (far && full && dy < d.offsetHeight * 0.55) { full = false; settle(''); }
+      else if (far) settle('translateY(100%)', onclose);
       else settle('');
     };
     d.addEventListener('touchstart', down, { passive: true });
@@ -106,13 +128,13 @@
 
 <!-- Esc and the back gesture (cancel) go up a level; the dialog closing any other way closes all -->
 <dialog
-  bind:this={dialog} class="sheet" aria-labelledby="sheet-title"
+  bind:this={dialog} class="sheet" class:full aria-labelledby="sheet-title"
   oncancel={(e) => { e.preventDefault(); onback(); }}
   onclose={() => { if (open) onclose(); }}
   onclick={(e) => { if (e.target === dialog) onclose(); }}
 >
   <div class="body" bind:this={body}>
-    <span class="grabber" aria-hidden="true"></span>
+    <button class="grabber" onclick={onclose} aria-label={backTo ? 'Close all' : 'Close'}><span></span></button>
     <header>
       <div class="ttl">
         {#if backTo}
@@ -164,10 +186,17 @@
   }
   /* phones: a bottom sheet */
   @media (max-width: 760px) {
-    .sheet { margin: auto 0 0; width: 100vw; max-width: 100vw; height: auto; max-height: 88dvh; border-radius: 22px 22px 0 0; }
-    .body { padding: 8px 16px calc(24px + env(safe-area-inset-bottom)); gap: 14px; }
-    /* the swipe affordance; the sheet itself is what drags */
-    .grabber { display: block; flex: none; align-self: center; width: 36px; height: 5px; border-radius: 3px; background: var(--muted); opacity: 0.45; margin-bottom: 2px; }
+    /* as tall as its content up to three quarters of the screen; `full` after a drag up, or from the start (`tall`) */
+    .sheet { margin: auto 0 0; width: 100vw; max-width: 100vw; height: auto; max-height: 76dvh; border-radius: 26px 26px 0 0; }
+    .sheet.full { height: calc(100dvh - 20px - env(safe-area-inset-top)); max-height: none; }
+    .body { padding: 0 16px calc(24px + env(safe-area-inset-bottom)); gap: 14px; }
+    .close { display: none; }
+    /* the handle: what drags, and a button that closes; the sheet itself follows the finger */
+    .grabber { display: flex; align-items: center; justify-content: center; flex: none; width: 100%; height: 30px; margin-bottom: -8px; padding: 0; border: 0; background: none; cursor: grab; }
+    .grabber span { width: 40px; height: 5px; border-radius: 3px; background: var(--muted); opacity: 0.45; }
+    .grabber:focus-visible { outline: 0; }
+    .grabber:focus-visible span { opacity: 1; background: var(--acc); }
+    @media (prefers-reduced-motion: no-preference) { .sheet { transition: height 0.24s cubic-bezier(0.2, 0.8, 0.2, 1); } }
     @media (prefers-reduced-motion: no-preference) {
       .sheet[open] { animation: up 0.24s cubic-bezier(0.2, 0.8, 0.2, 1); }
       @keyframes up { from { transform: translateY(32px); opacity: 0; } }

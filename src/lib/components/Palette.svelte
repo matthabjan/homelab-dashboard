@@ -75,6 +75,19 @@
   });
   $effect(() => { q; active = 0; });
 
+  // phones: the palette fills the screen as the Search view. It is sized to the visual viewport, which is what is
+  // left above the on-screen keyboard, so the keyboard never covers the results
+  let panel: HTMLElement | undefined = $state();
+  $effect(() => {
+    const vv = window.visualViewport;
+    if (!open || !panel || !vv) return;
+    const el = panel;
+    const fit = () => el.style.setProperty('--vvh', `${vv.height}px`);
+    fit();
+    vv.addEventListener('resize', fit);
+    return () => vv.removeEventListener('resize', fit);
+  });
+
   function go(item: Item | undefined, newTab = false) {
     if (!item?.href) return;
     if (item.kind === 'service') onopen?.(item.id);
@@ -96,7 +109,7 @@
 
 {#if open}
   <div class="scrim" role="presentation" onclick={(e) => e.target === e.currentTarget && (open = false)}>
-    <div class="panel" role="dialog" aria-modal="true" aria-label="Search services">
+    <div class="panel" bind:this={panel} role="dialog" aria-modal="true" aria-label="Search services">
       <div class="search">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
         <label class="sr" for="palette-q">Search services and links</label>
@@ -115,7 +128,7 @@
           aria-controls="palette-list"
           aria-activedescendant={results[active] ? 'pi-' + results[active].id : undefined}
         />
-        <button class="esc" onclick={() => (open = false)} aria-label="Close search">esc</button>
+        <button class="esc" onclick={() => (open = false)} aria-label="Close search"><span class="only-desktop">esc</span><span class="only-phone">Close</span></button>
       </div>
       <div class="label">{q.trim() ? `${results.length} result${results.length === 1 ? '' : 's'}` : 'Most used & services'}</div>
       <ul id="palette-list" role="listbox" bind:this={list}>
@@ -173,11 +186,15 @@
   .empty { padding: 20px 10px; color: var(--muted); text-align: center; }
   .hints { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 10px 16px; font-size: 11px; color: var(--muted); border-top: 1px solid var(--line); }
   @media (hover: none) { .hints { display: none; } }
-  /* phones, also in landscape: pinned under the status bar (and clear of the notch) so the keyboard never covers the results */
+  /* phones, also in landscape: the Search view. It fills the screen from the top, as tall as the visual viewport */
   @media (max-width: 760px), (max-height: 500px) and (pointer: coarse) {
-    .scrim { padding: max(10px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) 10px max(10px, env(safe-area-inset-left)); }
-    .panel { border-radius: 20px; }
-    ul { max-height: 50dvh; }
+    .scrim { padding: 0; backdrop-filter: none; }
+    .panel {
+      max-width: none; height: var(--vvh, 100dvh); border: 0; border-radius: 0; box-shadow: none; display: flex; flex-direction: column;
+      padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left); animation: fade 0.12s ease-out;
+    }
+    .esc { min-height: 36px; padding: 0 12px; font-size: 13px; font-family: inherit; }
+    ul { flex: 1; max-height: none; padding-bottom: calc(12px + env(safe-area-inset-bottom)); overscroll-behavior: contain; }
     a { min-height: 52px; }
   }
   @keyframes fade { from { opacity: 0; } }

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- The app icon: three tiles to launch, one green dot for "all up". Full bleed, the mark inside the middle 80%, so
+       the same art is the maskable icon. The PNG and ICO files beside this one are exported from it. -->
+  <rect width="512" height="512" fill="#0e1116"/>
+  <g fill="#e8ecf1">
+    <rect x="132" y="132" width="112" height="112" rx="30"/>
+    <rect x="268" y="132" width="112" height="112" rx="30"/>
+    <rect x="132" y="268" width="112" height="112" rx="30"/>
+  </g>
+  <circle cx="324" cy="324" r="52" fill="#17b877"/>
+</svg>

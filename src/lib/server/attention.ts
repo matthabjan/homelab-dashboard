@@ -13,6 +13,8 @@ export type Raised = {
   /** bare: the module puts the service's name in front unless the title already names it */
   title: string;
   detail?: string;
+  /** one line each about what it concerns (pending packages); the sheets list them */
+  items?: string[];
   /** when it began, if the source knows (a check went down); else when first raised */
   ts?: number;
   /** overrides the service's link (or gives a source's alert one) */
@@ -63,6 +65,7 @@ export function createAttention() {
           const prev = raised.get(key);
           if (prev && RANK[prev.item.sev] >= RANK[r.sev]) return; // one alert per key: the more severe, the first among equals
           const item: AttentionItem = { sev: r.sev, key, title: r.service ? named(r.service.name, r.title) : r.title, detail: r.detail, href: r.href !== undefined ? r.href : r.service?.href ?? null, ts: Math.min(r.ts ?? now, now) };
+          if (r.items?.length) item.items = r.items;
           if (r.service) Object.assign(item, { sid: r.service.id, service: r.service.name });
           raised.set(key, { item, bare: r.title });
         },

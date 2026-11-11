@@ -8,13 +8,13 @@ A self-hosted launcher and status page for a homelab on **any Docker host**: it 
 
 It is made for your **LAN or VPN** (WireGuard, Tailscale, …): it has no login of its own and must not be reachable from the internet.
 
-![Dashboard in dark mode with problems: the top problem with its Open button, the others that need attention, the infrastructure card with a column per area, the launcher, and recent activity with pending updates from Proxmox, OPNsense, OpenMediaVault and Home Assistant](docs/screenshots/desktop-dark.png)
+![Dashboard in dark mode with problems: the top problem with its buttons, beside it everything that needs attention, the infrastructure strip with a small chart per area, a tile per service with its status line, and recent activity](docs/screenshots/desktop-dark.png)
 
-- **One glance.** One sentence gives the state ("All 15 services up · 3 jobs on schedule", or the most important problem with a button to open that service), then whatever else needs attention, most severe first. When all is well, the page is short and quiet.
-- **Infrastructure at a glance, details on demand.** One card with an entry per area: **System** (CPU, memory, temperature of the Proxmox node or the machine the dashboard runs on), **Storage** (the fullest), **Drives** (SMART health, hottest drive, least life left), **Network** (WAN traffic, DNS block rate) and **Backups** (PBS and backup jobs, the next one due). Each one opens a sheet with the full detail: 24-hour charts you can scrub through (CPU, memory, disk, temperature), every storage with its fill, grouped by the host or NAS it belongs to, every drive with SMART health, traffic charts, each job's schedule. On a phone the card collapses to the area icons and one sentence: the key figures, or only what needs attention.
-- **Launcher.** The services you open most, picked automatically, then every service with a link, grouped as in `services.yaml`, with nothing on an icon but a small marker when it has a problem. Press `/` or `⌘K` / `Ctrl+K` for the command palette.
-- **Checks.** Services are checked every 30 s over HTTP or `tcp://`, which gives uptime (24 h and 7 d), p95 latency and a 24-hour health strip; the **Status** view of the services, and each service's sheet, show them, and the sheet lists the service's events of the last 7 days. The dashboard also tracks certificate expiry, backup age per guest, failed or unhealthy containers, SMART status and firewall gateways. Pending updates (Proxmox, OpenMediaVault, OPNsense, Home Assistant, and container images through What's Up Docker) and low batteries in Home Assistant are notes in Activity.
-- **Live and installable.** Updates are pushed to the browser as they happen, and a service whose status changes is briefly highlighted. If updates stop, the page says so and greys out instead of showing old data as current. It installs as an app (PWA) on phones and desktops, with the number of open problems on its icon, in light and dark themes.
+- **One glance.** One sentence gives the state ("All 15 services up · 3 jobs on schedule", or the most important problem with buttons to see its details and open that service). Beside it, everything else that needs attention is listed once, most severe first, with how long each has been raised and a filter by level. When all is well, the page is short and quiet.
+- **Infrastructure at a glance, details on demand.** One strip with a cell per area, each with its figure and a small picture of it: **System** (CPU, memory, temperature of the Proxmox node or the machine the dashboard runs on, with the CPU's last 24 hours), **Storage** (the fullest), **Drives** (SMART health, one mark per drive), **Network** (traffic, DNS block rate) and **Backups** (PBS and backup jobs, the last seven days). Each one opens its tab of a sheet with the full detail: 24-hour charts you can scrub through (CPU, memory, disk, temperature), every storage with its fill, grouped by the host or NAS it belongs to, every drive with SMART health, traffic charts, each backup job's schedule.
+- **Launcher and status in one.** The services you open most, picked automatically, then a tile for every service and job, grouped as in `services.yaml`: a tap opens the service, and the line under its name says how it is. The button at the tile's end (or a long press) opens its details, and a filter shows only the ones with a problem. Press `/` or `⌘K` / `Ctrl+K` for the command palette.
+- **Checks.** Services are checked every 30 s over HTTP or `tcp://`, which gives uptime (24 h and 7 d), p95 latency and a 24-hour health strip; each service's sheet shows them and lists the service's events of the last 7 days. The dashboard also tracks certificate expiry, backup age per guest, failed or unhealthy containers, SMART status and firewall gateways. Pending updates (Proxmox, OpenMediaVault, OPNsense, Home Assistant, and container images through What's Up Docker) and low batteries in Home Assistant are notes, folded into one row of Activity. Tapping a row in Activity opens its service's sheet, or the Backups tab for backups; outages shorter than 5 minutes stay out of Activity.
+- **Live and installable.** Updates are pushed to the browser as they happen, and a service whose status changes is briefly highlighted. If updates stop, the page says so and greys out instead of showing old data as current. It installs as an app (PWA) on phones and desktops, with the number of open problems on its icon, in light and dark themes. On a phone a bar at the bottom switches between Home, Services, Search and Alerts, and details open in a sheet you drag up or swipe away.
 - **Works without Proxmox.** On a plain Docker host you still get the machine's vitals, your containers (through a read-only socket proxy), values from any JSON API with alert thresholds, `tcp://` checks for services without a web page, and heartbeats: backup and cron jobs report when they ran, and a missed or failed run becomes an alert.
 - **Works with gethomepage configs.** [gethomepage](https://gethomepage.dev)'s `services.yaml`, `bookmarks.yaml` and icon names work as they are; its `homepage.*` container labels work once renamed to `dashboard.*`. Services without an icon get one automatically.
 
@@ -24,9 +24,9 @@ It is made for your **LAN or VPN** (WireGuard, Tailscale, …): it has no login 
 
 ## Screenshots
 
-![Light mode with everything healthy: "All 15 services up", the most used services, the infrastructure card with a column per area, the launcher and recent activity](docs/screenshots/desktop-light.png)
+![Light mode with everything healthy: "All 15 services up", the most used services, the infrastructure strip, the service tiles and recent activity](docs/screenshots/desktop-light.png)
 
-![On a phone: the top problem, the attention list and the collapsed infrastructure card naming only the problems in dark mode, and in light mode with everything healthy, the most used services and the infrastructure card with the key figures above the launcher](docs/screenshots/phones.png)
+![On a phone: Home in dark mode with the top problem, the way to all problems, the most used services and the infrastructure strip above the bottom bar; and the Services view in light mode with everything healthy, a row per service with its status line](docs/screenshots/phones.png)
 
 Every screenshot shows the built-in demo data (`DEMO=1`), not a real homelab.
 
@@ -50,7 +50,7 @@ mkdir -p config && docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/config:/s
 # compose.yaml
 services:
   dashboard:
-    image: matthabjan/homelab-dashboard:0.2.16 # pin a version, update deliberately
+    image: matthabjan/homelab-dashboard:0.3.0 # pin a version, update deliberately
     restart: unless-stopped
     ports:
       - 127.0.0.1:3000:3000 # localhost only; reach it from the LAN or VPN through a reverse proxy

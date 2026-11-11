@@ -21,7 +21,11 @@ export interface Settings {
     icon512: string;
     appleTouchIcon: string;
     favicon: string;
+    /** the favicon while the browser is in its dark theme; null: the app's own mark with its own icon, else `favicon` */
+    faviconDark: string | null;
     logo: string;
+    /** the header logo in the dark theme; null: the app's own mark with its own icon, else `logo` */
+    logoDark: string | null;
     background: string;
   };
   host: {
@@ -48,6 +52,7 @@ export interface Settings {
     tempWarnC: number;
     driveLifeWarnPct: number;
     driveTempWarnC: number;
+    minOutageMinutes: number;
   };
   retentionDays: number;
 }
@@ -262,6 +267,8 @@ export interface Alert {
   detail?: string;
   /** identifies the alert across polls, unique within one result: titles may carry readings (a count, a percentage) */
   key: string;
+  /** what the alert is about, one line each (pending packages with their versions); the sheets list them under it */
+  items?: string[];
 }
 
 /** Written to the events table and shown in the feed. */
@@ -430,10 +437,15 @@ export interface Backups {
   oldestName: string | null;
   /** PBS rows first (they run daily, so they change most), then the jobs by when they are due */
   rows: BackupRow[];
+  /**
+   * The last 7 days, a day each ending now, oldest first: the worst that was recorded that day (a backup job found
+   * late is critical, a backup service's event as it was raised), 'ok' when only good news was, 'none' for no record.
+   */
+  days: (Level | 'none')[];
 }
 
 /** What a sheet shows: one level of the sheet stack (the page keeps it in history state). */
-export type SheetRef = { kind: 'service'; id: string } | { kind: 'infra'; tab: 'system' | 'storage' | 'drives' | 'network' } | { kind: 'backups' } | { kind: 'activity' };
+export type SheetRef = { kind: 'service'; id: string } | { kind: 'infra'; tab: InfraPanel['id'] } | { kind: 'activity' };
 
 export interface ContainerCounts {
   running: number;
@@ -633,10 +645,13 @@ export interface AttentionItem {
   href?: string | null;
   /** when it first appeared */
   ts: number;
+  items?: string[];
+  /** the sheet that tells more, for its row in Activity; null when there is none */
+  open?: SheetRef | null;
 }
 
 /** A row of the feed: a note, or a recent event. */
-export type FeedItem = AttentionItem | (FeedEvent & { service?: undefined });
+export type FeedItem = AttentionItem | (FeedEvent & { service?: undefined; items?: undefined });
 
 export interface FeedEvent {
   ts: number;
@@ -646,6 +661,8 @@ export interface FeedEvent {
   title: string;
   detail: string | null;
   href: string | null;
+  /** the sheet that tells more, for its row in Activity; null when there is none */
+  open?: SheetRef | null;
 }
 
 export interface Tile {
@@ -744,6 +761,8 @@ export interface Snapshot {
   linkTarget: string;
   deepLink: Settings['deepLink'];
   logo: string | null;
+  /** the logo for the dark theme, when there is one */
+  logoDark: string | null;
   staleAfter: number;
   /** the hero: the state in one sentence; while something needs attention, its top item and how to get to it */
   verdict: { level: Level; tag: string; title: string; sub: string; action: { label: string; href: string } | null };
@@ -787,7 +806,7 @@ export interface Snapshot {
     lan: Traffic | null;
     dns: (DnsStats & { href: string | null; name: string }) | null;
   }) | null;
-  /** the infrastructure card's rows, which are also the Infrastructure sheet's tabs (all but Backups) */
+  /** the infrastructure strip's cells, which are also the Infrastructure sheet's tabs */
   infrastructure: InfraPanel[];
   /** most-opened services, by open count with a half-life of `settings.mostUsed.halfLifeDays` */
   mostUsed: Tile[];

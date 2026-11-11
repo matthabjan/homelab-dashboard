@@ -37,8 +37,8 @@ src/
 │       ├── check.ts             probe, container and heartbeat readings → check state
 │       ├── heartbeat.ts         the /api/heartbeat endpoint's rules
 │       ├── snapshot.ts          state + history → page JSON (status rules live here)
-│       ├── infrastructure.ts    the infrastructure card's rows and tabs: figure, context, level
-│       ├── backups.ts           the Backups row and sheet: PBS and jobs added up, rows worded and judged
+│       ├── infrastructure.ts    the infrastructure strip's cells and tabs: figure, context, level
+│       ├── backups.ts           the Backups cell and tab: PBS and jobs added up, rows worded and judged
 │       ├── storage.ts           how full a disk is: storage rows, the Disk gauge, their alerts, the Storage row
 │       ├── attention.ts         alerts → attention list, feed, headline, each service's worst alert
 │       ├── format.ts            numbers, ages, plural() and card() for stats and status lines
@@ -79,7 +79,8 @@ Guidelines: match gethomepage's widget fields where an equivalent exists. Never 
 - `npm run check` and `npm test` must pass. CI runs them, then builds the image and smoke-tests it in demo mode.
 - Update the docs when behaviour or configuration changes.
 - Screenshots help for UI changes. Take them in demo mode, never from a real setup.
-- The README screenshots are in `docs/screenshots/`. When the UI changes visibly, retake them in demo mode: desktop at 1440×1080, phones at 390×844 with 2× pixel density, side by side in `phones.png` (`issues` scenario in dark mode, `calm` in light mode at the top of the page).
+- The README screenshots are in `docs/screenshots/`. When the UI changes visibly, retake them in demo mode: desktop at 1440×1080, phones at 390×844 with 2× pixel density, side by side in `phones.png` (Home in the `issues` scenario in dark mode, the Services view in `calm` in light mode).
+- The app icon ships with the app in `src/lib/server/default-images/`: `icon.svg` is the source of the PNG and ICO files beside it (512, 192 and 180 px as it is; the favicon at 16 and 32 px with rounded corners and the mark 30% larger), `icon-dark.svg` of `logo-dark.png` and `favicon-dark.ico`. `default-images.ts` decides when they are served instead of a file in `config/images/`.
 
 ## Releases (maintainers)
 

@@ -4,6 +4,7 @@
 // temperatures and the first day of history. Icons still come from the real indexes.
 import { DEFAULT_SETTINGS } from './config.ts';
 import { localName } from './local.ts';
+import { fmtClock } from './format.ts';
 import { insertProbe, insertMetric, countProbes, transaction, insertEvent, recordOpen, kvSet } from './db.ts';
 import { kvKey } from './heartbeat.ts';
 import { request } from './http.ts';
@@ -82,8 +83,10 @@ export function seedHistory(services: Service[]) {
       const lastOk = now - (s.heartbeat.every > 86_400_000 ? s.heartbeat.every * 0.4 : (calm() ? 6 : 27) * 3600_000);
       const due = lastOk + s.heartbeat.every + s.heartbeat.grace;
       kvSet(kvKey(s.heartbeat.id), { since: now - 7 * 86_400_000, lastOk, lastFail: null });
+      // the week before, thinly: the Backups strip shows seven days
+      for (let ts = now - 7 * 86_400_000; ts < now - 86_400_000; ts += 1800_000) insertProbe(s.id, ts, true, null);
       for (let ts = now - 86_400_000; ts < now; ts += 120_000) insertProbe(s.id, ts, ts <= due, null);
-      if (due < now) insertEvent(due, 'crit', s.id, `${s.name} went down`, 'Missed its run');
+      if (due < now) insertEvent(due, 'crit', s.id, `${s.name} went down`, 'Missed its run', due);
     }
     for (let ts = now - 86_400_000, i = 0; ts < now; ts += 300_000, i++) {
       const day = Math.sin((i / 288) * Math.PI * 2 - 1.2);
@@ -105,11 +108,18 @@ export function seedHistory(services: Service[]) {
     const pbs = services.find((s) => s.widget?.type === 'proxmoxbackupserver')?.id ?? null;
     insertEvent(now - 42 * 60_000, 'ok', pbs, 'Host backups completed', 'pve · main');
     const pve = services.find((s) => s.widget?.type === 'proxmox')?.id ?? null;
+    // a two-minute blip: its service's sheet lists it, Activity leaves it out (thresholds.minOutageMinutes)
+    const blip = services.find((s) => s.probe && s.id !== 'entertainment-musicassistant' && s.id !== pve && s.id !== pbs);
+    if (blip) {
+      const at = now - 3 * 3600_000;
+      insertEvent(at + 30_000, 'crit', blip.id, `${blip.name} went down`, 'Connection refused', at);
+      insertEvent(at + 150_000, 'ok', blip.id, `${blip.name} recovered`, `was down since ${fmtClock(at)}`, at);
+    }
     if (calm()) {
       insertEvent(now - 13 * 3600_000, 'ok', pbs, 'Backups completed', 'adguard, docker-apps, homeassistant and 3 more · main');
       insertEvent(now - 5 * 3600_000, 'info', pve, '12 updates available on pve', 'apt packages pending');
     } else {
-      insertEvent(now - 68 * 60_000, 'crit', 'entertainment-musicassistant', 'MusicAssistant went down', 'Connection refused');
+      insertEvent(now - 68 * 60_000, 'crit', 'entertainment-musicassistant', 'MusicAssistant went down', 'Connection refused', now - 69 * 60_000);
       insertEvent(now - 13 * 3600_000, 'ok', pbs, 'Backups completed', 'adguard, docker-apps, homeassistant and 2 more · main');
     }
   });

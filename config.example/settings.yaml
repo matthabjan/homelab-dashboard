@@ -15,15 +15,17 @@ tlsVerify: true
 #   name: Pulse
 #   href: https://pulse.home.arpa
 
-# App icon / logo — files in config/images, replace them to change the icon
+# The installed app. The icon is built in; to use your own, put files into config/images and name them here
 pwa:
   name: Homelab
   shortName: Homelab
-  logo: images/android-chrome-192x192.png
-  icon192: images/android-chrome-192x192.png
-  icon512: images/android-chrome-512x512.png
-  appleTouchIcon: images/apple-touch-icon.png
-  favicon: images/favicon.ico
+  # logo: images/logo.png               # header logo
+  # logoDark: images/logo-dark.png      # header logo in the dark theme
+  # icon192: images/icon-192.png
+  # icon512: images/icon-512.png
+  # appleTouchIcon: images/apple-touch-icon.png
+  # favicon: images/favicon.ico
+  # faviconDark: images/favicon-dark.ico
   background: "#0A0D12"
 
 host:
@@ -60,5 +62,6 @@ thresholds:
   tempWarnC: 75
   driveLifeWarnPct: 10       # drive with this much rated endurance left → warning
   driveTempWarnC: 70
+  minOutageMinutes: 5        # shorter outages (already over) stay out of Activity; the service sheet lists them
 
 retentionDays: 30
