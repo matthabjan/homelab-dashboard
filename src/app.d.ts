@@ -9,6 +9,8 @@ declare global {
       view?: 'home' | 'services' | 'alerts';
       /** the view was entered from Home with its own history entry, so Home is one step back */
       viewPushed?: boolean;
+      /** Setup: the service whose details sheet is open */
+      setup?: string;
     }
   }
 }
