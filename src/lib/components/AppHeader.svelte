@@ -9,6 +9,8 @@
     demo?: boolean;
     /** the page it sits on: Setup's button is pressed there and leads back to the dashboard */
     current: 'home' | 'setup';
+    /** phones: the view shown, named beside the title ("Services", "Alerts") */
+    section?: string;
     /** the stream's state, where the page follows it; `age` is how old the data is when stale */
     live?: { state: 'live' | 'reconnecting' | 'stale'; age?: string };
     deepLink?: Settings['deepLink'];
@@ -17,7 +19,7 @@
     /** opens the palette in place; without it search is a link to the dashboard's palette */
     onsearch?: () => void;
   }
-  let { title, logo, demo = false, current, live, deepLink = null, target = '_blank', configProblems = 0, onsearch }: Props = $props();
+  let { title, logo, demo = false, current, section = '', live, deepLink = null, target = '_blank', configProblems = 0, onsearch }: Props = $props();
 
   const setupLabel = $derived(
     current === 'setup' ? 'Close Setup' : !configProblems ? 'Setup' : `Setup, ${configProblems} config problem${configProblems === 1 ? '' : 's'}`
@@ -33,7 +35,7 @@
 <header class="top">
   <a class="brand" href="/" aria-label="{title} — home">
     {#if logo}<img src={logo} alt="" width="36" height="36" />{/if}
-    <span class="bname">{title}</span>
+    <span class="bname">{title}{#if section}<span class="bsec only-phone">&nbsp;· {section}</span>{/if}</span>
   </a>
   {#if onsearch}
     <button class="search card" onclick={onsearch} aria-label="Search or jump to a service" aria-keyshortcuts="/ Control+K Meta+K">{@render searchInner()}</button>
@@ -66,6 +68,7 @@
   .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
   .brand img { width: 36px; height: 36px; border-radius: 11px; }
   .bname { font-size: 20px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bsec { font-weight: 400; color: var(--muted); }
   .search { flex: 1 1 260px; max-width: 440px; margin-left: auto; display: flex; align-items: center; gap: 10px; min-height: 42px; padding: 0 12px 0 14px; border: 0; border-radius: 12px; color: var(--muted); cursor: pointer; text-align: left; }
   .search:hover { color: var(--text); }
   .search .ph { flex: 1; }

@@ -1,8 +1,8 @@
 <script lang="ts">
   import type { Level } from '$lib/types';
 
-  // Phones: the app's four destinations in the thumb zone, the same on every page. Home, Services and Alerts lead to
-  // the dashboard's sections; Search opens the palette. Hidden above the phone breakpoint, where the header and the
+  // Phones: the app's four destinations in the thumb zone, the same on every page. Home, Services and Alerts are the
+  // dashboard's views; Search opens the palette. Hidden above the phone breakpoint, where the header and the
   // page itself hold all four.
   interface Props {
     /** the destination shown; unset on pages that are none of them (Setup) */
@@ -10,10 +10,17 @@
     /** how many items need attention, and how bad the worst is: the badge on Alerts */
     needCount?: number;
     level?: Level;
+    /** on the dashboard: switches the view in place instead of following the link */
+    onnav?: (view: 'home' | 'services' | 'alerts') => void;
     /** opens the palette in place; without it Search is a link to the dashboard's palette */
     onsearch?: () => void;
   }
-  let { current, needCount = 0, level = 'ok', onsearch }: Props = $props();
+  let { current, needCount = 0, level = 'ok', onnav, onsearch }: Props = $props();
+  const nav = (view: 'home' | 'services' | 'alerts') => (e: MouseEvent) => {
+    if (!onnav) return;
+    e.preventDefault();
+    onnav(view);
+  };
 </script>
 
 {#snippet searchInner()}
@@ -22,11 +29,11 @@
 {/snippet}
 
 <nav class="tabs only-phone" aria-label="Sections">
-  <a class="tab" href="/#top" aria-current={current === 'home' ? 'page' : undefined}>
+  <a class="tab" href="/" onclick={nav('home')} aria-current={current === 'home' ? 'page' : undefined}>
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11 12 4l8 7v8a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z" /></svg>
     Home
   </a>
-  <a class="tab" href="/#services" aria-current={current === 'services' ? 'page' : undefined}>
+  <a class="tab" href="/#view-services" onclick={nav('services')} aria-current={current === 'services' ? 'page' : undefined}>
     <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="6.5" height="6.5" rx="1.5" /><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5" /><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5" /><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5" /></svg>
     Services
   </a>
@@ -35,7 +42,7 @@
   {:else}
     <a class="tab" href="/#search">{@render searchInner()}</a>
   {/if}
-  <a class="tab" href="/#attention" aria-current={current === 'alerts' ? 'page' : undefined}>
+  <a class="tab" href="/#view-alerts" onclick={nav('alerts')} aria-current={current === 'alerts' ? 'page' : undefined}>
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15zM10 21h4" /></svg>
     Alerts
     {#if needCount}<span class="badge num lv-{level === 'crit' ? 'crit' : 'warn'}" aria-hidden="true">{needCount}</span><span class="sr">, {needCount} need{needCount === 1 ? 's' : ''} attention</span>{/if}

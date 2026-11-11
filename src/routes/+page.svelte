@@ -96,7 +96,7 @@
   const stack = $derived<SheetRef[]>(page.state.sheets ?? []);
   const sheet = $derived(stack.at(-1) ?? null);
   const sheetOpen = $derived(stack.length > 0);
-  const show = (s: SheetRef) => pushState('', { sheets: [...stack, s] });
+  const show = (s: SheetRef) => pushState('', { ...page.state, sheets: [...stack, s] });
   const back = () => history.back();
   const closeSheets = () => { if (stack.length) history.go(-stack.length); };
   const openCard = (c: InfraPanel) => show(c.id === 'backups' ? { kind: 'backups' } : { kind: 'infra', tab: c.id });
@@ -206,11 +206,30 @@
     (n ? nav.setAppBadge?.(n) : nav.clearAppBadge?.())?.catch(() => {});
   });
 
-  // Search on another page's header or tab bar leads here as /#search: open the palette and drop the hash
+  // ---- phones: one view at a time (Home, Services, Alerts), picked in the tab bar ----
+  // The view is history state. Leaving Home adds an entry, so back returns to Home and then leaves the app; switching
+  // between the other two replaces it. Above the phone breakpoint every section shows and the view changes nothing.
+  type View = NonNullable<App.PageState['view']>;
+  const view = $derived<View>(page.state.view ?? 'home');
+  const VIEW_NAME: Record<View, string> = { home: '', services: 'Services', alerts: 'Alerts' };
+  function setView(v: View) {
+    if (v === view) return scrollTo({ top: 0, behavior: 'smooth' });
+    if (v === 'home') {
+      if (page.state.viewPushed) history.back();
+      else replaceState('', {});
+    } else if (view === 'home') pushState('', { view: v, viewPushed: true });
+    else replaceState('', { ...page.state, view: v });
+    scrollTo(0, 0);
+  }
+
+  // Another page's header and tab bar lead here by hash: /#search opens the palette, /#view-services and /#view-alerts
+  // their view. The hash is dropped once it is acted on (none of them names an element, so nothing scrolls to it).
   afterNavigate(() => {
-    if (location.hash !== '#search') return;
-    paletteOpen = true;
-    try { replaceState('/', page.state); } catch {}
+    const h = location.hash;
+    const v: View | null = h === '#view-services' ? 'services' : h === '#view-alerts' ? 'alerts' : null;
+    if (h === '#search') paletteOpen = true;
+    else if (!v) return;
+    try { replaceState('/', v ? { view: v } : {}); } catch {}
   });
 
   function onKey(e: KeyboardEvent) {
@@ -279,9 +298,9 @@
 {#if !snap}
   <main class="boot"><p class="muted">Starting up…</p></main>
 {:else}
-  <div class="page" id="top">
+  <div class="page" id="top" data-view={view}>
     <AppHeader
-      title={snap.title} logo={snap.logo} demo={snap.demo} current="home" live={{ state: liveState, age: ago(snap.generatedAt, now) }}
+      title={snap.title} logo={snap.logo} demo={snap.demo} current="home" section={VIEW_NAME[view]} live={{ state: liveState, age: ago(snap.generatedAt, now) }}
       deepLink={snap.deepLink} {target} configProblems={snap.configProblems} onsearch={() => (paletteOpen = true)}
     />
 
@@ -298,7 +317,7 @@
     {/if}
 
     <!-- the answer first: one sentence; while something needs attention, the way to it -->
-    <section id="attention" class="card hero lv-{degraded ? 'none' : snap.verdict.level}" class:alert={!degraded && isProblem(snap.verdict.level)} class:flash={flash.has('verdict')} aria-label="Overall status">
+    <section data-v="home alerts" class="card hero lv-{degraded ? 'none' : snap.verdict.level}" class:alert={!degraded && isProblem(snap.verdict.level)} class:flash={flash.has('verdict')} aria-label="Overall status">
       <div class="state">
         <span class="mark" aria-hidden="true">
           {#if snap.verdict.level === 'ok'}<svg viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5" /></svg>{:else}<svg viewBox="0 0 24 24"><path d="M12 7v6M12 17h.01" /></svg>{/if}
@@ -316,11 +335,13 @@
       </div>
 
       {#if also.length}
-        <div class="also">
+        <!-- phones: Home names the top problem and leads to the rest; the Alerts view lists them all -->
+        <button class="review only-phone" data-v="home" onclick={() => setView('alerts')}>Review all {also.length + 1} problems</button>
+        <div class="also" data-v="alerts">
           <h2 class="k">Also needs attention · {also.length}</h2>
           <ul class="probs" id="also">
-            {#each alsoAll ? also : also.slice(0, ALSO) as a (a.key)}
-              <li class="prob lv-{a.sev}" class:flash={!!a.sid && flash.has(a.sid)}>
+            {#each also as a, i (a.key)}
+              <li class="prob lv-{a.sev}" class:extra={i >= ALSO && !alsoAll} class:flash={!!a.sid && flash.has(a.sid)}>
                 <!-- the card opens the service's details; Open goes straight to the service -->
                 <svelte:element this={a.sid ? 'button' : 'div'} class="pbody" onclick={() => a.sid && show({ kind: 'service', id: a.sid })} role={a.sid ? undefined : 'group'}>
                   <span class="ev-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={ICONS[a.sev] ?? ICONS.info} /></svg></span>
@@ -331,14 +352,16 @@
             {/each}
           </ul>
           {#if also.length > ALSO}
-            <button class="link-btn" aria-expanded={alsoAll} aria-controls="also" onclick={() => (alsoAll = !alsoAll)}>{alsoAll ? 'Show fewer' : `Show ${also.length - ALSO} more`}</button>
+            <button class="link-btn more" aria-expanded={alsoAll} aria-controls="also" onclick={() => (alsoAll = !alsoAll)}>{alsoAll ? 'Show fewer' : `Show ${also.length - ALSO} more`}</button>
           {/if}
         </div>
+      {:else}
+        <p class="muted quiet only-phone" data-v="alerts">{snap.needCount ? 'Nothing else needs attention.' : 'Nothing needs attention.'}</p>
       {/if}
 
-      <!-- while something needs attention the hero holds only that; the launcher stays under Services -->
-      {#if snap.mostUsed.length && !snap.needCount}
-        <div class="most">
+      <!-- wide: while something needs attention the hero holds only that. Phones: Home always has the most used -->
+      {#if snap.mostUsed.length}
+        <div class="most" class:need={snap.needCount > 0} data-v="home">
           <h2 class="k">Most used</h2>
           <div class="apps">
             {#each snap.mostUsed as t (t.id)}
@@ -355,7 +378,7 @@
     {#if cards.length}
       <!-- infrastructure and backups in one card: a row per area, side by side when wide; on phones collapsed to the area
            icons and one sentence. Each area opens its sheet -->
-      <section class="card infra" aria-labelledby="h-infra" style="--n: {cards.length}">
+      <section class="card infra" data-v="home" aria-labelledby="h-infra" style="--n: {cards.length}">
         <div class="ihead">
           <h2 id="h-infra">Infrastructure</h2>
           <span class="muted small" class:hl={infraProblems.length > 0}>{infraStatus}</span>
@@ -384,7 +407,7 @@
     {/if}
 
     <div class="lower">
-      <section id="services" class="card sec services" aria-labelledby="h-services">
+      <section data-v="services" class="card sec services" aria-labelledby="h-services">
         <div class="sec-head">
           <h2 id="h-services">Services</h2>
           <div class="seg" role="group" aria-label="Show services as">
@@ -438,7 +461,7 @@
         {/if}
       </section>
 
-      <section class="card sec activity" aria-labelledby="h-activity">
+      <section class="card sec activity" data-v="home" aria-labelledby="h-activity">
         <div class="sec-head"><h2 id="h-activity">Activity</h2>{#if snap.feed.length > 5}<button class="link-btn" onclick={() => show({ kind: 'activity' })}>Show all</button>{/if}</div>
         {#if snap.feed.length}
           <ul class="evs">{#each snap.feed.slice(0, 5) as a (a.ts + a.title)}{@render event(a, { tap: true })}{/each}</ul>
@@ -450,7 +473,7 @@
 
     {#if snap.bookmarks.length}
       <!-- a compact row: each link its icon beside its name, groups with their label -->
-      <section class="card sec links" aria-labelledby="h-links">
+      <section class="card sec links" data-v="home" aria-labelledby="h-links">
         <div class="sec-head"><h2 id="h-links">Links</h2></div>
         <div class="launch">
           {#each linkGroups as g (g.name)}
@@ -470,7 +493,7 @@
       </section>
     {/if}
 
-    <footer class="foot">
+    <footer class="foot" data-v="home">
       <span class="muted small ver">
         <a href="https://github.com/matthabjan/homelab-dashboard/tree/main/docs" target="_blank" rel="noopener">Documentation</a>
         {#if snap.version}<span class="mono">v{snap.version}</span>{/if}
@@ -563,7 +586,7 @@
     {/if}
   </Sheet>
 
-  <TabBar current="home" needCount={snap.needCount} level={snap.verdict.level} onsearch={() => (paletteOpen = true)} />
+  <TabBar current={view} needCount={snap.needCount} level={snap.verdict.level} onnav={setView} onsearch={() => (paletteOpen = true)} />
 
   <Palette bind:open={paletteOpen} services={allServices} bookmarks={snap.bookmarks} mostUsed={snap.mostUsed} {target} onopen={opened} />
 {/if}
@@ -571,8 +594,6 @@
 <style>
   .boot { min-height: 100vh; display: grid; place-items: center; }
   .page { max-width: 1240px; margin: 0 auto; padding: max(20px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 56px max(16px, env(safe-area-inset-left)); display: flex; flex-direction: column; gap: 20px; }
-  /* the tab bar's links land on these, clear of the top edge */
-  .hero, .services { scroll-margin-top: 12px; }
   .small { font-size: 13px; }
   h2 { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
   h2.k, .k { font-size: 13px; font-weight: 500; color: var(--muted); letter-spacing: 0; }
@@ -599,6 +620,10 @@
   .primary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 18px; border-radius: 12px; background: var(--text); color: var(--bg); font-size: 14px; font-weight: 600; flex: none; }
   .primary.wide { width: 100%; box-sizing: border-box; min-height: 46px; }
   .also { display: flex; flex-direction: column; gap: 8px; }
+  .prob.extra { display: none; }
+  .review { width: 100%; min-height: 46px; border: 0; border-radius: 12px; background: var(--surface-2); color: var(--text); font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; }
+  .quiet { margin: 0; font-size: 14px; }
+  @media not all and (max-width: 760px) { .most.need { display: none; } }
   .probs { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 10px; }
   .prob { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 6px; border-radius: 16px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); min-width: 0; }
   .pbody { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 6px; border: 0; border-radius: 12px; background: none; color: var(--text); font: inherit; text-align: left; }
@@ -774,6 +799,13 @@
   /* phones: the same order, tighter, above the tab bar */
   @media (max-width: 760px) {
     .page { gap: 14px; padding-bottom: calc(86px + env(safe-area-inset-bottom)); }
+    /* one view at a time: a section shows in the views its data-v names */
+    .page[data-view='home'] [data-v]:not([data-v~='home']),
+    .page[data-view='services'] [data-v]:not([data-v~='services']),
+    .page[data-view='alerts'] [data-v]:not([data-v~='alerts']) { display: none !important; }
+    /* the Alerts view lists every problem */
+    .prob.extra { display: flex; }
+    .more { display: none; }
     .hero { padding: 20px; border-radius: 22px; gap: 18px; }
     /* phones: the mark sits beside the headline like a status icon; the detail and the action go full width below */
     .state { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px 12px; }
