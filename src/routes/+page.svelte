@@ -445,7 +445,7 @@
               {:else if c.id === 'storage'}
                 <span class="meter"><span style:width="{Math.min(100, fullest)}%"></span></span>
               {:else if c.id === 'drives'}
-                <span class="pips">{#each snap.drives.slice(0, 10) as d, i (i)}<span class="lv-{d.level}" class:bad={isProblem(d.level)}></span>{/each}</span>
+                <span class="pips">{#each snap.drives.slice(0, 10) as d, i (i)}<span class="lv-{d.level}" class:bad={isProblem(d.level)} class:none={d.status === '—'}></span>{/each}</span>
               {:else if c.id === 'network'}
                 <Sparkline values={snap.network?.seriesDown ?? snap.network?.lan?.seriesDown} area minSpan={10} height={28} />
               {:else}
@@ -728,10 +728,13 @@
   .cell.alert .viz { --fill: var(--lv); }
   .meter { width: 100%; height: 6px; margin-bottom: 5px; border-radius: 3px; background: var(--track); overflow: hidden; }
   .meter span { display: block; height: 100%; border-radius: 3px; background: var(--fill); }
-  /* a drive each: one that needs a look is outlined in its colour */
-  .pips { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 3px; }
-  .pips span { width: 22px; height: 14px; border-radius: 4px; background: var(--surface-3); }
-  .pips span.bad { box-shadow: inset 0 0 0 1.5px var(--lv); background: var(--lv-soft); }
+  /* pictures of a state (a drive each, a day of backups) speak in status colours: full height and green when fine, a
+     short bar in its colour where something needs a look, a stub where nothing is known. Pictures of an amount
+     (CPU, storage, traffic) stay in the accent colour */
+  .pips { display: flex; align-items: flex-end; gap: 5px; margin-bottom: 3px; }
+  .pips span { width: 22px; height: 14px; border-radius: 4px; background: var(--lv); opacity: 0.85; }
+  .pips span.bad { height: 7px; }
+  .pips span.none { height: 3px; background: var(--surface-3); opacity: 1; }
   /* the last seven days of backups, today on the right: a short bar where something was late or failed, a stub where
      nothing was recorded */
   .days { display: flex; align-items: flex-end; gap: 3px; width: 100%; margin-bottom: 3px; }
@@ -894,8 +897,9 @@
     .viz { grid-area: viz; height: 24px; align-items: center; }
     .viz :global(svg) { height: 24px !important; }
     .meter { margin: 0; }
-    .pips { flex-wrap: nowrap; gap: 3px; margin: 0; }
-    .pips span { width: 10px; height: 14px; border-radius: 3px; }
+    .pips { gap: 3px; margin: 0; align-items: center; }
+    .pips span { width: 10px; height: 12px; border-radius: 2px; }
+    .pips span.bad { height: 6px; }
     .days { gap: 2px; margin: 0; align-items: center; }
     .days span { height: 12px; border-radius: 2px; }
     .days span.bad { height: 6px; }
