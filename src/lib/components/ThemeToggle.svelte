@@ -3,12 +3,7 @@
 
   type Theme = 'system' | 'light' | 'dark';
 
-  // The theme: three choices side by side (Setup), or `compact`, one button in the header that steps through them.
-  // Every toggle on the page shows the same choice: a pick tells the others.
-  interface Props {
-    compact?: boolean;
-  }
-  let { compact = false }: Props = $props();
+  // The theme switch in the header: one button that steps through system, light and dark, showing the current one.
 
   const OPTIONS: { id: Theme; label: string; d: string }[] = [
     { id: 'system', label: 'System theme', d: 'M3 5h18v11H3zM8 20h8M12 16v4' },
@@ -31,9 +26,6 @@
   onMount(() => {
     current = document.documentElement.dataset.theme || 'system';
     themeColor(current);
-    const sync = () => (current = document.documentElement.dataset.theme || 'system');
-    addEventListener('themechange', sync);
-    return () => removeEventListener('themechange', sync);
   });
 
   function pick(id: Theme) {
@@ -41,35 +33,16 @@
     document.documentElement.dataset.theme = id;
     themeColor(id);
     try { localStorage.setItem('theme', id); } catch {}
-    dispatchEvent(new Event('themechange'));
   }
 </script>
 
-{#if compact}
-  <button class="step" aria-label="{opt.label}. Switch to {next.label.toLowerCase()}" title="{opt.label} · switch to {next.label.toLowerCase()}" onclick={() => pick(next.id)}>
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={opt.d} /></svg>
-  </button>
-{:else}
-<div class="toggle" role="radiogroup" aria-label="Theme">
-  {#each OPTIONS as o}
-    <button role="radio" aria-checked={current === o.id} aria-label={o.label} title={o.label} class:on={current === o.id} onclick={() => pick(o.id)}>
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={o.d} /></svg>
-    </button>
-  {/each}
-</div>
-{/if}
+<button class="step" aria-label="{opt.label}. Switch to {next.label.toLowerCase()}" title="{opt.label} · switch to {next.label.toLowerCase()}" onclick={() => pick(next.id)}>
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={opt.d} /></svg>
+</button>
 
 <style>
-  /* the header's button: the same size and look as its neighbours */
-  .step { width: 42px; height: 42px; border-radius: 12px; background: var(--surface); box-shadow: var(--shadow); color: var(--text); }
-  .step:hover { color: var(--text); background: var(--surface-2); }
+  /* the same size and look as its neighbours in the header */
+  .step { width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 12px; background: var(--surface); box-shadow: var(--shadow); color: var(--text); cursor: pointer; }
+  .step:hover { background: var(--surface-2); }
   @media (max-width: 760px) { .step { width: 44px; height: 44px; border-radius: 14px; } }
-  .toggle { display: flex; gap: 2px; padding: 3px; border-radius: 12px; background: var(--surface-2); }
-  button {
-    width: 36px; height: 34px; border: 0; border-radius: 9px; background: transparent; color: var(--muted);
-    display: flex; align-items: center; justify-content: center; cursor: pointer;
-  }
-  button:hover { color: var(--text); }
-  @media (max-width: 760px) { button { width: 48px; height: 40px; } }
-  button.on { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
 </style>

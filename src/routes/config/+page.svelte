@@ -7,7 +7,6 @@
   import AppHeader from '$lib/components/AppHeader.svelte';
   import TabBar from '$lib/components/TabBar.svelte';
   import Sheet from '$lib/components/Sheet.svelte';
-  import ThemeToggle from '$lib/components/ThemeToggle.svelte';
   import type { PageProps } from './$types';
   import { ago } from '$lib/ago.ts';
 
@@ -211,7 +210,6 @@
 
     <section class="card sec" id="settings" aria-labelledby="h-settings">
       <h2 id="h-settings">Settings</h2>
-      <div class="theme"><span>Theme</span><ThemeToggle /></div>
       {#if changed.length}
         <p class="muted intro">Changed in <code>settings.yaml</code>; everything else keeps its default.</p>
         <table class="kv changed">
@@ -342,7 +340,6 @@
   .end { display: flex; justify-content: center; }
 
   /* settings */
-  .theme { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 14px; padding-bottom: 4px; }
   table { width: 100%; border-collapse: collapse; }
   .kv th, .kv td { text-align: left; vertical-align: top; padding: 7px 12px 7px 0; border-top: 1px solid var(--line); font-size: 12px; overflow-wrap: anywhere; }
   .kv th { width: 55%; color: var(--muted); font-weight: 400; }
