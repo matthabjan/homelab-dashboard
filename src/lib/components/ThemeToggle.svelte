@@ -3,12 +3,21 @@
 
   type Theme = 'system' | 'light' | 'dark';
 
+  // The theme: three choices side by side (Setup), or `compact`, one button in the header that steps through them.
+  // Every toggle on the page shows the same choice: a pick tells the others.
+  interface Props {
+    compact?: boolean;
+  }
+  let { compact = false }: Props = $props();
+
   const OPTIONS: { id: Theme; label: string; d: string }[] = [
     { id: 'system', label: 'System theme', d: 'M3 5h18v11H3zM8 20h8M12 16v4' },
     { id: 'light', label: 'Light theme', d: 'M12 4V2M12 22v-2M4.9 4.9 3.5 3.5M20.5 20.5l-1.4-1.4M4 12H2M22 12h-2M4.9 19.1l-1.4 1.4M20.5 3.5l-1.4 1.4M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z' },
     { id: 'dark', label: 'Dark theme', d: 'M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z' }
   ];
   let current = $state<string>('system');
+  const opt = $derived(OPTIONS.find((o) => o.id === current) ?? OPTIONS[0]);
+  const next = $derived(OPTIONS[(OPTIONS.indexOf(opt) + 1) % OPTIONS.length]);
 
   // --bg per theme: the browser and installed-app chrome (theme-color) follows a manually picked theme too
   const BG = { light: '#f4f5f7', dark: '#0a0d12' };
@@ -22,6 +31,9 @@
   onMount(() => {
     current = document.documentElement.dataset.theme || 'system';
     themeColor(current);
+    const sync = () => (current = document.documentElement.dataset.theme || 'system');
+    addEventListener('themechange', sync);
+    return () => removeEventListener('themechange', sync);
   });
 
   function pick(id: Theme) {
@@ -29,9 +41,15 @@
     document.documentElement.dataset.theme = id;
     themeColor(id);
     try { localStorage.setItem('theme', id); } catch {}
+    dispatchEvent(new Event('themechange'));
   }
 </script>
 
+{#if compact}
+  <button class="step" aria-label="{opt.label}. Switch to {next.label.toLowerCase()}" title="{opt.label} · switch to {next.label.toLowerCase()}" onclick={() => pick(next.id)}>
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={opt.d} /></svg>
+  </button>
+{:else}
 <div class="toggle" role="radiogroup" aria-label="Theme">
   {#each OPTIONS as o}
     <button role="radio" aria-checked={current === o.id} aria-label={o.label} title={o.label} class:on={current === o.id} onclick={() => pick(o.id)}>
@@ -39,8 +57,13 @@
     </button>
   {/each}
 </div>
+{/if}
 
 <style>
+  /* the header's button: the same size and look as its neighbours */
+  .step { width: 42px; height: 42px; border-radius: 12px; background: var(--surface); box-shadow: var(--shadow); color: var(--text); }
+  .step:hover { color: var(--text); background: var(--surface-2); }
+  @media (max-width: 760px) { .step { width: 44px; height: 44px; border-radius: 14px; } }
   .toggle { display: flex; gap: 2px; padding: 3px; border-radius: 12px; background: var(--surface-2); }
   button {
     width: 36px; height: 34px; border: 0; border-radius: 9px; background: transparent; color: var(--muted);
