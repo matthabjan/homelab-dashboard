@@ -69,7 +69,6 @@
   const changed = $derived(view.settings.filter((s) => s.changed));
 
   /** a row in a few words, for phones: "HTTP · proxmox connected" */
-  const brief = (r: Row) => `${r.check ? KIND[r.check.kind] : 'No check'} · ${r.widget ? `${r.widget.type} ${CONN[r.widget.status][1].toLowerCase()}` : 'no widget'}`;
 
   // a row opens the service's details in a sheet; it is a history entry, so back closes it
   const openId = $derived(page.state.setup ?? null);
@@ -172,7 +171,14 @@
                       <span class="ic"><Icon src={r.icon ?? `/assets/monogram/${encodeURIComponent(r.name)}.svg`} dark={r.iconDark} name={r.name} size={22} /></span>
                       <span class="who">
                         <span class="n">{r.name}</span>
-                        <span class="brief">{brief(r)}</span>
+                        <!-- phones: the check and the widget as labelled lines under the name (wide screens have columns) -->
+                        <span class="pl">
+                          <span class="pline"><span class="lab">Check</span>{#if r.check}<b>{KIND[r.check.kind]}</b>{#if r.check.kind === 'heartbeat'}<span>{r.check.interval}</span>{:else if r.check.kind === 'container'}<span>{r.source !== 'services.yaml' ? `from ${r.source}` : r.check.interval}</span>{:else}<span class="mono">{r.check.target.replace(/^[a-z]+:\/\//, '')}</span>{/if}{:else}<span>none</span>{/if}</span>
+                          {#if r.widget}
+                            <span class="pline"><span class="lab">Widget</span><span class="dot lv-{wl}" aria-hidden="true"></span><b>{r.widget.type}</b><span>{word.toLowerCase()}{#if r.widget.status === 'ok' || r.widget.status === 'error'}&nbsp;· {since(r.widget.lastOk)}{/if}</span></span>
+                            {#if r.widget.error}<span class="perr">{r.widget.error}</span>{/if}
+                          {/if}
+                        </span>
                         {#if r.source !== 'services.yaml'}<span class="sub muted wide">{r.source}</span>{/if}
                       </span>
                     </span>
@@ -320,7 +326,14 @@
   .ic.big { width: 50px; height: 50px; border-radius: 15px; }
   .who, .cell { display: flex; flex-direction: column; gap: 1px; min-width: 0; font-size: 13.5px; }
   .n { font-size: 14.5px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .brief { display: none; font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pl { display: none; }
+  .pline { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+  .pline > :last-child { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .pline b { font-weight: 500; color: var(--text); flex: none; }
+  .pline .lab { width: 46px; flex: none; font-size: 11.5px; }
+  .pline .dot { flex: none; }
+  .pline .mono { font-size: 11.5px; }
+  .perr { padding-left: 52px; font-size: 12.5px; color: color-mix(in srgb, var(--crit) 85%, var(--text)); overflow-wrap: anywhere; }
   .what { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .state { display: inline-flex; align-items: baseline; gap: 7px; font-weight: 500; }
   .state .dot { position: relative; top: -1px; }
@@ -369,10 +382,15 @@
     .strip .v { font-size: 19px; }
     .sec { padding: 16px 14px; border-radius: 20px; }
     .cols, .wide { display: none; }
-    .row { grid-template-columns: minmax(0, 1fr) 14px; min-height: 56px; }
+    .row { grid-template-columns: minmax(0, 1fr) 10px; gap: 8px; min-height: 56px; }
     .row:hover { background: none; }
     .row:active { background: var(--surface-2); }
-    .brief { display: block; }
+    .pl { display: flex; flex-direction: column; gap: 2px; margin-top: 2px; }
+    .row { align-items: start; }
+    .svc { align-items: flex-start; }
+    .end { padding-top: 12px; }
+    /* a service that needs a fix, tinted so it is found while scrolling */
+    .row:has(.perr) { background: color-mix(in srgb, var(--crit) 8%, transparent); }
     .chip { min-height: 36px; }
   }
 </style>
