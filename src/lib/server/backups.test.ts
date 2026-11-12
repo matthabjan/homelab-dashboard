@@ -71,13 +71,17 @@ test('days: a day each, oldest first; a job found late or a critical report make
   const history = {
     // day 0 (a week ago): checked, all on time; day 3: one check found a job late; day 6 (today): on time
     checks: [{ b: 0, n: 48, fails: 0 }, { b: 3, n: 48, fails: 1 }, { b: 6, n: 700, fails: 0 }, { b: 9, n: 5, fails: 5 }],
-    // day 1: a warning beats the completed backup; day 2: a note is no record; day 6: completed
+    // day 1: completed (a warning or failure among the events is a check of the service, not a backup); day 2: a note
+    // is no record; day 6: completed
     events: [{ ts: at(6), sev: 'ok' as const }, { ts: at(6), sev: 'warn' as const }, { ts: at(5), sev: 'info' as const }, { ts: at(1), sev: 'ok' as const }, { ts: now - 9 * D, sev: 'crit' as const }]
   };
-  assert.deepEqual(days(history, now), ['ok', 'warn', 'none', 'crit', 'none', 'none', 'ok']);
+  assert.deepEqual(days(history, now), ['ok', 'ok', 'none', 'crit', 'none', 'none', 'ok']);
   assert.deepEqual(backups([], [], now).sheet.days, ['none', 'none', 'none', 'none', 'none', 'none', 'none'], 'no record without history');
   assert.deepEqual(backups([pbs('A')], [], now, history).sheet.days[3], 'crit', 'the sheet carries them');
   // the PBS server itself was unreachable for a moment today, and came back: its backups are fine
   const blip = { checks: [{ b: 6, n: 700, fails: 0 }], events: [{ ts: at(0) - 2 * H, sev: 'crit' as const, outage: at(0) - 2 * H }, { ts: at(0) - H, sev: 'ok' as const, outage: at(0) - 2 * H }] };
   assert.equal(days(blip, now)[6], 'ok', 'an outage of the backup server is not a failed backup');
+  // the same outage written before outages were marked: no `outage`, still no failed backup
+  const old = { checks: [{ b: 6, n: 700, fails: 0 }], events: [{ ts: at(0) - 2 * H, sev: 'crit' as const, outage: null }] };
+  assert.equal(days(old, now)[6], 'ok', 'an unmarked went down from an older database is not a failed backup either');
 });

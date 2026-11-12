@@ -54,22 +54,24 @@ export const DAYS = 7;
 
 /**
  * What was recorded about backups over the last `DAYS` days: the backup jobs' checks per day (`b` counts days from
- * `now - DAYS` days; `fails` is how many found a job late) and what the backup services reported. An event with
- * `outage` is a check's went down or recovered: the service itself was unreachable, which says nothing about its
- * backups (a late job is in `checks` already), so it doesn't count.
+ * `now - DAYS` days; `fails` is how many found a job late) and what the backup services reported. Only good news
+ * counts from the events: what the backup services report is backups completed (an overdue backup is an alert, not
+ * an event), and their other events are their checks going down and recovering, which say nothing about backups.
+ * Those are marked with `outage`, but not in databases from before outages were marked, so a warning or failure
+ * among the events never counts; a late job is in `checks`.
  */
 export interface BackupHistory {
   checks: { b: number; n: number; fails: number }[];
   events: { ts: number; sev: Severity | 'ok'; outage?: number | null }[];
 }
 
-/** A day each, oldest first: critical when a job was found late or something critical was reported, and so on down. */
+/** A day each, oldest first: critical when a backup job was found late, ok when a job was on time or a backup completed. */
 export function days(history: BackupHistory, now: number): Backups['days'] {
   const rank = { none: 0, ok: 1, warn: 2, crit: 3 } as const;
   const out: (Level | 'none')[] = Array.from({ length: DAYS }, () => 'none');
   const put = (b: number, level: Level) => { if (b >= 0 && b < DAYS && rank[level] > rank[out[b]]) out[b] = level; };
   for (const c of history.checks) if (c.n) put(c.b, c.fails ? 'crit' : 'ok');
-  for (const e of history.events) if (e.sev !== 'info' && e.outage == null) put(Math.floor((e.ts - (now - DAYS * DAY)) / DAY), e.sev);
+  for (const e of history.events) if (e.sev === 'ok' && e.outage == null) put(Math.floor((e.ts - (now - DAYS * DAY)) / DAY), 'ok');
   return out;
 }
 
