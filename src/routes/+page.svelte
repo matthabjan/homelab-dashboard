@@ -405,7 +405,12 @@
           {/if}
         </div>
       {:else}
-        <p class="muted quiet only-phone" data-v="alerts">Nothing needs attention.</p>
+        <!-- phones, the Alerts view with nothing in it: a calm, centred all clear, not an empty list -->
+        <div class="quiet only-phone lv-ok" data-v="alerts">
+          <span class="mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5" /></svg></span>
+          <p class="qt">Nothing needs attention</p>
+          <p class="muted">{snap.verdict.title}{snap.lastChange ? ` · last change ${since(snap.lastChange)}` : ''}</p>
+        </div>
       {/if}
 
       <!-- wide: while something needs attention the card holds only that. Phones: Home always has the most used -->
@@ -691,7 +696,12 @@
   .arow .t { font-size: 14.5px; font-weight: 500; overflow-wrap: anywhere; }
   .arow .w { font-size: 12.5px; color: var(--muted); }
   .arow .d { grid-column: 2; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
-  .quiet { margin: 0; padding: 0 20px 20px; font-size: 14px; }
+  .quiet { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 36px 24px 32px; text-align: center; }
+  .quiet .mark { width: 56px; height: 56px; margin: 0 0 6px; }
+  .quiet .mark svg { width: 28px; height: 28px; }
+  .quiet p { margin: 0; text-wrap: balance; }
+  .quiet .qt { font-size: 20px; font-weight: 600; letter-spacing: -0.015em; }
+  .quiet .muted { font-size: 14px; }
   .most { display: flex; flex-direction: column; gap: 6px; padding: 20px 26px 20px 8px; }
   .most .k { padding-left: 10px; }
   @media not all and (max-width: 760px) { .most.need { display: none; } }
