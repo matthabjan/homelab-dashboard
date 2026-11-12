@@ -1,7 +1,7 @@
 // Turns engine state + history into the JSON the browser renders.
 import fs from 'node:fs';
 import { resolveIcon, assetUrl, darkAssetUrl } from './config.ts';
-import { probeStats, uptimeSince, probeBuckets, probeDays, eventsOf, series, recentEvents, openScores } from './db.ts';
+import { probeStats, uptimeSince, probeBuckets, probeDays, eventLevels, series, recentEvents, openScores } from './db.ts';
 import { fmtHours, fmtSize, plural } from './format.ts';
 import { hostService, hostSource } from './local.ts';
 import { heartbeatStatus, kindOf, status as checkStatus, withoutBlips } from './check.ts';
@@ -462,7 +462,7 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
     const services = engine.cfg.services;
     return {
       checks: probeDays(services.filter((s) => s.heartbeat?.backup).map((s) => s.id), since, 24 * H),
-      events: eventsOf(services.filter((s) => s.heartbeat?.backup || s.widget?.type === 'proxmoxbackupserver').map((s) => s.id), since, 500)
+      events: eventLevels(services.filter((s) => s.heartbeat?.backup || s.widget?.type === 'proxmoxbackupserver').map((s) => s.id), since)
     };
   });
   const { sheet: backups, panel: backupsPanel } = backupsOf(widgets.flatMap(({ s, w }) => (w.backups ? [{ id: s.id, name: s.name, backups: w.backups }] : [])), jobs, now, backupHistory);

@@ -77,4 +77,7 @@ test('days: a day each, oldest first; a job found late or a critical report make
   assert.deepEqual(days(history, now), ['ok', 'warn', 'none', 'crit', 'none', 'none', 'ok']);
   assert.deepEqual(backups([], [], now).sheet.days, ['none', 'none', 'none', 'none', 'none', 'none', 'none'], 'no record without history');
   assert.deepEqual(backups([pbs('A')], [], now, history).sheet.days[3], 'crit', 'the sheet carries them');
+  // the PBS server itself was unreachable for a moment today, and came back: its backups are fine
+  const blip = { checks: [{ b: 6, n: 700, fails: 0 }], events: [{ ts: at(0) - 2 * H, sev: 'crit' as const, outage: at(0) - 2 * H }, { ts: at(0) - H, sev: 'ok' as const, outage: at(0) - 2 * H }] };
+  assert.equal(days(blip, now)[6], 'ok', 'an outage of the backup server is not a failed backup');
 });

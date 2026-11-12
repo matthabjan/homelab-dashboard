@@ -71,6 +71,12 @@ export function eventsOf(sids: string[], since: number, limit = 30) {
   return all<EventRow>(`SELECT ts, sev, sid, title, detail FROM events WHERE sid IN (${sids.map(() => '?').join(', ')}) AND ts >= ? ORDER BY ts DESC LIMIT ?`, ...sids, since, limit);
 }
 
+/** What several services reported since `since`, with when an outage began for a check's down and recovered events. */
+export function eventLevels(sids: string[], since: number) {
+  if (!sids.length) return [];
+  return all<{ ts: number; sev: WidgetEvent['sev']; outage: number | null }>(`SELECT ts, sev, outage FROM events WHERE sid IN (${sids.map(() => '?').join(', ')}) AND ts >= ?`, ...sids, since);
+}
+
 /** One service's events, newest first: the service sheet's activity. */
 export function serviceEvents(sid: string, since: number, limit = 30) {
   return all<EventRow>('SELECT ts, sev, sid, title, detail FROM events WHERE sid = ? AND ts >= ? ORDER BY ts DESC LIMIT ?', sid, since, limit);
