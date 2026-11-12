@@ -166,13 +166,13 @@
   <div class="body" bind:this={body}>
     <button class="grabber" onclick={onclose} aria-label={backTo ? 'Close all' : 'Close'}><span></span></button>
     <header>
+      <!-- a level deeper: a round button back to the one below, beside the title; where it leads is its label -->
+      {#if backTo}
+        <button class="back" onclick={onback} aria-label="Back to {backTo}" title="Back to {backTo}">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
+        </button>
+      {/if}
       <div class="ttl">
-        {#if backTo}
-          <button class="back" onclick={onback}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
-            <span class="vh">Back to </span>{backTo}
-          </button>
-        {/if}
         <h2 id="sheet-title" tabindex="-1">{title}</h2>
         {#if sub}<p class="muted">{sub}</p>{/if}
       </div>
@@ -196,6 +196,8 @@
   .sheet::backdrop { background: rgba(10, 13, 18, 0.36); }
   .body { height: 100%; box-sizing: border-box; overflow-y: auto; overscroll-behavior: contain; padding: 22px 24px 28px; display: flex; flex-direction: column; gap: 18px; }
   header { display: flex; align-items: flex-start; gap: 12px; }
+  /* beside the back button the title sits level with its middle */
+  header:has(.back) { align-items: center; }
   .ttl { flex: 1; min-width: 0; }
   h2 { font-size: 21px; font-weight: 700; letter-spacing: -0.015em; }
   h2:focus { outline: none; }
@@ -203,12 +205,10 @@
   .close { flex: none; width: 40px; height: 40px; border: 0; border-radius: 12px; background: var(--surface-2); color: var(--text); display: flex; align-items: center; justify-content: center; cursor: pointer; }
   .close:hover { background: var(--surface-3); }
   .level { display: flex; flex-direction: column; gap: inherit; min-width: 0; }
-  .back {
-    display: inline-flex; align-items: center; gap: 2px; margin: -4px 0 4px -6px; padding: 4px 8px 4px 4px; min-height: 32px;
-    border: 0; border-radius: 8px; background: none; color: var(--acc); font: inherit; font-size: 14px; font-weight: 500; cursor: pointer;
-  }
-  .back:hover { background: var(--surface-2); }
-  .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  /* the same size and fill as the close button, round so the two read apart */
+  .back { flex: none; width: 40px; height: 40px; margin-right: 2px; border: 0; border-radius: 50%; background: var(--surface-2); color: var(--text); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+  .back:hover { background: var(--surface-3); }
+  .back svg { margin-left: -2px; }
   .grabber { display: none; }
   @media (prefers-reduced-motion: no-preference) {
     .sheet[open] { animation: in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1); }
@@ -221,6 +221,7 @@
     .sheet.full { height: calc(100dvh - 20px - env(safe-area-inset-top)); max-height: none; }
     .body { padding: 0 16px calc(24px + env(safe-area-inset-bottom)); gap: 14px; }
     .close { display: none; }
+    .back { width: 44px; height: 44px; }
     /* the handle: what drags, and a button that closes; the sheet itself follows the finger */
     .grabber { display: flex; align-items: center; justify-content: center; flex: none; width: 100%; height: 30px; margin-bottom: -8px; padding: 0; border: 0; background: none; cursor: grab; }
     .grabber span { width: 40px; height: 5px; border-radius: 3px; background: var(--muted); opacity: 0.45; }
