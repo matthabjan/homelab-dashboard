@@ -54,11 +54,13 @@ export const DAYS = 7;
 
 /**
  * What was recorded about backups over the last `DAYS` days: the backup jobs' checks per day (`b` counts days from
- * `now - DAYS` days; `fails` is how many found a job late) and what the backup services reported.
+ * `now - DAYS` days; `fails` is how many found a job late) and what the backup services reported. An event with
+ * `outage` is a check's went down or recovered: the service itself was unreachable, which says nothing about its
+ * backups (a late job is in `checks` already), so it doesn't count.
  */
 export interface BackupHistory {
   checks: { b: number; n: number; fails: number }[];
-  events: { ts: number; sev: Severity | 'ok' }[];
+  events: { ts: number; sev: Severity | 'ok'; outage?: number | null }[];
 }
 
 /** A day each, oldest first: critical when a job was found late or something critical was reported, and so on down. */
@@ -67,7 +69,7 @@ export function days(history: BackupHistory, now: number): Backups['days'] {
   const out: (Level | 'none')[] = Array.from({ length: DAYS }, () => 'none');
   const put = (b: number, level: Level) => { if (b >= 0 && b < DAYS && rank[level] > rank[out[b]]) out[b] = level; };
   for (const c of history.checks) if (c.n) put(c.b, c.fails ? 'crit' : 'ok');
-  for (const e of history.events) if (e.sev !== 'info') put(Math.floor((e.ts - (now - DAYS * DAY)) / DAY), e.sev);
+  for (const e of history.events) if (e.sev !== 'info' && e.outage == null) put(Math.floor((e.ts - (now - DAYS * DAY)) / DAY), e.sev);
   return out;
 }
 
