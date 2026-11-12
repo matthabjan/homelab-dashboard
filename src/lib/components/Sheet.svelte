@@ -4,8 +4,8 @@
 
   // Details on demand: a modal side panel on desktop, a bottom sheet on phones. The native <dialog> brings focus
   // handling, Esc, Android's back gesture and the backdrop; a click on the backdrop closes it too. On phones the
-  // sheet has no X: it opens part of the way up, drags up to the full height and down to shrink and then close, and
-  // its handle is a button that closes it, the tap alternative to the drag (WCAG 2.5.7).
+  // sheet has no X: it opens part of the way up and follows the finger, up to the full height and down to any height
+  // or closed in one pull, and its handle is a button that closes it, the tap alternative to the drag (WCAG 2.5.7).
   // Sheets stack: a deeper level slides in from the right with a back button to the one below. Esc and Android's back
   // gesture go up one level (`onback`); the close button, the backdrop and a swipe close them all (`onclose`).
   interface Props {
@@ -34,6 +34,7 @@
     if (open && !dialog.open) {
       full = untrack(() => tall);
       dialog.style.height = '';
+      dialog.style.maxHeight = '';
       dialog.style.transform = '';
       dialog.style.transition = '';
       dialog.showModal();
@@ -57,61 +58,90 @@
   });
   const reduce = () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  // dragging (phones only). Up, while part of the way up: the sheet grows with the finger and stays full past a short
-  // pull. Down, with the content scrolled to the top: it follows the finger; past a quarter of its height or on a quick
-  // flick a full sheet shrinks and a shrunk one closes, and a long pull closes either. Otherwise it snaps back
+  // dragging (phones only), one fluid gesture. The sheet's top edge follows the finger: above where it started the
+  // sheet grows (up to the full height), below it slides down. Letting go, the sheet carries on with the finger's speed
+  // for a moment and stays where that lands: closed when that is under a third of where it opened or past the bottom
+  // (or on a quick flick down),
+  // full when it is near the top, otherwise at that height. A pull starts on a downward move with the content
+  // scrolled to the top, or an upward one while the sheet isn't full; any other move scrolls the content
   $effect(() => {
     const d = dialog;
     if (!d) return;
     const phone = window.matchMedia('(max-width: 760px)');
-    let start: { y: number; t: number } | null = null;
-    let dy = 0;
-    let dragging: 'down' | 'up' | false = false;
-    let h0 = 0;
-    const settle = (to: string, then?: () => void) => {
-      const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      d.style.transition = reduce ? '' : 'transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1)';
-      d.style.transform = to;
-      if (then) (reduce ? then() : setTimeout(then, 200));
+    let start: { y: number; h: number } | null = null;
+    let dragging = false;
+    let maxH = 0;
+    let vis = 0;
+    // the last moments of the move, for the speed when letting go
+    let trail: { y: number; t: number }[] = [];
+    // the room above the sheet at full height, as the CSS leaves it: 20 px and the notch
+    const fullHeight = () => {
+      const probe = document.createElement('div');
+      probe.style.cssText = 'position:fixed;top:0;height:env(safe-area-inset-top);visibility:hidden;pointer-events:none';
+      document.body.append(probe);
+      const inset = probe.offsetHeight;
+      probe.remove();
+      return window.innerHeight - 20 - inset;
     };
+    const motion = () => !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const EASE = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
     const down = (e: TouchEvent) => {
       if (!phone.matches || e.touches.length !== 1) return;
-      start = { y: e.touches[0].clientY, t: e.timeStamp };
-      dy = 0;
+      start = { y: e.touches[0].clientY, h: d.offsetHeight };
       dragging = false;
+      trail = [{ y: e.touches[0].clientY, t: performance.now() }];
     };
     const move = (e: TouchEvent) => {
       if (!start) return;
-      dy = e.touches[0].clientY - start.y;
+      const y = e.touches[0].clientY;
+      const dy = y - start.y;
       if (!dragging) {
-        // a pull down from the top drags the sheet, a pull up grows one that isn't full; anything else scrolls as usual
-        if (dy > 6 && (body?.scrollTop ?? 0) <= 0) dragging = 'down';
-        else if (dy < -6 && !full) { dragging = 'up'; h0 = d.offsetHeight; }
-        else if (Math.abs(dy) > 6) { start = null; return; }
-        else return;
+        if (Math.abs(dy) <= 6) return;
+        maxH = fullHeight();
+        const grow = dy < 0 && start.h < maxH - 2;
+        const pull = dy > 0 && (body?.scrollTop ?? 0) <= 0;
+        if (!grow && !pull) { start = null; return; }
+        dragging = true;
+        d.style.transition = 'none';
+        d.style.maxHeight = 'none';
       }
       e.preventDefault();
-      d.style.transition = 'none';
-      if (dragging === 'up') d.style.height = `${Math.min(window.innerHeight - 20, h0 - dy)}px`;
-      else d.style.transform = `translateY(${Math.max(0, dy)}px)`;
+      const now = performance.now();
+      trail.push({ y, t: now });
+      while (trail.length > 2 && now - trail[0].t > 100) trail.shift();
+      vis = Math.min(maxH, start.h - dy);
+      if (vis >= start.h) { d.style.height = `${vis}px`; d.style.transform = ''; }
+      else { d.style.height = `${start.h}px`; d.style.transform = `translateY(${start.h - vis}px)`; }
     };
-    const up = (e: TouchEvent) => {
-      if (!start || !dragging) { start = null; return; }
-      const fast = dy / Math.max(1, e.timeStamp - start.t) > 0.5;
-      const was = dragging;
+    const up = () => {
+      const s = start;
       start = null;
+      if (!s || !dragging) return;
       dragging = false;
-      if (was === 'up') {
-        // let go: the height animates on to full, or back to where it was
-        d.style.transition = '';
-        d.style.height = '';
-        if (dy < -40) full = true;
+      const first = trail[0], last = trail[trail.length - 1];
+      // px per ms, positive downwards
+      const speed = last.t > first.t ? (last.y - first.y) / (last.t - first.t) : 0;
+      const lands = vis - speed * 220;
+      const opened = Math.min(maxH, Math.max(s.h, 160));
+      // a quick flick down closes from any height, as a long pull does
+      if (lands < opened / 3 || lands < 120 || (speed > 0.8 && s.h - vis > 40)) {
+        // closed: slide out from where it is
+        const gone = () => { onclose(); };
+        if (!motion()) return gone();
+        d.style.transition = `transform 0.2s ${EASE}`;
+        d.style.transform = `translateY(${d.offsetHeight}px)`;
+        setTimeout(gone, 200);
         return;
       }
-      const far = dy > d.offsetHeight / 4 || (fast && dy > 30);
-      if (far && full && dy < d.offsetHeight * 0.55) { full = false; settle(''); }
-      else if (far) settle('translateY(100%)', onclose);
-      else settle('');
+      const to = maxH - lands < 72 ? maxH : Math.min(maxH, lands);
+      full = to >= maxH;
+      // from what is shown now (its height, no offset) to where it lands, as one movement
+      d.style.transition = 'none';
+      d.style.height = `${vis}px`;
+      d.style.transform = '';
+      void d.offsetHeight;
+      d.style.transition = motion() ? `height 0.26s ${EASE}` : '';
+      d.style.height = `${to}px`;
     };
     d.addEventListener('touchstart', down, { passive: true });
     d.addEventListener('touchmove', move, { passive: false });

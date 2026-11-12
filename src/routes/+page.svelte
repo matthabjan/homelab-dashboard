@@ -879,11 +879,28 @@
     .most { padding: 0 12px 14px; }
     .apps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
     .app { width: auto; }
-    .infra { border-radius: 22px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .cell { padding: 12px 14px; }
-    .fig .v, .fig .isv { font-size: 19px; }
-    /* an odd one left over takes the row */
-    .cell:last-child:nth-child(even) { grid-column: 1 / -1; }
+    /* the strip as a compact list: a row per area, its label over its figure, the picture on the right. The line of
+       context shows only for an area with a problem (the sheet has the rest) */
+    .infra { display: flex; flex-direction: column; padding: 4px 6px; border-radius: 22px; }
+    .cell { display: grid; grid-template-columns: minmax(0, 1fr) 68px; grid-template-areas: 'lab viz' 'fig viz' 's s'; align-items: center; gap: 1px 14px; padding: 10px 10px; }
+    .cell + .cell::before { display: block; left: 10px; right: 10px; top: 0; bottom: auto; border-left: 0; border-top: 1px solid var(--line); }
+    .cell:hover::before, .cell:hover + .cell::before { display: block; }
+    .cell:active { background: var(--surface-2); }
+    .clab { grid-area: lab; font-size: 12.5px; }
+    .fig { grid-area: fig; gap: 0 9px; }
+    .fig .v, .fig .isv { font-size: 17px; }
+    .isk, .fig .u { font-size: 12px; }
+    .fig .u { margin-left: -5px; }
+    .viz { grid-area: viz; height: 24px; align-items: center; }
+    .viz :global(svg) { height: 24px !important; }
+    .meter { margin: 0; }
+    .pips { flex-wrap: nowrap; gap: 3px; margin: 0; }
+    .pips span { width: 10px; height: 14px; border-radius: 3px; }
+    .days { gap: 2px; margin: 0; align-items: center; }
+    .days span { height: 12px; border-radius: 2px; }
+    .days span.bad { height: 6px; }
+    .cell .s { grid-area: s; display: none; font-size: 12px; margin-top: 2px; }
+    .cell.alert .s { display: block; color: color-mix(in srgb, var(--lv) 75%, var(--text)); }
     .sec { padding: 16px 14px; border-radius: 20px; }
     .tiles { grid-template-columns: minmax(0, 1fr); }
     .tile { min-height: 56px; }
