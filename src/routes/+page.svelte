@@ -405,7 +405,12 @@
           {/if}
         </div>
       {:else}
-        <p class="muted quiet only-phone" data-v="alerts">Nothing needs attention.</p>
+        <!-- phones, the Alerts view with nothing in it: a calm, centred all clear, not an empty list -->
+        <div class="quiet only-phone lv-ok" data-v="alerts">
+          <span class="mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5" /></svg></span>
+          <p class="qt">Nothing needs attention</p>
+          <p class="muted">{snap.verdict.title}{snap.lastChange ? ` · last change ${since(snap.lastChange)}` : ''}</p>
+        </div>
       {/if}
 
       <!-- wide: while something needs attention the card holds only that. Phones: Home always has the most used -->
@@ -691,7 +696,12 @@
   .arow .t { font-size: 14.5px; font-weight: 500; overflow-wrap: anywhere; }
   .arow .w { font-size: 12.5px; color: var(--muted); }
   .arow .d { grid-column: 2; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
-  .quiet { margin: 0; padding: 0 20px 20px; font-size: 14px; }
+  .quiet { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 36px 24px 32px; text-align: center; }
+  .quiet .mark { width: 56px; height: 56px; margin: 0 0 6px; }
+  .quiet .mark svg { width: 28px; height: 28px; }
+  .quiet p { margin: 0; text-wrap: balance; }
+  .quiet .qt { font-size: 20px; font-weight: 600; letter-spacing: -0.015em; }
+  .quiet .muted { font-size: 14px; }
   .most { display: flex; flex-direction: column; gap: 6px; padding: 20px 26px 20px 8px; }
   .most .k { padding-left: 10px; }
   @media not all and (max-width: 760px) { .most.need { display: none; } }
@@ -707,15 +717,15 @@
   .pmark { position: absolute; top: -3px; right: -3px; width: 12px; height: 12px; border-radius: 50%; background: var(--lv); box-shadow: 0 0 0 2px var(--surface); }
 
   /* infrastructure and backups: one strip, a cell per area: label, figure, a small picture of it, context */
-  .infra { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); padding: 6px; }
-  .cell { position: relative; display: flex; flex-direction: column; gap: 4px; min-width: 0; padding: 14px 16px; border: 0; border-radius: 14px; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; transition: background-color 0.15s; }
+  .infra { display: flex; padding: 6px; }
+  .cell { position: relative; flex: 1 1 0; display: flex; flex-direction: column; gap: 4px; min-width: 0; padding: 14px 16px; border: 0; border-radius: 14px; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; transition: background-color 0.15s; }
   .cell:hover { background: var(--surface-2); }
   .cell:focus-visible { outline: 2px solid var(--acc); outline-offset: -2px; }
   /* a rule between cells, left out next to a hovered one */
   .cell + .cell::before { content: ''; position: absolute; left: 0; top: 14px; bottom: 14px; border-left: 1px solid var(--line); }
   .cell:hover::before, .cell:hover + .cell::before { display: none; }
-  /* a cell of several figures (System: CPU, RAM, temperature) gets the room to keep them on one line */
-  .cell:has(.ist + .ist + .ist) { grid-column: span 2; }
+  /* a cell of several figures (System: CPU, RAM, temperature) gets half again the room, enough for one line */
+  .cell:has(.ist + .ist + .ist) { flex-grow: 1.5; }
   .clab { display: flex; align-items: center; gap: 7px; min-width: 0; font-size: 13px; color: var(--muted); }
   .kw::before { content: '·'; margin-right: 7px; }
   .fig { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 12px; min-width: 0; }
@@ -846,16 +856,18 @@
   .flash { animation: flash 2.4s ease-out; }
   @keyframes flash { 0%, 30% { box-shadow: 0 0 0 3px var(--lv), var(--shadow); } }
 
-  /* narrower: the list goes under the sentence, activity under the services; the strip wraps to three across */
+  /* narrower: the list goes under the sentence, activity under the services; the strip keeps its row, tighter */
   @media (max-width: 1000px) {
     .top, .top.calm { grid-template-columns: minmax(0, 1fr); }
     .triage { border-left: 0; border-top: 1px solid var(--line); }
     .most { padding: 0 22px 20px; }
     .lower { grid-template-columns: minmax(0, 1fr); }
     .side { position: static; }
-    .infra { grid-auto-flow: row; grid-template-columns: repeat(4, minmax(0, 1fr)); }
-    .cell:has(.ist + .ist + .ist) { grid-column: 1 / -1; }
-    .cell + .cell::before { display: none; }
+    /* the strip stays one row: System a little wider, its figures wrap onto a second line rather than taking a row */
+    .cell:has(.ist + .ist + .ist) { flex-grow: 1.15; }
+    .cell { padding: 12px 12px; }
+    .fig { gap: 0 8px; }
+    .fig .v, .fig .isv { font-size: 18px; }
   }
   /* phones: one view at a time, above the tab bar */
   @media (max-width: 760px) {
@@ -885,7 +897,7 @@
     /* the strip as a compact list: a row per area, its label over its figure, the picture on the right. The line of
        context shows only for an area with a problem (the sheet has the rest) */
     .infra { display: flex; flex-direction: column; padding: 4px 6px; border-radius: 22px; }
-    .cell { display: grid; grid-template-columns: minmax(0, 1fr) 68px; grid-template-areas: 'lab viz' 'fig viz' 's s'; align-items: center; gap: 1px 14px; padding: 10px 10px; }
+    .cell { flex: none; display: grid; grid-template-columns: minmax(0, 1fr) 68px; grid-template-areas: 'lab viz' 'fig viz' 's s'; align-items: center; gap: 1px 14px; padding: 10px 10px; }
     .cell + .cell::before { display: block; left: 10px; right: 10px; top: 0; bottom: auto; border-left: 0; border-top: 1px solid var(--line); }
     .cell:hover::before, .cell:hover + .cell::before { display: block; }
     .cell:active { background: var(--surface-2); }

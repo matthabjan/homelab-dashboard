@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ThemeToggle from './ThemeToggle.svelte';
   import type { Settings } from '$lib/types';
 
   // The header every page shares: the brand (home), search, the live state, the monitoring link and Setup. On phones
@@ -59,6 +60,7 @@
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8" /></svg>
       </a>
     {/if}
+    <ThemeToggle />
     <a class="hbtn" class:on={current === 'setup'} href={current === 'setup' ? '/' : '/config'} aria-label={setupLabel} title={setupLabel}>
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1" /><circle cx="15" cy="6" r="2" /><circle cx="9" cy="12" r="2" /><circle cx="17" cy="18" r="2" /></svg>
       {#if configProblems && current !== 'setup'}<span class="cfg-badge mono" aria-hidden="true">{configProblems}</span>{/if}

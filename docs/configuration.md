@@ -35,7 +35,7 @@ Every key is optional. Anything you leave out keeps its default, and nested obje
 | Key | Default | Description |
 |---|---|---|
 | `title` | `Homelab` | Page title and the default name of the installed app. |
-| `theme` | `system` | Default theme for new visitors: `system`, `light` or `dark`. Each viewer can switch it on Setup, under Settings, and the choice is remembered per device. |
+| `theme` | `system` | Default theme for new visitors: `system`, `light` or `dark`. Each viewer can switch it next to Setup in the header (on phones one button that steps through system, light and dark), and the choice is remembered per device. |
 | `accent` | `#4F8DF7` | Accent colour as a hex value (`#rgb` to `#rrggbbaa`). An invalid value falls back to the default. |
 | `linkTarget` | `_blank` | Where service links open: `_blank` (a new tab) or `_self`. |
 | `tlsVerify` | `true` | Verify TLS certificates when calling widget APIs. You can override it per service. See [TLS for widget APIs](deployment.md#tls-for-widget-apis). |
