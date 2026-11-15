@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { checkIn, createLimiter, heartbeatState, kvKey, response, tokenMatches, tokenOf } from './heartbeat.ts';
 import { memoryKv } from './test-helpers.ts';
-import type { HeartbeatRecord, Kv, Service } from '$lib/types';
+import type { HeartbeatRecord, Kv, Service } from '#lib/types';
 
 const H = 3600_000;
 const hb = { id: 'backups-nightly-restic', every: 24 * H, grace: H, token: 's3cret', backup: true };

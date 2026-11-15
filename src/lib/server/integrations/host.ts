@@ -3,7 +3,7 @@
 // is the Proxmox host's, so these are the host's real CPU / NVMe / drive temperatures.
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import type { Temps } from '$lib/types';
+import type { Temps } from '#lib/types';
 
 const HWMON = process.env.HWMON_DIR || '/sys/class/hwmon';
 const CPU_DRIVERS = ['coretemp', 'k10temp', 'zenpower', 'cpu_thermal', 'soc_thermal', 'acpitz'];

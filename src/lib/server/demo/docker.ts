@@ -1,7 +1,7 @@
 // Docker through a socket proxy: a second, smaller Docker host than the one behind Portainer (another engine id,
 // so its containers add to the count). "issues": syncthing's health check fails.
 import { container } from './portainer.ts';
-import type { Fixtures } from '$lib/types';
+import type { Fixtures } from '#lib/types';
 import type { DockerContainer, DockerContainerInspect } from '../integrations/containers.ts';
 
 const names = ['socket-proxy', 'unbound', 'restic-rest', 'mealie', 'ntfy'];

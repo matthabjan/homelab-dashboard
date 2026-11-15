@@ -1,6 +1,6 @@
 import type { LayoutServerLoad } from './$types';
-import { getEngine } from '$lib/server/engine.ts';
-import { assetUrl, darkAssetUrl } from '$lib/server/config.ts';
+import { getEngine } from '#lib/server/engine.ts';
+import { assetUrl, darkAssetUrl } from '#lib/server/config.ts';
 
 export const load: LayoutServerLoad = () => {
   const { settings } = getEngine().cfg;

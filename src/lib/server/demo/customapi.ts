@@ -1,5 +1,5 @@
 // Custom API: a media server's JSON status endpoint, with a nested object. "issues": it reports itself unhealthy.
-import type { Fixtures, Json } from '$lib/types';
+import type { Fixtures, Json } from '#lib/types';
 
 export default {
   'GET /api/status': ({ scenario, now }): Record<string, Json> => ({

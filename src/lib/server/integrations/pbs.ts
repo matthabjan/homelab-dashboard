@@ -6,7 +6,7 @@ import { trimUrl } from '../http.ts';
 import { card, fmtPair, fmtDuration, fmtPct, pct } from '../format.ts';
 import { fromAttributes, isVirtual, kindOf, slowly, toDrive } from './smart.ts';
 import type { SmartAttribute } from './smart.ts';
-import type { Alert, Drive, Kv, SmartReading, Stat, StorageRow, UsageRow, WidgetEvent, Context, Widget, WidgetResult } from '$lib/types';
+import type { Alert, Drive, Kv, SmartReading, Stat, StorageRow, UsageRow, WidgetEvent, Context, Widget, WidgetResult } from '#lib/types';
 
 /** Every PBS API answer wraps its payload in `data`. */
 export interface PbsResponse<T> {

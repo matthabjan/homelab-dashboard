@@ -7,7 +7,7 @@ import { container } from '../demo/portainer.ts';
 import { DEFAULT_SETTINGS } from '../config.ts';
 import { crossed, fieldPath, formatValue } from './customapi.ts';
 import { memoryKv } from '../test-helpers.ts';
-import type { CustomApiMapping, Fixtures, Json, Shared, Transport, Widget, WidgetResult } from '$lib/types';
+import type { CustomApiMapping, Fixtures, Json, Shared, Transport, Widget, WidgetResult } from '#lib/types';
 import type { OmvRpcRequest } from './openmediavault.ts';
 
 /** A widget block without its type, which each test adds. */

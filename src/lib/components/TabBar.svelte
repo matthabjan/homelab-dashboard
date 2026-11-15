@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Level } from '$lib/types';
+  import type { Level } from '#lib/types';
 
   // Phones: the app's four destinations in the thumb zone, the same on every page. Home, Services and Alerts are the
   // dashboard's views; Search opens the palette. Hidden above the phone breakpoint, where the header and the

@@ -1,6 +1,6 @@
 import type { RequestHandler } from './$types';
-import { getEngine } from '$lib/server/engine.ts';
-import { assetUrl } from '$lib/server/config.ts';
+import { getEngine } from '#lib/server/engine.ts';
+import { assetUrl } from '#lib/server/config.ts';
 
 export const GET: RequestHandler = () => {
   const { settings } = getEngine().cfg;

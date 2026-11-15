@@ -4,7 +4,7 @@ import { trimUrl } from '../http.ts';
 import { card, fmtPair, fmtPct, pct } from '../format.ts';
 import { usageLevel } from '../storage.ts';
 import { attributesFromText, fromAttributes, fromNvmeText, slowly, toDrive } from './smart.ts';
-import type { Alert, UsageRow, Context, Drive, SmartReading, Stat, Widget, WidgetResult } from '$lib/types';
+import type { Alert, UsageRow, Context, Drive, SmartReading, Stat, Widget, WidgetResult } from '#lib/types';
 
 /** What /rpc.php is sent. */
 export interface OmvRpcRequest {

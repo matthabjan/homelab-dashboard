@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Gauge } from '$lib/types';
+  import type { Gauge } from '#lib/types';
   import Chart from './Chart.svelte';
 
   // One System reading: its value, then its last 24 h as a chart. Scrubbing the chart puts the reading at that

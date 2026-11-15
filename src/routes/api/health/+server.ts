@@ -1,5 +1,5 @@
 import type { RequestHandler } from './$types';
-import { getEngine } from '$lib/server/engine.ts';
+import { getEngine } from '#lib/server/engine.ts';
 
 export const GET: RequestHandler = () => {
   const ok = !!getEngine().snapshot;

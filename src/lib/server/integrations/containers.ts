@@ -2,7 +2,7 @@
 // container counts, failed and unhealthy containers, and services from `dashboard.*` labels.
 // Containers with label `dashboard.ignore=true` are skipped.
 import { card } from '../format.ts';
-import type { Alert, ContainerCounts, ContainerState, Context, RequestOptions, ServiceDef, Stat, WidgetResult } from '$lib/types';
+import type { Alert, ContainerCounts, ContainerState, Context, RequestOptions, ServiceDef, Stat, WidgetResult } from '#lib/types';
 
 /** An entry of GET /containers/json?all=1 (Docker Engine API). */
 export interface DockerContainer {

@@ -13,7 +13,7 @@ import customapi from './customapi.ts';
 import whatsupdocker from './whatsupdocker.ts';
 import homeassistant from './homeassistant.ts';
 
-import type { Fixtures, Transport } from '$lib/types';
+import type { Fixtures, Transport } from '#lib/types';
 
 export const FIXTURES = { proxmox, proxmoxbackupserver, opnsense, fritzbox, adguard, portainer, openmediavault, docker, pihole, customapi, whatsupdocker, homeassistant };
 

@@ -1,6 +1,6 @@
 import type { RequestHandler } from './$types';
-import type { Snapshot } from '$lib/types';
-import { getEngine } from '$lib/server/engine.ts';
+import type { Snapshot } from '#lib/types';
+import { getEngine } from '#lib/server/engine.ts';
 
 // Caps on open streams, so one client can't exhaust the server.
 // Per-client needs ADDRESS_HEADER / XFF_DEPTH behind a proxy; otherwise every client shares the proxy's address.

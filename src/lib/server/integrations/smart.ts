@@ -1,6 +1,6 @@
 // Physical drives and their SMART data, as PVE, OMV and PBS report them, reduced to one Drive shape.
 // Not an integration itself: the proxmox, openmediavault and proxmoxbackupserver integrations use it.
-import type { Context, Drive, SmartReading } from '$lib/types';
+import type { Context, Drive, SmartReading } from '#lib/types';
 
 const SLOW_MS = 10 * 60_000; // SMART changes slowly, and reading it wakes the disks
 

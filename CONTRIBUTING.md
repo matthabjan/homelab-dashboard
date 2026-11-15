@@ -4,7 +4,7 @@ Issues and pull requests are welcome. For larger changes, please open an issue f
 
 ## Setup
 
-Requires Node 22.13 or later (Node 24 is what the image ships with).
+Requires Node 22.17 or later (Node 24 is what the image ships with).
 
 ```bash
 npm ci
@@ -24,7 +24,7 @@ To test against your real homelab, copy `config.example/` to `config/` and drop 
 ```
 src/
 ├── hooks.server.ts              starts and stops the engine
-├── service-worker.ts            caches static assets for the PWA (never page loads or /api/*)
+├── service-worker/index.ts      caches static assets for the PWA (never page loads or /api/*)
 ├── lib/
 │   ├── components/              Svelte UI pieces (Sheet, Infrastructure, Palette, charts)
 │   ├── types.d.ts               shared types (config, widget results, snapshot)

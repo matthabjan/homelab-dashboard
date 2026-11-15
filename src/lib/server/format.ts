@@ -1,4 +1,4 @@
-import type { Level, Stat } from '$lib/types';
+import type { Level, Stat } from '#lib/types';
 
 export const GiB = 1024 ** 3;
 export const TiB = 1024 ** 4;

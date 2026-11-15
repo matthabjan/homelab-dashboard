@@ -1,5 +1,5 @@
 // Pi-hole: v6 (session login, summary, blocking state) and v5 (api.php summaryRaw). "issues": blocking is disabled.
-import type { Fixtures } from '$lib/types';
+import type { Fixtures } from '#lib/types';
 import type { PiholeAuth, PiholeBlocking, PiholeSummary, PiholeV5Summary } from '../integrations/pihole.ts';
 
 const SID = 'demo-session-id';

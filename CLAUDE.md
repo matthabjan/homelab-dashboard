@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Self-hosted homelab status page and launcher (SvelteKit 2 / Svelte 5, Node adapter, Node ≥ 22.13, image ships Node 24). Reads gethomepage-compatible YAML, polls Proxmox VE, PBS, OPNsense, OpenMediaVault, AdGuard Home, Pi-hole, Portainer, Docker (socket proxy), What's Up Docker, Home Assistant, FRITZ!Box and any JSON API (`customapi`), and pushes one JSON snapshot to browsers over SSE.
+Self-hosted homelab status page and launcher (SvelteKit 3 / Svelte 5, Node adapter, Node ≥ 22.17, image ships Node 24). Reads gethomepage-compatible YAML, polls Proxmox VE, PBS, OPNsense, OpenMediaVault, AdGuard Home, Pi-hole, Portainer, Docker (socket proxy), What's Up Docker, Home Assistant, FRITZ!Box and any JSON API (`customapi`), and pushes one JSON snapshot to browsers over SSE.
 
 ## Commands
 
@@ -50,9 +50,10 @@ One Node process, no worker or external DB. `src/hooks.server.ts` starts a singl
 
 - TypeScript in strict mode, `<script lang="ts">` in components, no `any` (use `unknown` and narrow). Shared shapes go in `types.d.ts`, imported with `import type`. Svelte 5 runes; props typed with an `interface Props`.
 - Tests run the `.ts` sources with Node's type stripping, so relative imports name the `.ts` file (`./db.ts`), only erasable syntax is allowed (`erasableSyntaxOnly`), and type-only imports use `import type`.
+- App-wide imports use `#lib/...` (subpath imports in `package.json`; Kit 3 removed `$lib`). `#lib/types` maps to `src/lib/types.d.ts`.
 - External API shapes (`PveNode`, `AdguardStats`, …) live in their integration's file, exported; fixtures return them, so a drifting fixture fails `npm run check`. Read them with `ctx.getJson<T>()`.
 - Runtime dependencies are only `yaml` and `undici`; avoid adding more.
-- CSP is nonce-based (`svelte.config.js`): no inline scripts or `javascript:` URLs. The service worker never intercepts page loads or `/api/*`, because of basic auth prompts.
+- CSP is nonce-based (`vite.config.ts`, the `sveltekit()` options; there is no `svelte.config.js` since Kit 3): no inline scripts or `javascript:` URLs. The service worker never intercepts page loads or `/api/*`, because of basic auth prompts.
 - Every section is one markup for both layouts: the tiles are a grid above 760 px and rows below, and the phone's views only hide sections (`data-v`). Don't duplicate sections per layout.
 - **Two configs.** `config.example/` is the full demo (`DEMO=1`; in the image at `/app/config.example`, picked via `DEMO_CONFIG_DIR`). `config.starter/` is the image's `/config` and must work with zero edits on any Docker host (CI checks it). Neither holds images: the icon is built in.
 - **This repo is public.** Examples, fixtures, docs and screenshots use generic names only (`*.home.arpa`, `example.com`, demo mode), never the maintainer's real hosts, IPs or setup. Local `config/`, `.env`, `compose*.yaml`, `secrets/` and `data/` are gitignored.

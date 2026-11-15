@@ -16,7 +16,7 @@ const { lastProbes, serviceEvents } = await import('./db.ts');
 const { reasonText } = await import('./http.ts');
 const { fmtClock, fmtDuration } = await import('./format.ts');
 const { snapshotInput } = await import('./test-helpers.ts');
-import type { ContainerState, HeartbeatRecord } from '$lib/types';
+import type { ContainerState, HeartbeatRecord } from '#lib/types';
 import type { TestService } from './test-helpers.ts';
 
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));

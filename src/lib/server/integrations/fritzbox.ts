@@ -1,6 +1,6 @@
 // FRITZ!Box — TR-064/UPnP on port 49000 (no login needed; "Statusinformationen über UPnP übertragen" must be enabled).
 import { card, fmtDuration } from '../format.ts';
-import type { Alert, Context, Stat, Widget, WidgetResult } from '$lib/types';
+import type { Alert, Context, Stat, Widget, WidgetResult } from '#lib/types';
 
 // The TR-064 values read here: the <New…> elements of each SOAP answer, all text.
 

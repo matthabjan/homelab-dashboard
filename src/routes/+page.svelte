@@ -2,17 +2,17 @@
   import { onMount } from 'svelte';
   import { afterNavigate, pushState, replaceState } from '$app/navigation';
   import { page } from '$app/state';
-  import type { FeedItem, InfraPanel, SheetRef, Snapshot } from '$lib/types';
+  import type { FeedItem, InfraPanel, SheetRef, Snapshot } from '#lib/types';
   import type { PageProps } from './$types';
-  import Icon from '$lib/components/Icon.svelte';
-  import Infrastructure from '$lib/components/Infrastructure.svelte';
-  import AppHeader from '$lib/components/AppHeader.svelte';
-  import TabBar from '$lib/components/TabBar.svelte';
-  import Palette from '$lib/components/Palette.svelte';
-  import Beats from '$lib/components/Beats.svelte';
-  import Sparkline from '$lib/components/Sparkline.svelte';
-  import Sheet from '$lib/components/Sheet.svelte';
-  import { ago, until, validFor } from '$lib/ago.ts';
+  import Icon from '#lib/components/Icon.svelte';
+  import Infrastructure from '#lib/components/Infrastructure.svelte';
+  import AppHeader from '#lib/components/AppHeader.svelte';
+  import TabBar from '#lib/components/TabBar.svelte';
+  import Palette from '#lib/components/Palette.svelte';
+  import Beats from '#lib/components/Beats.svelte';
+  import Sparkline from '#lib/components/Sparkline.svelte';
+  import Sheet from '#lib/components/Sheet.svelte';
+  import { ago, until, validFor } from '#lib/ago.ts';
 
   // The page answers "is everything fine?" at a glance and gets you to a service in one tap: the sentence, what needs
   // attention listed once, a strip of the infrastructure, and a tile per service that both launches it and says how

@@ -2,7 +2,7 @@
 // Guests are backed up nightly, the PVE host itself (proxmox-backup-client, a "host" group) every 30 minutes.
 // "issues": guest 103 missed its last backup and the offsite disk is unplugged; "calm": it is plugged in.
 import { TiB } from '../format.ts';
-import type { Fixtures } from '$lib/types';
+import type { Fixtures } from '#lib/types';
 import type { PbsBackupGroup, PbsDatastoreUsage, PbsDisk, PbsDiskSmart, PbsResponse } from '../integrations/pbs.ts';
 
 const H = 3600_000;

@@ -3,7 +3,7 @@
 import { trimUrl, basicAuth } from '../http.ts';
 import { card, plural } from '../format.ts';
 import { slowly } from './smart.ts';
-import type { Alert, Context, Stat, Widget, WidgetResult } from '$lib/types';
+import type { Alert, Context, Stat, Widget, WidgetResult } from '#lib/types';
 
 /** GET /api/diagnostics/activity/getActivity: `top` output; headers[2] is the CPU line. */
 export interface OpnsenseActivity {

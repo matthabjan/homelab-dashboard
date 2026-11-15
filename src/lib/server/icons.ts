@@ -6,7 +6,7 @@
 // services.yaml or bookmarks.yaml by its index name gets the same check (`variantOf`) unless it names `iconDark`.
 import { request } from './http.ts';
 import { CDN_DASHBOARD as DI, CDN_SELFHST as SH, slug } from './config.ts';
-import type { Kv, Transport } from '$lib/types';
+import type { Kv, Transport } from '#lib/types';
 
 /** One entry of selfh.st's index.json. */
 export interface SelfhstIcon {
