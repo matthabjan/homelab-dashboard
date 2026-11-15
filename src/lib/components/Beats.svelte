@@ -1,6 +1,6 @@
 <script lang="ts">
   /** 24 h health ribbon: 48 half-hour buckets ending at `end`. Healthy ones form one quiet ribbon; a degraded or down one stands taller in its colour. */
-  import type { Level } from '$lib/types';
+  import type { Level } from '#lib/types';
 
   interface Props {
     beats: (Level | 'none')[];

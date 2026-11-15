@@ -6,7 +6,7 @@ import { DEFAULT_SETTINGS } from './config.ts';
 import { INTEGRATIONS } from './integrations/index.ts';
 import { fmtDuration } from './format.ts';
 import { kindOf } from './check.ts';
-import type { ConfigView, KeyValue, Level, Service, Tile } from '$lib/types';
+import type { ConfigView, KeyValue, Level, Service, Tile } from '#lib/types';
 import type { Engine } from './engine.ts';
 
 /** What the config view reads from the engine; the Engine itself satisfies it. */

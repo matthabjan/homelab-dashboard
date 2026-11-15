@@ -8,7 +8,7 @@ import path from 'node:path';
 import YAML from 'yaml';
 import { dockerUrlOk } from './integrations/docker.ts';
 import { portainerEnvOk } from './integrations/portainer.ts';
-import type { Bookmark, Config, ConfigProblem, Discovered, Heartbeat, HeartbeatDef, Service, ServiceDef, Settings } from '$lib/types';
+import type { Bookmark, Config, ConfigProblem, Discovered, Heartbeat, HeartbeatDef, Service, ServiceDef, Settings } from '#lib/types';
 
 export const DEMO = !!process.env.DEMO && process.env.DEMO !== '0';
 // The image ships a starter config in /config and the full demo config in DEMO_CONFIG_DIR (/app/config.example):

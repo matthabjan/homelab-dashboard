@@ -1,5 +1,5 @@
 // Shared shapes, checked by `npm run check`. Types only: nothing here exists at runtime.
-// Imported with `import type { Context, WidgetResult } from '$lib/types'`. Terms as in CONTEXT.md.
+// Imported with `import type { Context, WidgetResult } from '#lib/types'`. Terms as in CONTEXT.md.
 // The shapes of the APIs an integration reads live in that integration's own file.
 
 /** Any value JSON can hold: parsed config values, API bodies before an integration narrows them. */

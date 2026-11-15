@@ -50,7 +50,7 @@ mkdir -p config && docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/config:/s
 # compose.yaml
 services:
   dashboard:
-    image: matthabjan/homelab-dashboard:0.3.4 # pin a version, update deliberately
+    image: matthabjan/homelab-dashboard:0.3.5 # pin a version, update deliberately
     restart: unless-stopped
     ports:
       - 127.0.0.1:3000:3000 # localhost only; reach it from the LAN or VPN through a reverse proxy
@@ -98,7 +98,7 @@ Pin an exact version in production, so it only updates when you choose.
 
 ## Tech
 
-SvelteKit 2 / Svelte 5 on Node 24 (Node adapter), history in the built-in `node:sqlite`; the only other runtime dependencies are `yaml` and `undici`. Fonts are self-hosted [Geist](https://vercel.com/font) (SIL Open Font License, see [static/fonts/OFL.txt](static/fonts/OFL.txt)). Service logos aren't bundled: they load from [selfh.st icons](https://selfh.st/icons/), [dashboard-icons](https://github.com/homarr-labs/dashboard-icons) or your own files.
+SvelteKit 3 / Svelte 5 on Node 24 (Node adapter), history in the built-in `node:sqlite`; the only other runtime dependencies are `yaml` and `undici`. Fonts are self-hosted [Geist](https://vercel.com/font) (SIL Open Font License, see [static/fonts/OFL.txt](static/fonts/OFL.txt)). Service logos aren't bundled: they load from [selfh.st icons](https://selfh.st/icons/), [dashboard-icons](https://github.com/homarr-labs/dashboard-icons) or your own files.
 
 ## License
 

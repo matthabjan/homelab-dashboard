@@ -1,6 +1,6 @@
 // Home Assistant: a small house. "issues": core and an add-on have updates, two batteries run low and a plug is
 // unavailable; "calm": all up to date and charged.
-import type { Fixtures } from '$lib/types';
+import type { Fixtures } from '#lib/types';
 import type { HassConfig, HassState } from '../integrations/homeassistant.ts';
 
 const update = (id: string, title: string, installed: string, latest: string): HassState => ({

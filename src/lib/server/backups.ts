@@ -2,7 +2,7 @@
 // each job is judged where it is read (pbs.ts against backupMaxAgeHours, check.ts for heartbeats); this adds them up.
 import { ago, until } from '../ago.ts';
 import { plural, worst } from './format.ts';
-import type { BackupRow, Backups, InfraPanel, Job, Level, PbsBackups, Severity } from '$lib/types';
+import type { BackupRow, Backups, InfraPanel, Job, Level, PbsBackups, Severity } from '#lib/types';
 
 /** One PBS service's backups. */
 export interface PbsSource {

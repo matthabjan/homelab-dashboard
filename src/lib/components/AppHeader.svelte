@@ -1,6 +1,6 @@
 <script lang="ts">
   import ThemeToggle from './ThemeToggle.svelte';
-  import type { Settings } from '$lib/types';
+  import type { Settings } from '#lib/types';
 
   // The header every page shares: the brand (home), search, the live state, the monitoring link and Setup. On phones
   // search moves to the tab bar, so the header keeps room for the title.

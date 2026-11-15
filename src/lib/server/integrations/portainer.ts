@@ -2,7 +2,7 @@
 // containers.ts does the rest, as for the docker widget.
 import { trimUrl } from '../http.ts';
 import { collectContainers } from './containers.ts';
-import type { Context, Widget, WidgetResult } from '$lib/types';
+import type { Context, Widget, WidgetResult } from '#lib/types';
 
 /** `env` is the Portainer environment id; `key` an access token (config requires it for this type). */
 type PortainerWidget = Widget & { env?: string | number; key: string };

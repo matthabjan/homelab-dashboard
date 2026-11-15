@@ -4,7 +4,7 @@
 // are notes in Activity; `custom` adds entity states or templates as stats, like homepage.
 import { trimUrl } from '../http.ts';
 import { card, plural } from '../format.ts';
-import type { Alert, Context, Json, Stat, Widget, WidgetResult } from '$lib/types';
+import type { Alert, Context, Json, Stat, Widget, WidgetResult } from '#lib/types';
 
 /** GET /api/config, the fields read here. */
 export interface HassConfig {

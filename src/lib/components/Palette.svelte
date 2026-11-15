@@ -1,6 +1,6 @@
 <script lang="ts">
   import { tick } from 'svelte';
-  import type { Bookmark, Tile } from '$lib/types';
+  import type { Bookmark, Tile } from '#lib/types';
   import Icon from './Icon.svelte';
 
   /** Command palette: fuzzy search over services and bookmarks. */

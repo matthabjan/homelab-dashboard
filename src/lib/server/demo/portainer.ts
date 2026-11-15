@@ -1,7 +1,7 @@
 // Portainer: 26 containers, two of them carrying dashboard labels (they become services).
 // "issues": music-assistant crashed and stays exited; wud was `docker stop`ped (exit 0, but it should be running).
 // In both, certbot-renew is a one-shot job that finished (exit 0, no restart policy): not a failure.
-import type { Fixtures } from '$lib/types';
+import type { Fixtures } from '#lib/types';
 import type { DockerContainer, DockerContainerInspect } from '../integrations/containers.ts';
 
 const plain = ['postgres', 'redis', 'immich-server', 'immich-ml', 'paperless', 'gotenberg', 'tika', 'jellyfin', 'sonarr', 'radarr', 'prowlarr', 'qbittorrent', 'vaultwarden',

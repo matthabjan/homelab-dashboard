@@ -9,7 +9,7 @@ import path from 'node:path';
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dashboard-config-'));
 process.env.CONFIG_DIR = dir;
 const { loadConfig } = await import('./config.ts');
-import type { Config } from '$lib/types';
+import type { Config } from '#lib/types';
 
 const write = (name: string, text: string) => fs.writeFileSync(path.join(dir, name), text);
 const names = (cfg: Config) => cfg.services.map((s) => s.name);

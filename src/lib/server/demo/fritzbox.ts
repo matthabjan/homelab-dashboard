@@ -1,5 +1,5 @@
 // FRITZ!Box UPnP (TR-064): SOAP answers chosen by the SoapAction header.
-import type { Fixtures } from '$lib/types';
+import type { Fixtures } from '#lib/types';
 import type { FritzAddonInfos, FritzLinkProperties, FritzStatusInfo } from '../integrations/fritzbox.ts';
 
 /** An answer's <New…> fields, as numbers or text (XML makes them text). */

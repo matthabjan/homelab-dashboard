@@ -16,7 +16,7 @@ const { Engine } = await import('./engine.ts');
 const { FIXTURES, fixtureTransport } = await import('./demo/index.ts');
 const { lastProbes, recentEvents, series } = await import('./db.ts');
 const { reasonText } = await import('./http.ts');
-import type { HostVitals, ProbeResult, Snapshot, Sources, Transport } from '$lib/types';
+import type { HostVitals, ProbeResult, Snapshot, Sources, Transport } from '#lib/types';
 
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 

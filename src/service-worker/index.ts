@@ -1,16 +1,13 @@
-/// <reference types="@sveltejs/kit" />
-/// <reference no-default-lib="true"/>
-/// <reference lib="esnext" />
-/// <reference lib="webworker" />
 // App-shell caching so the installed app opens instantly; live data always comes from the network.
 // Page loads are never intercepted: the browser shows the basic-auth prompt only for its own requests,
 // so a 401 answered from here would leave the page at "401 Unauthorized" with no way to log in.
-import { build, files, version } from '$service-worker';
-
-const sw = self as unknown as ServiceWorkerGlobalScope;
+import { self as sw } from '$app/service-worker';
+import { immutable, assets } from '$app/manifest';
+import { version } from '$app/env';
 
 const CACHE = `shell-${version}`;
-const SHELL = [...build, ...files.filter((f) => !f.endsWith('.txt'))];
+// manifest paths are relative to the base path, which is the root here
+const SHELL = [...immutable, ...assets].map((f) => `/${f.path}`).filter((f) => !f.endsWith('.txt'));
 
 sw.addEventListener('install', (e) => {
   // one by one and best effort: a 401 (not logged in yet) must not block a new worker from installing

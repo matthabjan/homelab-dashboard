@@ -1,6 +1,6 @@
 // Proxmox VE: one node with guest disks on local-zfs. "issues": the NFS backup storage is gone.
 import { GiB, TiB } from '../format.ts';
-import type { Fixtures } from '$lib/types';
+import type { Fixtures } from '#lib/types';
 import type { SmartAttribute } from '../integrations/smart.ts';
 import type { PveAptUpdate, PveDisk, PveDiskSmart, PveResource, PveResponse, PveRrdPoint, PveStorage } from '../integrations/proxmox.ts';
 

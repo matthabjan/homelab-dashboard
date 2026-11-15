@@ -2,7 +2,7 @@ import { Agent, fetch } from 'undici';
 import dns from 'node:dns';
 import tls from 'node:tls';
 import net from 'node:net';
-import type { CertInfo, ProbeResult, RequestOptions, Transport } from '$lib/types';
+import type { CertInfo, ProbeResult, RequestOptions, Transport } from '#lib/types';
 
 /**
  * `lookup` for connections that caches answers for 5 minutes: without it every probe and widget call resolves its

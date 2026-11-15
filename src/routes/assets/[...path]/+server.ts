@@ -3,14 +3,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { error } from '@sveltejs/kit';
 import { createHash } from 'node:crypto';
-import { CONFIG_DIR } from '$lib/server/config.ts';
-import { builtinFor } from '$lib/server/default-images.ts';
-import icon192 from '$lib/server/default-images/android-chrome-192x192.png?inline';
-import icon512 from '$lib/server/default-images/android-chrome-512x512.png?inline';
-import appleTouch from '$lib/server/default-images/apple-touch-icon.png?inline';
-import favicon from '$lib/server/default-images/favicon.ico?inline';
-import logoDark from '$lib/server/default-images/logo-dark.png?inline';
-import faviconDark from '$lib/server/default-images/favicon-dark.ico?inline';
+import { CONFIG_DIR } from '#lib/server/config.ts';
+import { builtinFor } from '#lib/server/default-images.ts';
+import icon192 from '#lib/server/default-images/android-chrome-192x192.png?inline';
+import icon512 from '#lib/server/default-images/android-chrome-512x512.png?inline';
+import appleTouch from '#lib/server/default-images/apple-touch-icon.png?inline';
+import favicon from '#lib/server/default-images/favicon.ico?inline';
+import logoDark from '#lib/server/default-images/logo-dark.png?inline';
+import faviconDark from '#lib/server/default-images/favicon-dark.ico?inline';
 
 // Serves user-editable files from config/icons and config/images, and the app's own icon where the config has none
 // (default-images.ts).

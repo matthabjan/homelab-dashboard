@@ -2,7 +2,7 @@
 // Reads which watched containers have a newer image; each one is a note in Activity, like apt updates.
 import { trimUrl, basicAuth } from '../http.ts';
 import { card, plural } from '../format.ts';
-import type { Alert, Context, Stat, Widget, WidgetResult } from '$lib/types';
+import type { Alert, Context, Stat, Widget, WidgetResult } from '#lib/types';
 
 /** An entry of GET /api/containers, the fields read here. */
 export interface WudContainer {

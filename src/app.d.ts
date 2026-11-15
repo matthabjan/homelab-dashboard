@@ -1,4 +1,4 @@
-import type { SheetRef } from '$lib/types';
+import type { SheetRef } from '#lib/types';
 
 declare global {
   namespace App {

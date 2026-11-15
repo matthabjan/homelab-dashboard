@@ -4,7 +4,7 @@
 import { insertEvent, insertProbe } from './db.ts';
 import { reasonText } from './http.ts';
 import { fmtClock, fmtDuration } from './format.ts';
-import type { CheckKind, CheckState, CheckStatus, ContainerState, HeartbeatState, ProbeResult, Service, ServiceState } from '$lib/types';
+import type { CheckKind, CheckState, CheckStatus, ContainerState, HeartbeatState, ProbeResult, Service, ServiceState } from '#lib/types';
 
 /**
  * A service has at most one check: config.ts drops `siteMonitor` when there is a heartbeat, and a container's state

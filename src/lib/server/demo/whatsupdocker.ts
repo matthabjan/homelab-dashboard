@@ -1,6 +1,6 @@
 // What's Up Docker: the Portainer host's containers. "issues": three have a newer image (a tag, a digest) and one
 // registry lookup failed; "calm": all up to date.
-import type { Fixtures } from '$lib/types';
+import type { Fixtures } from '#lib/types';
 import type { WudContainer } from '../integrations/whatsupdocker.ts';
 
 const NAMES = ['postgres', 'redis', 'immich-server', 'paperless', 'jellyfin', 'vaultwarden', 'nextcloud', 'mosquitto', 'zigbee2mqtt', 'grafana', 'traefik', 'wud'];

@@ -2,13 +2,13 @@
   import { onMount } from 'svelte';
   import { invalidateAll, pushState } from '$app/navigation';
   import { page } from '$app/state';
-  import type { CheckKind, ConfigView, Level } from '$lib/types';
-  import Icon from '$lib/components/Icon.svelte';
-  import AppHeader from '$lib/components/AppHeader.svelte';
-  import TabBar from '$lib/components/TabBar.svelte';
-  import Sheet from '$lib/components/Sheet.svelte';
+  import type { CheckKind, ConfigView, Level } from '#lib/types';
+  import Icon from '#lib/components/Icon.svelte';
+  import AppHeader from '#lib/components/AppHeader.svelte';
+  import TabBar from '#lib/components/TabBar.svelte';
+  import Sheet from '#lib/components/Sheet.svelte';
   import type { PageProps } from './$types';
-  import { ago } from '$lib/ago.ts';
+  import { ago } from '#lib/ago.ts';
 
   // Setup answers "is my configuration right?": what loaded, how each service is set up, whether its widget can
   // connect. How the services are doing is the dashboard's job, not this page's.
