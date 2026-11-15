@@ -3,7 +3,7 @@
 // both (the same metric) warns once.
 import { plural, worst } from './format.ts';
 import type { Raised } from './attention.ts';
-import type { HostVitals, InfraPanel, Level, Service, Settings, Snapshot, StorageRow, Trend } from '$lib/types';
+import type { HostVitals, InfraPanel, Level, Service, Settings, Snapshot, StorageRow, Trend } from '#lib/types';
 
 type Th = Pick<Settings['thresholds'], 'storageAmberPct' | 'storageWarnPct'>;
 type Owner = Pick<Service, 'id' | 'name' | 'href'>;

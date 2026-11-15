@@ -2,7 +2,7 @@
 // A heartbeat is up while its last success is within `every + grace` and no failure was reported after it.
 // What each id last reported lives in kv (`heartbeat:<id>`), so a restart doesn't make every job overdue.
 import crypto from 'node:crypto';
-import type { Heartbeat, HeartbeatRecord, HeartbeatState, Kv, Service } from '$lib/types';
+import type { Heartbeat, HeartbeatRecord, HeartbeatState, Kv, Service } from '#lib/types';
 
 export const kvKey = (id: string) => `heartbeat:${id}`;
 

@@ -2,7 +2,7 @@
 // for both. Built from the snapshot's own parts, after attention closed; the Storage and Backups rows come from
 // storage.ts and backups.ts.
 import { plural, worst } from './format.ts';
-import type { InfraPanel, Snapshot } from '$lib/types';
+import type { InfraPanel, Snapshot } from '#lib/types';
 
 type Parts = Pick<Snapshot, 'host' | 'drives' | 'network'>;
 

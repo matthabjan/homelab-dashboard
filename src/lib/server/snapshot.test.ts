@@ -19,7 +19,7 @@ const { record } = await import('./check.ts');
 const { heartbeatState } = await import('./heartbeat.ts');
 const { toDrive } = await import('./integrations/smart.ts');
 import type { TestService } from './test-helpers.ts';
-import type { Alert, Drive, PbsBackups, Snapshot, StorageRow, Tile, WidgetState } from '$lib/types';
+import type { Alert, Drive, PbsBackups, Snapshot, StorageRow, Tile, WidgetState } from '#lib/types';
 
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
@@ -184,7 +184,7 @@ test('checks other than probes: a stopped container is down, a heartbeat that mi
     { name: 'Restic', heartbeat: hb }
   ] });
   const [jellyfin, restic] = input.cfg.services;
-  record(jellyfin, input.state(jellyfin.id), (jellyfin.container as import('$lib/types').ContainerState), now);
+  record(jellyfin, input.state(jellyfin.id), (jellyfin.container as import('#lib/types').ContainerState), now);
   const lastOk = now - 26 * 60 * MIN;
   record(restic, input.state(restic.id), heartbeatState(hb, { since: lastOk, lastOk, lastFail: null }, now), now);
   const snap = createSnapshot()(input, now);

@@ -2,7 +2,7 @@
 // or is refused, since Pi-hole limits concurrent sessions. v5 (`version: 5`): the API token as `auth=`.
 import { trimUrl } from '../http.ts';
 import { fmtNum } from '../format.ts';
-import type { Alert, Context, Widget, WidgetResult } from '$lib/types';
+import type { Alert, Context, Widget, WidgetResult } from '#lib/types';
 
 /** POST /api/auth (v6). */
 export interface PiholeAuth {

@@ -1,7 +1,7 @@
 // AdGuard Home — basic auth.
 import { trimUrl, basicAuth } from '../http.ts';
 import { fmtNum } from '../format.ts';
-import type { Alert, Context, Widget, WidgetResult } from '$lib/types';
+import type { Alert, Context, Widget, WidgetResult } from '#lib/types';
 
 /** GET /control/stats. */
 export interface AdguardStats {

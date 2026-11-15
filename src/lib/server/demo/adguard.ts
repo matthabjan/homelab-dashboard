@@ -1,5 +1,5 @@
 // AdGuard Home: a day of DNS queries with an evening peak.
-import type { Fixtures } from '$lib/types';
+import type { Fixtures } from '#lib/types';
 import type { AdguardStats, AdguardStatus } from '../integrations/adguard.ts';
 
 const QUERIES = Array.from({ length: 24 }, (_, i) => 1400 + Math.round(Math.sin((i - 6) / 3.8) * 900 + 900));

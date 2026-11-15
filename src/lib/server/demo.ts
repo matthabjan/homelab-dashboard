@@ -9,7 +9,7 @@ import { insertProbe, insertMetric, countProbes, transaction, insertEvent, recor
 import { kvKey } from './heartbeat.ts';
 import { request } from './http.ts';
 import { FIXTURES, fixtureTransport } from './demo/index.ts';
-import type { CertInfo, Heartbeat, HostVitals, ProbeResult, Service, Settings, Sources, Temps } from '$lib/types';
+import type { CertInfo, Heartbeat, HostVitals, ProbeResult, Service, Settings, Sources, Temps } from '#lib/types';
 
 export { DEMO } from './config.ts';
 export const SCENARIO = process.env.DEMO_SCENARIO === 'calm' ? 'calm' : 'issues';

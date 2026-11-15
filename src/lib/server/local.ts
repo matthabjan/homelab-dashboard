@@ -5,7 +5,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fmtDuration, fmtPair, pct } from './format.ts';
-import type { Config, HostVitals, Service, Settings } from '$lib/types';
+import type { Config, HostVitals, Service, Settings } from '#lib/types';
 
 const PROC = process.env.PROC_DIR || '/proc';
 

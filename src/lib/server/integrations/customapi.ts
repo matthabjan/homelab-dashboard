@@ -3,7 +3,7 @@
 // alerts only (the service's status stays its reachability).
 import { basicAuth } from '../http.ts';
 import { card, fmtBitrate, fmtBytes, fmtDuration, fmtRelative } from '../format.ts';
-import type { Alert, Context, CustomApiMapping, Json, Stat, Threshold, Widget, WidgetResult } from '$lib/types';
+import type { Alert, Context, CustomApiMapping, Json, Stat, Threshold, Widget, WidgetResult } from '#lib/types';
 
 type CustomApiWidget = Widget & {
   method?: string;

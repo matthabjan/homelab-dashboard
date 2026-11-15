@@ -1,6 +1,6 @@
 import type { RequestHandler } from './$types';
-import { getEngine } from '$lib/server/engine.ts';
-import { response, tokenOf } from '$lib/server/heartbeat.ts';
+import { getEngine } from '#lib/server/engine.ts';
+import { response, tokenOf } from '#lib/server/heartbeat.ts';
 
 // A job reports a failed run. A POST body (the job's output) goes to the log only: it is upstream text.
 export const GET: RequestHandler = ({ params, request, url }) => {

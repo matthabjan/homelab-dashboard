@@ -3,7 +3,7 @@
 import { certInfo, probe, request } from './http.ts';
 import { readTemps } from './integrations/host.ts';
 import { readLocal } from './local.ts';
-import type { Sources } from '$lib/types';
+import type { Sources } from '#lib/types';
 
 export const liveSources: Sources = {
   probe: (s) => probe((s.probe as string)),

@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { storage, usageLevel } from './storage.ts';
 import type { GaugeDisk, StorageReport } from './storage.ts';
-import type { StorageRow } from '$lib/types';
+import type { StorageRow } from '#lib/types';
 
 const th = { storageAmberPct: 70, storageWarnPct: 85 };
 const noTrend = () => null;

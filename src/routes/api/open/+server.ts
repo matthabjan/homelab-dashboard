@@ -1,6 +1,6 @@
 import type { RequestHandler } from './$types';
-import { getEngine } from '$lib/server/engine.ts';
-import { recordOpen } from '$lib/server/db.ts';
+import { getEngine } from '#lib/server/engine.ts';
+import { recordOpen } from '#lib/server/db.ts';
 
 // Counts how often a service is opened, which fills the "Most used" row.
 export const POST: RequestHandler = async ({ request }) => {

@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createAttention, withoutRepeats } from './attention.ts';
-import type { AttentionItem, FeedEvent } from '$lib/types';
+import type { AttentionItem, FeedEvent } from '#lib/types';
 
 const MIN = 60_000;
 const T = Date.UTC(2026, 0, 1);

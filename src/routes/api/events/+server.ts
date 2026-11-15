@@ -1,8 +1,8 @@
 import type { RequestHandler } from './$types';
 import { json } from '@sveltejs/kit';
-import { getEngine } from '$lib/server/engine.ts';
-import { eventsOf, serviceEvents } from '$lib/server/db.ts';
-import { withoutRepeats } from '$lib/server/attention.ts';
+import { getEngine } from '#lib/server/engine.ts';
+import { eventsOf, serviceEvents } from '#lib/server/db.ts';
+import { withoutRepeats } from '#lib/server/attention.ts';
 
 const WEEK = 7 * 86_400_000;
 

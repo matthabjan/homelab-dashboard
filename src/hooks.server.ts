@@ -1,5 +1,5 @@
-import type { Handle } from '@sveltejs/kit';
-import { getEngine } from '$lib/server/engine.ts';
+import type { Handle } from '@sveltejs/kit/hooks';
+import { getEngine } from '#lib/server/engine.ts';
 
 getEngine().start();
 

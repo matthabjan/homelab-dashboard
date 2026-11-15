@@ -14,7 +14,7 @@ delete process.env.DEMO;
 const { loadConfig, withDiscovered } = await import('./config.ts');
 const { buildConfigView, iconName, originOf } = await import('./config-view.ts');
 const { blankCheck } = await import('./check.ts');
-import type { ServiceState } from '$lib/types';
+import type { ServiceState } from '#lib/types';
 import type { ConfigViewInput } from './config-view.ts';
 
 // every secret is distinctive, so a substring search can't miss one

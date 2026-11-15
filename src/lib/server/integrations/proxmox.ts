@@ -4,7 +4,7 @@ import { trimUrl } from '../http.ts';
 import { fmtPair, fmtDuration, pct } from '../format.ts';
 import { fromAttributes, fromNvmeText, isVirtual, kindOf, slowly, toDrive } from './smart.ts';
 import type { SmartAttribute } from './smart.ts';
-import type { Alert, Context, Drive, NetworkReading, OfflineRow, Settings, SmartReading, UsageRow, Widget, WidgetResult } from '$lib/types';
+import type { Alert, Context, Drive, NetworkReading, OfflineRow, Settings, SmartReading, UsageRow, Widget, WidgetResult } from '#lib/types';
 
 /** Every PVE API answer wraps its payload in `data`. */
 export interface PveResponse<T> {

@@ -9,7 +9,7 @@ import { createAttention, type Raised } from './attention.ts';
 import { infrastructure } from './infrastructure.ts';
 import { backups as backupsOf, DAYS } from './backups.ts';
 import { storage as storageOf } from './storage.ts';
-import type { AttentionItem, Backups, ConfigProblem, Drive, Fact, Gauge, Job, Level, NetworkReading, Settings, Severity, SheetRef, Snapshot, Tile, Traffic, Trend } from '$lib/types';
+import type { AttentionItem, Backups, ConfigProblem, Drive, Fact, Gauge, Job, Level, NetworkReading, Settings, Severity, SheetRef, Snapshot, Tile, Traffic, Trend } from '#lib/types';
 import type { Engine } from './engine.ts';
 
 const RANK: Record<Severity | Level, number> = { crit: 3, warn: 2, info: 1, ok: 0 };

@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync, type SQLInputValue, type StatementSync } from 'node:sqlite';
 import { DATA_DIR } from './config.ts';
-import type { WidgetEvent } from '$lib/types';
+import type { WidgetEvent } from '#lib/types';
 
 // One row of each query as SQLite returns it: INTEGER and REAL columns both come back as numbers.
 export interface EventRow { ts: number; sev: WidgetEvent['sev']; sid: string | null; title: string; detail: string | null }

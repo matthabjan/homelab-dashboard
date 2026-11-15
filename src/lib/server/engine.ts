@@ -14,7 +14,7 @@ import { blankCheck, kindOf, record } from './check.ts';
 import { createIconFinder, iconCandidates } from './icons.ts';
 import { validFor } from '../ago.ts';
 import { INTEGRATIONS, ORDER, createContext } from './integrations/index.ts';
-import type { Config, ContainerState, Discovered, HostVitals, Service, ServiceState, Shared, Snapshot, Sources, Temps, Widget } from '$lib/types';
+import type { Config, ContainerState, Discovered, HostVitals, Service, ServiceState, Shared, Snapshot, Sources, Temps, Widget } from '#lib/types';
 
 const kv = { get: kvGet, set: kvSet };
 type Round = 'probe' | 'widgets' | 'cert' | 'icons';

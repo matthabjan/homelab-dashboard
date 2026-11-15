@@ -2,7 +2,7 @@
 // reads them on import).
 import { DEFAULT_SETTINGS, slug } from './config.ts';
 import { blankCheck } from './check.ts';
-import type { Config, HostVitals, Kv, Service, ServiceState, Settings, Temps } from '$lib/types';
+import type { Config, HostVitals, Kv, Service, ServiceState, Settings, Temps } from '#lib/types';
 import type { SnapshotInput } from './snapshot.ts';
 
 /** A `Kv` in memory, for one test. */

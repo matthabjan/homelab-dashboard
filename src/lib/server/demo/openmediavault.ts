@@ -1,7 +1,7 @@
 // OpenMediaVault JSON-RPC: everything goes to /rpc.php, routed on service.method.
 // "data" sits on a passed-through disk with SMART; "scratch" is a virtual disk without.
 // devicefile is a by-id link, canonicaldevicefile the plain device; virtual disks have monitoring off
-import type { Fixtures } from '$lib/types';
+import type { Fixtures } from '#lib/types';
 import type {
   OmvExecOutput, OmvFilesystem, OmvList, OmvLogin, OmvRpcRequest, OmvRpcResponse, OmvServiceStatus, OmvSmartDevice, OmvSmartExtended, OmvSystemInformation
 } from '../integrations/openmediavault.ts';

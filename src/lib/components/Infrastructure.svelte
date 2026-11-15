@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, type Snippet } from 'svelte';
-  import type { Level, Snapshot, Traffic, Trend } from '$lib/types';
+  import type { Level, Snapshot, Traffic, Trend } from '#lib/types';
   import Gauge from './Gauge.svelte';
   import Reading from './Reading.svelte';
 

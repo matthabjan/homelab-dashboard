@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { backups, days } from './backups.ts';
 import type { PbsSource } from './backups.ts';
-import type { Job, PbsBackups } from '$lib/types';
+import type { Job, PbsBackups } from '#lib/types';
 
 const H = 3600_000;
 const now = 100 * 24 * H;

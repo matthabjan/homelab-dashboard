@@ -14,7 +14,7 @@ const { readLocal, hostSource } = await import('./local.ts');
 const { DEFAULT_SETTINGS } = await import('./config.ts');
 const { createSnapshot } = await import('./snapshot.ts');
 const { snapshotInput } = await import('./test-helpers.ts');
-import type { Config, Settings } from '$lib/types';
+import type { Config, Settings } from '#lib/types';
 const buildSnapshot = (input: import('./snapshot.ts').SnapshotInput) => createSnapshot()(input, Date.now());
 
 const proc = path.join(tmp, 'proc');

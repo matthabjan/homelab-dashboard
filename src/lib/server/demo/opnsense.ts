@@ -2,7 +2,7 @@
 // so the integration derives rates from consecutive polls just like in production.
 // bytes so far = integral of rate(t) = bytesPerS · (1 + 0.3 · sin(t / 1 h))
 // "issues": the backup LTE gateway loses packets and a firmware update is pending; "calm": both fine.
-import type { Fixtures } from '$lib/types';
+import type { Fixtures } from '#lib/types';
 import type { OpnsenseActivity, OpnsenseFirmware, OpnsenseGateways, OpnsenseServices, OpnsenseTraffic } from '../integrations/opnsense.ts';
 
 const counter = (now: number, bytesPerS: number) => {
