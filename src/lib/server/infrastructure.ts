@@ -18,7 +18,8 @@ function system(host: NonNullable<Parts['host']>): InfraPanel {
     stats: [
       cpu && { k: 'CPU', v: `${cpu.val}%`, level: cpu.level },
       mem && { k: 'RAM', v: mem.pct != null ? `${Math.round(mem.pct)}%` : '—', level: mem.level },
-      temp && { k: 'TEMP', v: `${temp.val}°C`, level: temp.level }
+      // the temperature only when it needs a look: the cells stay equal, and the sheet charts it
+      temp && (temp.level === 'warn' || temp.level === 'crit') && { k: 'TEMP', v: `${temp.val}°C`, level: temp.level }
     ].filter((x) => !!x),
     level: worst(host.gauges.map((x) => x.level))
   };
