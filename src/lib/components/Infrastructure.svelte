@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, type Snippet } from 'svelte';
-  import type { Level, Snapshot, Traffic, Trend } from '#lib/types';
+  import { ago } from '#lib/ago.ts';
+  import type { Backups, Level, Snapshot, Traffic, Trend } from '#lib/types';
   import Gauge from './Gauge.svelte';
   import MeterRow from './MeterRow.svelte';
   import Reading from './Reading.svelte';
@@ -17,10 +18,15 @@
     now: number;
     /** the panel to open with (a sheet opened from its card); without it, the one this browser last chose */
     initial?: Panel['id'];
-    /** the Backups tab's content: the page's, since its rows open service sheets */
-    backups?: Snippet;
+    /** the Backups tab: its summary, the week and a row per backup; without it there is no tab */
+    backups?: Backups | null;
+    /** a backup row opens its service's sheet, which the page keeps */
+    onbackup?: (id: string) => void;
+    /** the tab's Recent list (the page's event rows) and how many there are */
+    recent?: Snippet;
+    recentCount?: number;
   }
-  let { panels: summaries, host, storage, drives, network, target, now, initial, backups }: Props = $props();
+  let { panels: summaries, host, storage, drives, network, target, now, initial, backups, onbackup, recent, recentCount = 0 }: Props = $props();
 
   /** a tab of the card: its panel id, its name and the dot it shows */
   interface Panel {
@@ -30,8 +36,8 @@
     meta?: string;
   }
 
-  // the dot on a tab: a hidden panel must not hide a problem. Backups has no line beside its tabs: its summary says it
-  const panels: Panel[] = $derived(summaries.flatMap((p) => (p.id === 'backups' && !backups ? [] : [{ id: p.id, name: p.label, level: p.level === 'none' || p.level === 'ok' ? null : p.level, meta: p.id === 'backups' ? undefined : p.meta }])));
+  // the dot on a tab: a hidden panel must not hide a problem. Backups' line is its summary ("All 7 on schedule · next: …")
+  const panels: Panel[] = $derived(summaries.flatMap((p) => (p.id === 'backups' && !backups ? [] : [{ id: p.id, name: p.label, level: p.level === 'none' || p.level === 'ok' ? null : p.level, meta: p.id === 'backups' && backups ? [backups.title, backups.sub].filter(Boolean).join(' · ') : p.meta }])));
 
   // which panel is open. Remembered per browser as a convenience, so storage errors are ignored
   // svelte-ignore state_referenced_locally — the panel it opens with; the tabs change it from there
@@ -84,6 +90,11 @@
   /** how far back the charts go, said once above them instead of under each */
   const span = (from: number | null | undefined) => `Last ${from ? Math.max(1, Math.round((now - from) / 3_600_000)) : 24} h`;
   const fmtRate = (v: number | null) => (v == null ? '—' : v >= 100 ? String(Math.round(v)) : v.toFixed(1));
+  /** PBS rows grouped by the service that reports them, then the jobs, in the order the server sorted them */
+  const backupGroups = $derived(grouped((backups?.rows ?? []).map((r) => ({ ...r, group: r.source ?? 'Jobs' }))));
+  let recentOpen = $state(false);
+  /** "11 h ago", "just now", "never" */
+  const since = (ts: number | null) => (ts == null ? 'never' : ago(ts, now) === 'now' ? 'just now' : `${ago(ts, now)} ago`);
   const fmtMBs = (v: number | null) => (v == null ? '—' : v >= 10 ? String(Math.round(v)) : v.toFixed(1));
   /** the day's highest reading of a series, the band's when it has one */
   const peakOf = (vs: (number | null)[] | null | undefined) => {
@@ -128,7 +139,7 @@
         {#each host.facts as f (f.label)}<div><dt>{f.label}</dt><dd>{f.value}</dd></div>{/each}
       </dl>
     {:else if active?.meta}
-      <span class="meta muted">{active.meta}</span>
+      <span class="meta muted" class:hl={!!active.level} class:lv-warn={active.level === 'warn'} class:lv-crit={active.level === 'crit'}>{active.meta}</span>
     {/if}
   </div>
 
@@ -227,8 +238,51 @@
               />
             {/if}
           </div>
-        {:else if p.id === 'backups'}
-          <div class="backups">{@render backups?.()}</div>
+        {:else if p.id === 'backups' && backups}
+          <!-- the week, then the backups grouped like Storage and Drives: PBS by the service that reports it, then the
+               jobs. A row is a storage row: name and when it last ran; how often it should and a bar for the share of
+               that gone by (amber in the last tenth; full, in its colour and with a pill on a problem). A tap opens
+               its service -->
+          <div class="groups">
+            <section class="group" aria-label="Last 7 days">
+              <h3 class="ghead">Last 7 days</h3>
+              <div class="week" role="img" aria-label="Backups over the last 7 days: {backups.days.map((d) => (d === 'none' ? 'nothing recorded' : d === 'ok' ? 'fine' : d === 'warn' ? 'warning' : 'late')).join(', ')}">
+                {#each backups.days as d, i (i)}<span class="lv-{d}" class:none={d === 'none'}></span>{/each}
+              </div>
+              <div class="week-l"><span>7 days ago</span><span>today</span></div>
+            </section>
+            {#each backupGroups as g (g.name)}
+              <section class="group" aria-label={g.name}>
+                <h3 class="ghead">{g.name}</h3>
+                <div class="rows">
+                  {#each g.rows as r (r.id + r.title)}
+                    {@const bad = r.level === 'warn' || r.level === 'crit'}
+                    {@const share = r.last != null && r.every ? (now - r.last) / r.every : null}
+                    {@const lv = bad ? r.level : share != null && share >= 0.9 ? 'warn' : r.level === 'none' ? 'off' : 'ok'}
+                    <button class="row bar brow lv-{lv}" class:bad onclick={() => onbackup?.(r.id)} aria-label="{r.title}: {r.state}, last run {since(r.last)}{r.every ? `, every ${ago(0, r.every)}` : ''}">
+                      <span class="row-head">
+                        <span class="name">{r.title}</span>
+                        {#if bad}<span class="dstatus lv-{r.level}">{r.state}</span>{/if}
+                        <span class="num pct">{since(r.last)}</span>
+                      </span>
+                      <span class="row-line">
+                        <span class="meta-t size">{r.every ? `every ${ago(0, r.every)}` : r.state}</span>
+                        <span class="track"><span class="fill" style:width="{bad ? 100 : Math.min(100, Math.max(0, (share ?? 0) * 100))}%"></span></span>
+                      </span>
+                    </button>
+                  {/each}
+                </div>
+              </section>
+            {/each}
+            <!-- what happened, folded: Activity and each service's sheet list it too -->
+            <section class="group recent">
+              <button class="recent-head" aria-expanded={recentOpen} disabled={!recentCount} onclick={() => (recentOpen = !recentOpen)}>
+                <span><span class="rt">Recent</span> <span class="muted">· {recentCount ? `${recentCount} ${recentCount === 1 ? 'event' : 'events'} in 7 days` : 'nothing in 7 days'}</span></span>
+                {#if recentCount}<svg class="chev" class:open={recentOpen} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>{/if}
+              </button>
+              {#if recentOpen && recentCount}<div class="recent-list">{@render recent?.()}</div>{/if}
+            </section>
+          </div>
         {/if}
       </div>
     {/each}
@@ -245,6 +299,8 @@
   /* tabs on the left, what the open panel shows on the right; the context wraps below when it doesn't fit */
   .head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; min-height: 34px; }
   .meta { font-size: 12px; }
+  /* the line of a panel with a problem (Backups: what is overdue) in its colour */
+  .meta.hl { color: color-mix(in srgb, var(--lv) 85%, var(--text)); }
   .host-facts { display: flex; flex-wrap: wrap; gap: 4px 20px; margin: 0; }
   .host-facts div { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
   .host-facts dt { color: var(--muted); }
@@ -316,7 +372,24 @@
 
   /* network: WAN, LAN and DNS as tiles like System's, stacked in the sheet, side by side when the card is wide */
   .span { margin: 0 0 10px; font-size: 12px; color: var(--muted); }
-  .backups { display: flex; flex-direction: column; gap: 16px; }
+  /* backups: the week as a box, rows as buttons that look like storage rows, Recent as a box that opens */
+  .week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; padding: 6px 0 4px; }
+  .week span { height: 14px; border-radius: 4px; background: var(--lv); opacity: 0.85; }
+  .week span.none { background: var(--surface-3); opacity: 1; }
+  .week-l { display: flex; justify-content: space-between; padding-bottom: 10px; font-size: 11px; color: var(--muted); }
+  .brow { width: 100%; border-left: 0; border-right: 0; border-bottom: 0; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+  .brow:hover .name { color: var(--acc); }
+  .brow:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; border-radius: 6px; }
+  .brow .row-head, .brow .row-line { width: 100%; }
+  .bar.lv-ok { --fill: var(--acc); }
+  .recent { padding: 0; }
+  .recent-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; width: 100%; padding: 12px 14px; border: 0; background: none; color: var(--text); font: inherit; font-size: 13px; text-align: left; cursor: pointer; border-radius: 14px; }
+  .recent-head:disabled { cursor: default; }
+  .recent-head:focus-visible { outline: 2px solid var(--acc); outline-offset: -2px; }
+  .rt { font-weight: 500; }
+  .chev { color: var(--muted); transition: transform 0.2s; }
+  .chev.open { transform: rotate(180deg); }
+  .recent-list { padding: 0 14px 6px; }
   .net { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: 12px; }
 
   @container infra (max-width: 519.98px) {
