@@ -503,7 +503,7 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
     storage,
     drives,
     network,
-    infrastructure: infrastructure({ host, drives, network }, { storage: disks.panel, backups: backupsPanel }, now),
+    infrastructure: infrastructure({ host, drives, network }, { storage: disks.panel, backups: backupsPanel }),
     mostUsed,
     groups: groups.map((g) => {
       const ts = g.services.map((s) => (tiles.get(s.id) as Tile)); // every service got a tile above

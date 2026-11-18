@@ -459,11 +459,7 @@
               {:else}
                 <span class="days">{#each snap.backups.days as d, i (i)}<span class="lv-{d}" class:none={d === 'none'} class:bad={isProblem(d)}></span>{/each}</span>
               {/if}
-              <!-- the picture's 24 h peak, in its corner -->
-              {#if c.peak}<span class="pk">{c.peak}</span>{/if}
             </span>
-            <!-- phones: the day's range under the figure (the context line shows only for a problem there) -->
-            {#if c.range}<span class="rg">{c.range}</span>{/if}
             {#if c.sub}<span class="s">{c.sub}</span>{/if}
           </button>
         {/each}
@@ -731,8 +727,10 @@
   /* a rule between cells, left out next to a hovered one */
   .cell + .cell::before { content: ''; position: absolute; left: 0; top: 14px; bottom: 14px; border-left: 1px solid var(--line); }
   .cell:hover::before, .cell:hover + .cell::before { display: none; }
-  /* a cell of several figures (System: CPU, RAM, temperature) gets half again the room, enough for one line */
-  .cell:has(.ist + .ist + .ist) { flex-grow: 1.5; }
+  /* a cell of several figures (System: CPU, RAM, temperature) gets half again the room, and never less than its
+     figures on one line: they don't wrap, the other cells give way */
+  .cell:has(.ist + .ist + .ist) { flex-grow: 1.5; min-width: min-content; }
+  .cell:has(.ist + .ist + .ist) .fig { flex-wrap: nowrap; }
   .clab { display: flex; align-items: center; gap: 7px; min-width: 0; font-size: 13px; color: var(--muted); }
   .kw::before { content: '·'; margin-right: 7px; }
   .fig { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 12px; min-width: 0; }
@@ -742,8 +740,6 @@
   .isk { font-size: 13px; color: var(--muted); }
   .isv.hl, .cell.alert .fig .v { color: var(--lv); }
   .viz { position: relative; display: flex; align-items: flex-end; height: 34px; --fill: var(--acc); }
-  .pk { position: absolute; right: 0; top: -4px; font-size: 10.5px; line-height: 1; color: var(--muted); font-variant-numeric: tabular-nums; }
-  .rg { display: none; }
   .cell.alert .viz { --fill: var(--lv); }
   .meter { position: relative; width: 100%; height: 6px; margin-bottom: 5px; border-radius: 3px; background: var(--track); }
   .meter span { display: block; height: 100%; border-radius: 3px; background: var(--fill); }
@@ -873,7 +869,7 @@
     .most { padding: 0 22px 20px; }
     .lower { grid-template-columns: minmax(0, 1fr); }
     .side { position: static; }
-    /* the strip stays one row: System a little wider, its figures wrap onto a second line rather than taking a row */
+    /* the strip stays one row: System a little wider, its figures still on one line */
     .cell:has(.ist + .ist + .ist) { flex-grow: 1.15; }
     .cell { padding: 12px 12px; }
     .fig { gap: 0 8px; }
@@ -904,10 +900,11 @@
     .most { padding: 0 12px 14px; }
     .apps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
     .app { width: auto; }
-    /* the strip as a compact list: a row per area, its label over its figure, the picture on the right. The line of
-       context shows only for an area with a problem (the sheet has the rest) */
+    /* the strip as a compact list: a row per area, its label over its figure, the picture on the right, as wide in every
+       row: 112 px, narrower on small phones (56 px, 40 if it must) so System's figures stay on one line. The line of context shows only for an area with
+       a problem (the sheet has the rest) */
     .infra { display: flex; flex-direction: column; padding: 4px 6px; border-radius: 22px; }
-    .cell { flex: none; display: grid; grid-template-columns: minmax(0, 1fr) 112px; grid-template-areas: 'lab viz' 'fig viz' 'rg viz' 's s'; align-items: center; gap: 1px 14px; padding: 10px 10px; }
+    .cell { flex: none; display: grid; grid-template-columns: minmax(min-content, 1fr) minmax(40px, clamp(56px, 100vw - 300px, 112px)); grid-template-areas: 'lab viz' 'fig viz' 's s'; align-items: center; gap: 1px 14px; padding: 10px 10px; }
     .cell + .cell::before { display: block; left: 10px; right: 10px; top: 0; bottom: auto; border-left: 0; border-top: 1px solid var(--line); }
     .cell:hover::before, .cell:hover + .cell::before { display: block; }
     .cell:active { background: var(--surface-2); }
@@ -918,8 +915,6 @@
     .fig .u { margin-left: -5px; }
     .viz { grid-area: viz; height: 30px; align-items: center; }
     .viz :global(.spark) { height: 30px !important; }
-    .pk { display: none; }
-    .rg { grid-area: rg; display: block; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
     .meter { margin: 0; }
     .pips { gap: 3px; margin: 0; align-items: center; }
     .pips span { width: 10px; height: 12px; border-radius: 2px; }

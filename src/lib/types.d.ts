@@ -773,10 +773,6 @@ export interface InfraPanel {
   level: Level | 'none';
   /** the line under the panel's tab in the Infrastructure sheet */
   meta?: string;
-  /** the 24 h peak of the cell's picture ("peak 31%"), in its corner */
-  peak?: string;
-  /** the day's range or change, under the figure in the phone list ("CPU 4–31% today") */
-  range?: string;
 }
 
 export interface Snapshot {
