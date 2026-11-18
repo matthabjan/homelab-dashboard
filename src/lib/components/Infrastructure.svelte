@@ -30,8 +30,8 @@
     meta?: string;
   }
 
-  // the dot on a tab: a hidden panel must not hide a problem
-  const panels: Panel[] = $derived(summaries.flatMap((p) => (p.id === 'backups' && !backups ? [] : [{ id: p.id, name: p.label, level: p.level === 'none' || p.level === 'ok' ? null : p.level, meta: p.id === 'backups' ? p.sub : p.meta }])));
+  // the dot on a tab: a hidden panel must not hide a problem. Backups has no line beside its tabs: its summary says it
+  const panels: Panel[] = $derived(summaries.flatMap((p) => (p.id === 'backups' && !backups ? [] : [{ id: p.id, name: p.label, level: p.level === 'none' || p.level === 'ok' ? null : p.level, meta: p.id === 'backups' ? undefined : p.meta }])));
 
   // which panel is open. Remembered per browser as a convenience, so storage errors are ignored
   // svelte-ignore state_referenced_locally — the panel it opens with; the tabs change it from there

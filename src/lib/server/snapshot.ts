@@ -475,7 +475,7 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
       events: eventLevels(services.filter((s) => s.heartbeat?.backup || s.widget?.type === 'proxmoxbackupserver').map((s) => s.id), since)
     };
   });
-  const { sheet: backups, panel: backupsPanel } = backupsOf(widgets.flatMap(({ s, w }) => (w.backups ? [{ id: s.id, name: s.name, backups: w.backups }] : [])), jobs, now, backupHistory);
+  const { sheet: backups, panel: backupsPanel } = backupsOf(widgets.flatMap(({ s, w }) => (w.backups ? [{ id: s.id, name: s.name, backups: w.backups }] : [])), jobs, now, backupHistory, settings.thresholds.backupMaxAgeHours * H);
   const verdict = verdictOf(engine, all, jobs, backups, att);
   const mostUsed = mostUsedRow(all, settings, now);
 

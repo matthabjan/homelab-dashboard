@@ -427,6 +427,8 @@ export interface BackupRow {
   last: number | null;
   /** jobs: when the next run is expected (ms) */
   due: number | null;
+  /** how often it should run (ms): a job's interval, PBS's backupMaxAgeHours; the sheet's bar is the share of it gone by */
+  every: number | null;
   /** "on schedule", "2 overdue", "failed" */
   state: string;
   level: Level | 'none';
@@ -442,8 +444,11 @@ export interface Backups {
   oldestAge: number | null;
   /** what the oldest backup is: a guest or host on PBS, or a backup job */
   oldestName: string | null;
-  /** PBS rows first (they run daily, so they change most), then the jobs by when they are due */
+  /** PBS rows first (they run daily, so they change most), then the jobs, the furthest through their cycle first */
   rows: BackupRow[];
+  /** the sheet's summary: "All 7 on schedule" or "2 overdue", and under it the card's line (what is late, or the next job) */
+  title: string;
+  sub: string;
   /**
    * The last 7 days, a day each ending now, oldest first: the worst that was recorded that day (a backup job found
    * late is critical, a backup service's event as it was raised), 'ok' when only good news was, 'none' for no record.
