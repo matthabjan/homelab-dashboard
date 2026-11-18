@@ -45,6 +45,6 @@ export async function collect(w: Widget, ctx: Context): Promise<WidgetResult> {
     ],
     line: `${fmtNum(q)} queries · ${blockedPct.toFixed(1)}% blocked`,
     alerts,
-    dns: { queries: q, blockedPct, avgMs, series, period: series ? `${series.length} ${stats.time_units === 'days' ? 'd' : 'h'}` : null, blockedSeries, stepMs: series ? (stats.time_units === 'days' ? 86_400_000 : 3_600_000) : null }
+    dns: { queries: q, blockedPct, avgMs, series, period: series ? `${series.length} ${stats.time_units === 'days' ? 'd' : 'h'}` : null, blockedSeries, blockedCounts: blockedPer, stepMs: series ? (stats.time_units === 'days' ? 86_400_000 : 3_600_000) : null }
   };
 }
