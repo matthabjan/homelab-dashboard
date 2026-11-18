@@ -79,7 +79,7 @@ Guidelines: match gethomepage's widget fields where an equivalent exists. Never 
 - `npm run check` and `npm test` must pass. CI runs them, then builds the image and smoke-tests it in demo mode.
 - Update the docs when behaviour or configuration changes.
 - Screenshots help for UI changes. Take them in demo mode, never from a real setup.
-- The README screenshots are in `docs/screenshots/`. When the UI changes visibly, retake them in demo mode: desktop at 1440×1080, phones at 390×844 with 2× pixel density, side by side in `phones.png` (Home in the `issues` scenario in dark mode, the Services view in `calm` in light mode).
+- The README screenshots are in `docs/screenshots/`. When the UI changes visibly, retake them in demo mode: desktop at 1440×1080, phones at 390×844 with 2× pixel density, side by side in `phones.png` (Home in the `issues` scenario in dark mode, the Services view in `calm` in light mode) and in `infrastructure.png` (the Infrastructure sheet's System tab in `issues`, dark, and its Network tab in `calm`, light, with the `en-GB` locale so the chart times read 24 h).
 - The app icon ships with the app in `src/lib/server/default-images/`: `icon.svg` is the source of the PNG and ICO files beside it (512, 192 and 180 px as it is; the favicon at 16 and 32 px with rounded corners and the mark 30% larger), `icon-dark.svg` of `logo-dark.png` and `favicon-dark.ico`. `default-images.ts` decides when they are served instead of a file in `config/images/`.
 
 ## Releases (maintainers)
