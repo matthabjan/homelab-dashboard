@@ -338,7 +338,7 @@ test('Activity: outages under minOutageMinutes are left out, and each row says w
   assert.ok(every.some((f) => f.title === 'Blip went down'), '0 shows every outage');
 });
 
-test('System and Network panels: charts with each bucket\'s low and high, slow readings as meters, Disk I/O', () => {
+test('System and Network panels: charts with each bucket\'s low and high, slow readings as meters, Disk I/O; the strip\'s temperature only for a problem', () => {
   const now = day(31);
   // CPU: 10% averages with one 60% spike inside a bucket; LAN: one 300 Mbit/s burst two hours ago
   for (let i = 1; i <= 40; i++) {
@@ -362,6 +362,10 @@ test('System and Network panels: charts with each bucket\'s low and high, slow r
   assert.equal(Math.max(...cpu.series.filter((v) => v != null)), 35, 'the average flattens the spike');
   assert.deepEqual([Math.max(...cpu.hi.filter((v) => v != null)), Math.min(...cpu.lo.filter((v) => v != null))], [60, 10], 'the band keeps it');
   assert.deepEqual([snap.host?.io?.read, snap.host?.io?.write, snap.host?.io?.seriesRead?.some((v) => v === 2)], [2.5, 0.5, true]);
+  // the strip's System cell: CPU and RAM; the temperature only when it needs a look
+  assert.deepEqual(panel(snap, 'system')?.stats?.map((x) => x.k), ['CPU', 'RAM']);
+  const hot = createSnapshot()(snapshotInput({ services: [pve], temps: { cpu: 80, nvme: [], drives: [] } }), now);
+  assert.deepEqual(panel(hot, 'system')?.stats?.map((x) => [x.k, x.v, x.level]), [['CPU', '12%', 'ok'], ['RAM', '50%', 'ok'], ['TEMP', '80°C', 'warn']]);
   // the LAN's burst survives in the band of its download
   assert.equal(Math.max(...(snap.network?.lan?.downHi ?? []).filter((v) => v != null)), 300);
 });

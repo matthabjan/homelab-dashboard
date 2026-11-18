@@ -743,15 +743,15 @@
   /* a rule between cells, left out next to a hovered one */
   .cell + .cell::before { content: ''; position: absolute; left: 0; top: 14px; bottom: 14px; border-left: 1px solid var(--line); }
   .cell:hover::before, .cell:hover + .cell::before { display: none; }
-  /* a cell of several figures (System: CPU, RAM, temperature) gets half again the room, and never less than its
-     figures on one line: they don't wrap, the other cells give way */
-  .cell:has(.ist + .ist + .ist) { flex-grow: 1.5; min-width: min-content; }
-  .cell:has(.ist + .ist + .ist) .fig { flex-wrap: nowrap; }
+  /* every cell as wide as the others: System shows CPU and RAM, and its temperature only for a problem, when the
+     figures may take a second line */
   .clab { display: flex; align-items: center; gap: 7px; min-width: 0; font-size: 13px; color: var(--muted); }
   .kw::before { content: '·'; margin-right: 7px; }
   .fig { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 12px; min-width: 0; }
+  /* a figure and its unit sit closer than two figures, without a negative margin that would indent a wrapped unit */
+  .fig:not(:has(.ist)) { column-gap: 6px; }
   .fig .v, .fig .isv { font-size: 20px; font-weight: 600; letter-spacing: -0.015em; white-space: nowrap; font-variant-numeric: tabular-nums; }
-  .fig .u { margin-left: -6px; font-size: 13px; color: var(--muted); white-space: nowrap; }
+  .fig .u { font-size: 13px; color: var(--muted); white-space: nowrap; }
   .ist { display: inline-flex; align-items: baseline; gap: 4px; white-space: nowrap; }
   .isk { font-size: 13px; color: var(--muted); }
   .isv.hl, .cell.alert .fig .v { color: var(--lv); }
@@ -906,8 +906,7 @@
     .most { padding: 0 22px 20px; }
     .lower { grid-template-columns: minmax(0, 1fr); }
     .side { position: static; }
-    /* the strip stays one row: System a little wider, its figures still on one line */
-    .cell:has(.ist + .ist + .ist) { flex-grow: 1.15; }
+    /* the strip stays one row, the cells as wide as each other */
     .cell { padding: 12px 12px; }
     .fig { gap: 0 8px; }
     .fig .v, .fig .isv { font-size: 18px; }
@@ -938,10 +937,10 @@
     .apps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
     .app { width: auto; }
     /* the strip as a compact list: a row per area, its label over its figure, the picture on the right, as wide in every
-       row: 112 px, narrower on small phones (56 px, 40 if it must) so System's figures stay on one line. The line of context shows only for an area with
+       row: 45% of it (about 145 px on a phone). The line of context shows only for an area with
        a problem (the sheet has the rest) */
     .infra { display: flex; flex-direction: column; padding: 4px 6px; border-radius: 22px; }
-    .cell { flex: none; display: grid; grid-template-columns: minmax(min-content, 1fr) minmax(40px, clamp(56px, 100vw - 300px, 112px)); grid-template-areas: 'lab viz' 'fig viz' 's s'; align-items: center; gap: 1px 14px; padding: 10px 10px; }
+    .cell { flex: none; display: grid; grid-template-columns: minmax(0, 1fr) 45%; grid-template-areas: 'lab viz' 'fig viz' 's s'; align-items: center; gap: 1px 14px; padding: 10px 10px; }
     .cell + .cell::before { display: block; left: 10px; right: 10px; top: 0; bottom: auto; border-left: 0; border-top: 1px solid var(--line); }
     .cell:hover::before, .cell:hover + .cell::before { display: block; }
     .cell:active { background: var(--surface-2); }
@@ -949,7 +948,6 @@
     .fig { grid-area: fig; gap: 0 9px; }
     .fig .v, .fig .isv { font-size: 17px; }
     .isk, .fig .u { font-size: 12px; }
-    .fig .u { margin-left: -5px; }
     .viz { grid-area: viz; height: 30px; align-items: center; }
     .viz :global(.spark) { height: 30px !important; }
     .meter { margin: 0; }
