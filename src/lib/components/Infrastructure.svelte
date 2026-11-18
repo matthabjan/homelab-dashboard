@@ -2,6 +2,7 @@
   import { onMount, type Snippet } from 'svelte';
   import type { Level, Snapshot, Traffic, Trend } from '#lib/types';
   import Gauge from './Gauge.svelte';
+  import MeterRow from './MeterRow.svelte';
   import Reading from './Reading.svelte';
 
   interface Props {
@@ -82,17 +83,26 @@
   const driveMeta = (d: Snapshot['drives'][number]) => (d.meta.endsWith(` · ${d.group}`) ? d.meta.slice(0, -(d.group.length + 3)) : d.meta);
   /** how far back the charts go, said once above them instead of under each */
   const span = (from: number | null | undefined) => `Last ${from ? Math.max(1, Math.round((now - from) / 3_600_000)) : 24} h`;
-  const fmtRate = (v: number | null) => (v == null ? '—' : v >= 100 ? Math.round(v) : v.toFixed(1));
+  const fmtRate = (v: number | null) => (v == null ? '—' : v >= 100 ? String(Math.round(v)) : v.toFixed(1));
+  const fmtMBs = (v: number | null) => (v == null ? '—' : v >= 10 ? String(Math.round(v)) : v.toFixed(1));
+  /** the day's highest reading of a series, the band's when it has one */
+  const peakOf = (vs: (number | null)[] | null | undefined) => {
+    const ns = (vs ?? []).filter((v): v is number => v != null);
+    return ns.length > 1 ? Math.max(...ns) : null;
+  };
+  const meters = $derived(host?.gauges.filter((g) => g.view === 'meter') ?? []);
+  const charts = $derived(host?.gauges.filter((g) => g.view === 'chart') ?? []);
   const fmtNum = (n: number | null) => (n == null ? '—' : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(n >= 1e4 ? 0 : 1) + 'k' : String(n));
 </script>
 
 {#snippet traffic(t: Traffic, what: string)}
-  <!-- one traffic reading as a tile: download filled, upload as a second line, both in Mbit/s -->
+  <!-- one traffic reading as a tile: download filled with its band, upload as a second line, both in Mbit/s -->
+  {@const top = peakOf(t.downHi ?? t.seriesDown)}
   <Reading
     label={what} source={t.source} href={t.href} {target} {now}
-    current={{ a: `↓${fmtRate(t.down)}`, b: `↑${fmtRate(t.up)}`, unit: 'Mbit/s' }}
-    values={t.seriesDown} values2={t.seriesUp} from={t.from}
-    at={(v, v2) => ({ a: `↓${fmtRate(v)}`, b: `↑${fmtRate(v2)}`, unit: 'Mbit/s' })}
+    names={['Down', 'Up']} current={[fmtRate(t.down), fmtRate(t.up)]} unit="Mbit/s" peak={top != null ? `peak ${fmtRate(top)}` : null}
+    values={t.seriesDown} values2={t.seriesUp} lo={t.downLo} hi={t.downHi} from={t.from}
+    at={(v, v2) => [fmtRate(v), fmtRate(v2)]}
     format={(v) => `${fmtRate(v)} Mbit/s down`}
   />
 {/snippet}
@@ -127,9 +137,22 @@
     {#each panels as p (p.id)}
       <div class="panel {p.id}" class:off={view !== p.id} id="vp-{p.id}" role={tabbed ? 'tabpanel' : undefined} aria-labelledby={tabbed ? `vt-${p.id}` : undefined}>
         {#if p.id === 'system' && host}
+          <!-- what barely moves in a day as meter rows, then a chart for each reading that does (3B) -->
+          {#if meters.length}<div class="meters">{#each meters as g (g.key)}<MeterRow {g} />{/each}</div>{/if}
           <p class="span">{span(host.gauges.find((g) => g.from)?.from)}</p>
           <div class="gauges">
-            {#each host.gauges as g (g.key)}<Gauge {g} {now} />{/each}
+            {#each charts.filter((g) => g.key === 'cpu') as g (g.key)}<Gauge {g} {now} />{/each}
+            {#if host.io}
+              {@const io = host.io}
+              <Reading
+                label="Disk I/O" source={io.source} {target} {now}
+                names={['Read', 'Write']} current={[fmtMBs(io.read), fmtMBs(io.write)]} unit="MB/s"
+                values={io.seriesRead} values2={io.seriesWrite} from={io.from}
+                at={(v, v2) => [fmtMBs(v), fmtMBs(v2)]}
+                format={(v) => `${fmtMBs(v)} MB/s read`}
+              />
+            {/if}
+            {#each charts.filter((g) => g.key !== 'cpu') as g (g.key)}<Gauge {g} {now} />{/each}
           </div>
         {:else if p.id === 'storage'}
           <!-- grouped by the service that reports them, each group a box like the chart tiles; the order inside stays stable -->
@@ -192,14 +215,15 @@
             {#if network.lan}{@render traffic(network.lan, 'LAN')}{/if}
             {#if network.dns}
               {@const d = network.dns}
-              <!-- DNS: the share blocked, over the server's statistics interval when it reports one per hour (AdGuard) -->
+              <!-- DNS: queries per hour as bars with the blocked part, over the server's statistics interval when it reports
+                   one per hour (AdGuard); without that, just the figures -->
               <Reading
                 label="DNS" source={d.name} href={d.href} {target} {now}
-                current={{ a: `${d.blockedPct.toFixed(1)}%`, unit: 'blocked' }}
-                detail="{fmtNum(d.queries)} queries{d.period ? ` · ${d.period}` : ''}"
-                values={d.blockedSeries} from={d.blockedSeries && d.stepMs ? now - d.blockedSeries.length * d.stepMs : null}
-                at={(v) => ({ a: `${v.toFixed(1)}%`, unit: 'blocked' })}
-                format={(v) => `${v.toFixed(1)}% blocked`} min={null} minSpan={10}
+                names={['Queries', 'Blocked']} current={[fmtNum(d.queries), `${d.blockedPct.toFixed(1)}%`]} unit=""
+                detail={d.period ? `Last ${d.period}` : undefined}
+                bars values={d.series} values2={d.blockedCounts} from={d.series && d.stepMs ? now - d.series.length * d.stepMs : null}
+                at={(v, v2) => [fmtNum(v), v ? `${(((v2 ?? 0) / v) * 100).toFixed(1)}%` : '—']}
+                format={(v) => `${fmtNum(v)} queries`}
               />
             {/if}
           </div>
@@ -242,12 +266,16 @@
   .tabs .dot.lv-warn { width: 9px; height: 8px; }
   @media (pointer: coarse) { .tabs button { min-height: 28px; } }
 
-  .panels { display: grid; }
+  /* the charts' plot height: taller where the card is wide */
+  .panels { display: grid; --chart-h: 120px; }
+  @container infra (min-width: 520px) { .panels { --chart-h: 150px; } }
   .panel { grid-area: 1 / 1; display: flex; flex-direction: column; min-width: 0; }
   /* hidden panels still hold their height; visibility also takes them out of the tab order and the accessibility tree */
   .panel.off { visibility: hidden; }
 
-  /* system: tiles like Network's, one per row in the sheet, side by side only where the card is wide */
+  /* system: memory and disk as meter rows in one box, then chart tiles like Network's, one per row in the sheet, side
+     by side only where the card is wide */
+  .meters { display: flex; flex-direction: column; padding: 0 14px; margin-bottom: 14px; border-radius: 14px; background: var(--surface-2); }
   .gauges { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: 12px; }
 
   /* storage and drives: one row pattern, two lines each (name and figure; what it is and a bar), a rule above
