@@ -323,6 +323,8 @@ export interface HostVitals {
   memPct: number;
   /** `metric`: where its fill is recorded; unset for the local host, whose disk the engine records as host.disk */
   disk: { name: string; pct: number | null; sub: string; metric?: string };
+  /** disk read and write in MB/s (Proxmox rrddata), recorded as host.io.read / host.io.write */
+  io?: { read: number; write: number } | null;
   uptime: string | null;
   guestsRunning: number | null;
   guestsTotal: number | null;
@@ -371,6 +373,9 @@ export interface Traffic {
   up: number | null;
   seriesDown: (number | null)[] | null;
   seriesUp: (number | null)[] | null;
+  /** the download's lowest and highest reading per bucket: the band around its line */
+  downLo?: (number | null)[] | null;
+  downHi?: (number | null)[] | null;
   spanH: number | null;
   /** where the series start (ms); they end at the snapshot's time */
   from: number | null;
@@ -386,6 +391,8 @@ export interface DnsStats {
   period: string | null;
   /** % blocked per point of `series`, and how long a point is (ms); null when the server doesn't report them */
   blockedSeries?: number[] | null;
+  /** queries blocked per point of `series`: the blocked part of each hourly bar */
+  blockedCounts?: number[] | null;
   stepMs?: number | null;
 }
 
@@ -713,7 +720,20 @@ export interface Job {
 /** A metric's recent history: equal buckets from `from` to the snapshot's time, null where nothing was recorded. */
 export interface Trend {
   values: (number | null)[];
+  /** each bucket's lowest and highest reading, around the average in `values` */
+  lo?: (number | null)[];
+  hi?: (number | null)[];
   from: number;
+}
+
+/** A pair of rates over 24 h (disk read and write in MB/s), drawn like Network's traffic. */
+export interface IoReading {
+  source: string;
+  read: number | null;
+  write: number | null;
+  seriesRead: (number | null)[] | null;
+  seriesWrite: (number | null)[] | null;
+  from: number | null;
 }
 
 export interface Gauge {
@@ -726,7 +746,12 @@ export interface Gauge {
   sub: string | null;
   /** 24 h history in equal buckets from `from` to the snapshot's time; null without two samples yet */
   series: (number | null)[] | null;
+  /** each bucket's lowest and highest reading: the band around the line */
+  lo?: (number | null)[] | null;
+  hi?: (number | null)[] | null;
   from?: number;
+  /** a chart, or (slow readings: memory, disk fill) a meter row with a small 24 h line */
+  view: 'chart' | 'meter';
   max?: number | null;
   /** where it turns amber, drawn as a line on the chart */
   warn?: number | null;
@@ -748,6 +773,10 @@ export interface InfraPanel {
   level: Level | 'none';
   /** the line under the panel's tab in the Infrastructure sheet */
   meta?: string;
+  /** the 24 h peak of the cell's picture ("peak 31%"), in its corner */
+  peak?: string;
+  /** the day's range or change, under the figure in the phone list ("CPU 4–31% today") */
+  range?: string;
 }
 
 export interface Snapshot {
@@ -780,7 +809,7 @@ export interface Snapshot {
   fleet: (Level | 'none')[];
   fleetAvail: number | null;
   /** `name` is the Proxmox node; `facts` are labelled pairs shown beside it (uptime, guests) */
-  host: { name: string; href: string | null; facts: { label: string; value: string }[]; gauges: Gauge[] } | null;
+  host: { name: string; href: string | null; facts: { label: string; value: string }[]; gauges: Gauge[]; io: IoReading | null } | null;
   /** `off` rows (unavailable, detached, size unknown) draw `pct` as a grey bar: the last known fill, or empty */
   /** `group`: the service that reports it (rows are grouped by it); `warn`: the fill where its bar turns amber */
   storage: { name: string; group: string; pct: number | null; level: Level | 'off'; sub: string; warn: number; trend: Trend | null }[];

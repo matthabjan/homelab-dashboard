@@ -42,11 +42,11 @@ export default {
         : storage('nas-backup', 'nfs', 'backup', 1.1 * TiB, 4 * TiB, { shared: 1 })
     ]
   }),
-  // host NIC, bytes/s per minute; the newest point is still being filled, as in the real RRD
+  // host NIC and disks, bytes/s per minute; the newest point is still being filled, as in the real RRD
   'GET /api2/json/nodes/:node/rrddata': ({ now }): PveResponse<PveRrdPoint[]> => ({
     data: Array.from({ length: 70 }, (_, i): PveRrdPoint => {
       const t = Math.floor(now / 60_000) - 69 + i;
-      return i === 69 ? { time: t * 60 } : { time: t * 60, netin: (2 + Math.abs(Math.sin(t / 9)) * 25) * 125_000, netout: (6 + Math.abs(Math.sin(t / 13)) * 60) * 125_000 };
+      return i === 69 ? { time: t * 60 } : { time: t * 60, netin: (2 + Math.abs(Math.sin(t / 9)) * 25) * 125_000, netout: (6 + Math.abs(Math.sin(t / 13)) * 60) * 125_000, diskread: (0.3 + Math.abs(Math.sin(t / 7)) * 1.5) * 1e6, diskwrite: (0.8 + Math.abs(Math.sin(t / 11)) * 2) * 1e6 };
     })
   }),
   'GET /api2/json/nodes/:node/disks/list': (): PveResponse<PveDisk[]> => ({

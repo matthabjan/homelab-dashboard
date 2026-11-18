@@ -92,7 +92,8 @@
   // the infrastructure strip: a cell per area, worded and judged on the server (the same panels are the sheet's tabs),
   // each with a small picture of its figure drawn from what the sheet charts
   const cards = $derived(snap?.infrastructure ?? []);
-  const fullest = $derived(Math.max(0, ...(snap?.storage ?? []).filter((r) => r.level !== 'off').map((r) => r.pct ?? 0)));
+  // the fullest storage, and where it turns amber (the tick on its meter)
+  const fullest = $derived((snap?.storage ?? []).filter((r) => r.level !== 'off').reduce<{ pct: number; warn: number | null }>((a, r) => ((r.pct ?? 0) > a.pct ? { pct: r.pct ?? 0, warn: r.warn } : a), { pct: 0, warn: null }));
 
   // Activity: what happened first; the notes (pending updates and the like) fold into one row under it
   const notes = $derived((snap?.feed ?? []).filter((a) => 'key' in a && a.sev === 'info'));
@@ -446,17 +447,23 @@
             </span>
             <span class="viz" aria-hidden="true">
               {#if c.id === 'system'}
-                <Sparkline values={snap.host?.gauges[0]?.series} area minSpan={30} height={28} />
+                {@const cpu = snap.host?.gauges.find((g) => g.key === 'cpu')}
+                <Sparkline values={cpu?.series} lo={cpu?.lo} hi={cpu?.hi} area dot minSpan={20} height={34} />
               {:else if c.id === 'storage'}
-                <span class="meter"><span style:width="{Math.min(100, fullest)}%"></span></span>
+                <span class="meter"><span style:width="{Math.min(100, fullest.pct)}%"></span>{#if fullest.warn != null}<i style:left="{fullest.warn}%"></i>{/if}</span>
               {:else if c.id === 'drives'}
                 <span class="pips">{#each snap.drives.slice(0, 10) as d, i (i)}<span class="lv-{d.level}" class:bad={isProblem(d.level)} class:none={d.status === '—'}></span>{/each}</span>
               {:else if c.id === 'network'}
-                <Sparkline values={snap.network?.seriesDown ?? snap.network?.lan?.seriesDown} area minSpan={10} height={28} />
+                {@const t = snap.network?.seriesDown ? snap.network : snap.network?.lan}
+                <Sparkline values={t?.seriesDown} values2={t?.seriesUp} area dot minSpan={1} height={34} />
               {:else}
                 <span class="days">{#each snap.backups.days as d, i (i)}<span class="lv-{d}" class:none={d === 'none'} class:bad={isProblem(d)}></span>{/each}</span>
               {/if}
+              <!-- the picture's 24 h peak, in its corner -->
+              {#if c.peak}<span class="pk">{c.peak}</span>{/if}
             </span>
+            <!-- phones: the day's range under the figure (the context line shows only for a problem there) -->
+            {#if c.range}<span class="rg">{c.range}</span>{/if}
             {#if c.sub}<span class="s">{c.sub}</span>{/if}
           </button>
         {/each}
@@ -734,10 +741,13 @@
   .ist { display: inline-flex; align-items: baseline; gap: 4px; white-space: nowrap; }
   .isk { font-size: 13px; color: var(--muted); }
   .isv.hl, .cell.alert .fig .v { color: var(--lv); }
-  .viz { display: flex; align-items: flex-end; height: 28px; --fill: var(--acc); }
+  .viz { position: relative; display: flex; align-items: flex-end; height: 34px; --fill: var(--acc); }
+  .pk { position: absolute; right: 0; top: -4px; font-size: 10.5px; line-height: 1; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .rg { display: none; }
   .cell.alert .viz { --fill: var(--lv); }
-  .meter { width: 100%; height: 6px; margin-bottom: 5px; border-radius: 3px; background: var(--track); overflow: hidden; }
+  .meter { position: relative; width: 100%; height: 6px; margin-bottom: 5px; border-radius: 3px; background: var(--track); }
   .meter span { display: block; height: 100%; border-radius: 3px; background: var(--fill); }
+  .meter i { position: absolute; top: -2px; bottom: -2px; width: 2px; margin-left: -1px; background: var(--warn); opacity: 0.7; }
   /* pictures of a state (a drive each, a day of backups) speak in status colours: full height and green when fine, a
      short bar in its colour where something needs a look, a stub where nothing is known. Pictures of an amount
      (CPU, storage, traffic) stay in the accent colour */
@@ -897,7 +907,7 @@
     /* the strip as a compact list: a row per area, its label over its figure, the picture on the right. The line of
        context shows only for an area with a problem (the sheet has the rest) */
     .infra { display: flex; flex-direction: column; padding: 4px 6px; border-radius: 22px; }
-    .cell { flex: none; display: grid; grid-template-columns: minmax(0, 1fr) 68px; grid-template-areas: 'lab viz' 'fig viz' 's s'; align-items: center; gap: 1px 14px; padding: 10px 10px; }
+    .cell { flex: none; display: grid; grid-template-columns: minmax(0, 1fr) 112px; grid-template-areas: 'lab viz' 'fig viz' 'rg viz' 's s'; align-items: center; gap: 1px 14px; padding: 10px 10px; }
     .cell + .cell::before { display: block; left: 10px; right: 10px; top: 0; bottom: auto; border-left: 0; border-top: 1px solid var(--line); }
     .cell:hover::before, .cell:hover + .cell::before { display: block; }
     .cell:active { background: var(--surface-2); }
@@ -906,8 +916,10 @@
     .fig .v, .fig .isv { font-size: 17px; }
     .isk, .fig .u { font-size: 12px; }
     .fig .u { margin-left: -5px; }
-    .viz { grid-area: viz; height: 24px; align-items: center; }
-    .viz :global(svg) { height: 24px !important; }
+    .viz { grid-area: viz; height: 30px; align-items: center; }
+    .viz :global(.spark) { height: 30px !important; }
+    .pk { display: none; }
+    .rg { grid-area: rg; display: block; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
     .meter { margin: 0; }
     .pips { gap: 3px; margin: 0; align-items: center; }
     .pips span { width: 10px; height: 12px; border-radius: 2px; }

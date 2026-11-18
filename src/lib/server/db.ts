@@ -119,21 +119,26 @@ export function probeBuckets(since: number, bucketMs: number) {
 /**
  * Averaged series for a metric, resampled into up to `points` buckets (null where no data).
  * Starts at the oldest sample when the history is shorter than the window, so a fresh install
- * shows a full-width line instead of a dot at the right edge. `from` is where it starts.
+ * shows a full-width line instead of a dot at the right edge. `from` is where it starts. `lo` and `hi` are each
+ * bucket's lowest and highest reading: the band around the line, so a spike survives the averaging.
  */
-export function series(key: string, since: number, until: number, points: number): { values: (number | null)[]; from: number } {
+export function series(key: string, since: number, until: number, points: number): { values: (number | null)[]; lo: (number | null)[]; hi: (number | null)[]; from: number } {
   const rows = all<MetricRow>('SELECT ts, v FROM metrics WHERE key = ? AND ts >= ? ORDER BY ts', key, since);
   const from = rows.length ? rows[0].ts : since;
   const n = Math.max(1, Math.min(points, Math.ceil(rows.length / 2))); // ~2 samples per bucket: no gaps from timer jitter
   const span = (until - from) / n || 1;
   const sums: number[] = new Array(n).fill(0);
   const counts: number[] = new Array(n).fill(0);
+  const lo: (number | null)[] = new Array(n).fill(null);
+  const hi: (number | null)[] = new Array(n).fill(null);
   for (const r of rows) {
     const i = Math.min(n - 1, Math.floor((r.ts - from) / span));
     sums[i] += r.v;
     counts[i]++;
+    lo[i] = lo[i] == null ? r.v : Math.min(lo[i], r.v);
+    hi[i] = hi[i] == null ? r.v : Math.max(hi[i], r.v);
   }
-  return { values: sums.map((s, i) => (counts[i] ? s / counts[i] : null)), from };
+  return { values: sums.map((s, i) => (counts[i] ? s / counts[i] : null)), lo, hi, from };
 }
 
 /** Open count where each open loses half its weight every `halfLifeDays`; only the sum and its time are stored. */

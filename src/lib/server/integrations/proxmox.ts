@@ -59,6 +59,8 @@ export interface PveRrdPoint {
   time: number;
   netin?: number;
   netout?: number;
+  diskread?: number;
+  diskwrite?: number;
 }
 
 /** A pending package in /nodes/{node}/apt/update. */
@@ -153,14 +155,19 @@ export async function collect(w: Widget, ctx: Context): Promise<WidgetResult> {
   let pending: PveAptUpdate[] | null = null;
   try { pending = (await ctx.getJson<PveResponse<PveAptUpdate[]>>(`${base}/nodes/${node.node}/apt/update`, opts)).data ?? null; } catch { /* needs Sys.Modify, which PVEAuditor lacks */ }
   const updates = pending?.length ?? null;
-  // the host NIC: LAN traffic to and from the server (NAS, backups, apps). RRD points are bytes/s averages; the newest can still be empty
+  // the host NIC: LAN traffic to and from the server (NAS, backups, apps), and the node's disk I/O. RRD points are bytes/s
+  // averages; the newest can still be empty
   let lan: NetworkReading | null = null;
+  let io: { read: number; write: number } | null = null;
   try {
     const rrd = (await ctx.getJson<PveResponse<PveRrdPoint[]>>(`${base}/nodes/${node.node}/rrddata?timeframe=hour&cf=AVERAGE`, opts)).data ?? [];
-    const last = rrd.findLast((p): p is Required<PveRrdPoint> => p.netin != null && p.netout != null);
-    if (last) lan = { down: (last.netin * 8) / 1e6, up: (last.netout * 8) / 1e6, source: node.node };
+    const last = rrd.findLast((p) => p.netin != null && p.netout != null);
+    if (last?.netin != null && last.netout != null) lan = { down: (last.netin * 8) / 1e6, up: (last.netout * 8) / 1e6, source: node.node };
+    const disk = rrd.findLast((p) => p.diskread != null && p.diskwrite != null);
+    if (disk?.diskread != null && disk.diskwrite != null) io = { read: disk.diskread / 1e6, write: disk.diskwrite / 1e6 };
   } catch { /* optional */ }
   if (lan) { ctx.metric('lan.down', lan.down); ctx.metric('lan.up', lan.up); }
+  if (io) { ctx.metric('host.io.read', io.read); ctx.metric('host.io.write', io.write); }
   const drives = (await slowly(ctx, 'drives', () => nodeDrives(ctx, base, opts, node.node))) ?? [];
 
   const cpu = (node.cpu ?? 0) * 100;
@@ -199,6 +206,7 @@ export async function collect(w: Widget, ctx: Context): Promise<WidgetResult> {
       disk: main
         ? { name: main.storage, pct: pct(main.disk, main.maxdisk), sub: fmtPair(main.disk, main.maxdisk), metric: `storage.pve.${main.storage}` }
         : { name: 'root', pct: rootPct, sub: fmtPair(node.disk, node.maxdisk), metric: 'host.root' },
+      io,
       uptime: node.uptime ? fmtDuration(node.uptime * 1000) : null,
       guestsRunning: running,
       guestsTotal: guests.length,

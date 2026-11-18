@@ -31,7 +31,7 @@ A widget adds live data to a service: its status line and stats, cells of the in
 
 ## Proxmox VE
 
-Provides the **System** panel (CPU, memory, disk, uptime, guests), the PVE rows in **Storage**, the host NIC traffic (LAN in and out) in **Network**, the host's physical disks in [**Drives**](#drives), and guest ids that the PBS widget uses to judge backup age.
+Provides the **System** panel (CPU, memory, disk, disk I/O, uptime, guests), the PVE rows in **Storage**, the host NIC traffic (LAN in and out) in **Network**, the host's physical disks in [**Drives**](#drives), and guest ids that the PBS widget uses to judge backup age.
 
 ```yaml
 widget:
@@ -182,7 +182,7 @@ Disk health alerts come from [Drives](#drives). Only disks with SMART monitoring
 
 ## AdGuard Home
 
-Provides the **DNS** part of the Network panel: queries, block rate, average response time and a 24-hour query chart.
+Provides the **DNS** part of the Network panel: queries, block rate, average response time and a 24-hour chart of queries per hour with the blocked part of each.
 
 ```yaml
 widget:

@@ -97,6 +97,8 @@ export function seedHistory(services: Service[]) {
       insertMetric('net.up', ts, Math.max(1, 8 + day * 5 + r() * 8));
       insertMetric('lan.down', ts, Math.max(1, 6 + r() * 20 + (i % 288 > 20 && i % 288 < 30 ? 300 : 0))); // nightly backup burst
       insertMetric('lan.up', ts, Math.max(1, 15 + day * 10 + r() * 30));
+      insertMetric('host.io.read', ts, 0.3 + r() * 1.2 + (i % 288 > 20 && i % 288 < 30 ? 180 : 0)); // the backup reads the disks
+      insertMetric('host.io.write', ts, 0.8 + day * 0.4 + r() * 1.5);
       // storage fills slowly through the day (the nightly backup adds a step)
       const grow = i / 288;
       for (const [key, pct, step] of STORAGE_TRENDS) insertMetric(key, ts, pct(calm()) - step * (1 - grow) - (i % 288 < 25 ? step / 2 : 0));

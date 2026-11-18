@@ -9,7 +9,7 @@ import { createAttention, type Raised } from './attention.ts';
 import { infrastructure } from './infrastructure.ts';
 import { backups as backupsOf, DAYS } from './backups.ts';
 import { storage as storageOf } from './storage.ts';
-import type { AttentionItem, Backups, ConfigProblem, Drive, Fact, Gauge, Job, Level, NetworkReading, Settings, Severity, SheetRef, Snapshot, Tile, Traffic, Trend } from '#lib/types';
+import type { AttentionItem, Backups, ConfigProblem, Drive, Fact, Gauge, IoReading, Job, Level, NetworkReading, Settings, Severity, SheetRef, Snapshot, Tile, Traffic, Trend } from '#lib/types';
 import type { Engine } from './engine.ts';
 
 const RANK: Record<Severity | Level, number> = { crit: 3, warn: 2, info: 1, ok: 0 };
@@ -59,7 +59,7 @@ const series24 = (mem: Memory, now: number, key: string, points: number) => perM
 const trend24 = (mem: Memory, now: number, key: string | undefined, points: number): Trend | null => {
   if (!key) return null;
   const s = series24(mem, now, key, points);
-  return s.values.filter((v) => v != null).length > 1 ? s : null;
+  return s.values.filter((v) => v != null).length > 1 ? { values: s.values, from: s.from } : null;
 };
 
 const level = (v: number | null | undefined, warn: number, crit: number): Level | 'none' => (v == null ? 'none' : v >= crit ? 'crit' : v >= warn ? 'warn' : 'ok');
@@ -239,29 +239,30 @@ function hostReading(engine: SnapshotInput) {
 function hostPanel(engine: SnapshotInput, { service: hostSvc, hw }: ReturnType<typeof hostReading>, diskLevel: Level | 'none', now: number, mem: Memory, round: Round): Snapshot['host'] {
   const { settings } = engine.cfg;
   const th = settings.thresholds;
-  // 15-minute buckets: fine enough to scrub through, coarse enough to stay smooth
+  // 15-minute buckets: fine enough to scrub through, coarse enough to stay smooth; each with its lowest and highest
+  // reading, so the chart's band keeps a spike the average flattens
   const hist = (key: string | undefined) => {
-    const t = trend24(mem, now, key, 96);
-    return t ? { series: t.values, from: t.from } : { series: null };
+    if (!key) return { series: null };
+    const s = series24(mem, now, key, 96);
+    return s.values.filter((v) => v != null).length > 1 ? { series: s.values, lo: s.lo, hi: s.hi, from: s.from } : { series: null };
   };
   let host = null;
   if (hw || engine.temps) {
     const temps = engine.temps;
     const gauges: Gauge[] = [];
     if (hw) {
-      gauges.push({ key: 'cpu', label: 'CPU', val: hw.cpu == null ? '—' : Math.round(hw.cpu), unit: '%', pct: hw.cpu, level: level(hw.cpu, 75, 90), sub: `${hw.cpus} threads`, ...hist('host.cpu'), max: 100, warn: 75 });
-      // a percentage like the other gauges and its history; the amounts are the detail
-      gauges.push({ key: 'mem', label: 'Memory', val: Math.round(hw.memPct), unit: '%', pct: hw.memPct, level: level(hw.memPct, 80, 92), sub: `${(hw.mem / 1024 ** 3).toFixed(1)} of ${Math.round(hw.maxmem / 1024 ** 3)} GiB`, ...hist('host.mem'), max: 100, warn: 80 });
-      gauges.push({ key: 'disk', label: 'Disk', val: hw.disk.pct == null ? '—' : Math.round(hw.disk.pct), unit: '%', pct: hw.disk.pct, level: diskLevel, sub: hw.disk.name, ...hist(hostSvc ? hw.disk.metric : 'host.disk'), max: 100, warn: th.storageAmberPct });
+      gauges.push({ key: 'cpu', label: 'CPU', val: hw.cpu == null ? '—' : Math.round(hw.cpu), unit: '%', pct: hw.cpu, level: level(hw.cpu, 75, 90), sub: `${hw.cpus} threads`, ...hist('host.cpu'), view: 'chart', max: 100, warn: 75 });
+      // memory and disk fill barely move in a day: meter rows with a small line, not charts. The amounts are the detail
+      gauges.push({ key: 'mem', label: 'Memory', val: Math.round(hw.memPct), unit: '%', pct: hw.memPct, level: level(hw.memPct, 80, 92), sub: `${(hw.mem / 1024 ** 3).toFixed(1)} of ${Math.round(hw.maxmem / 1024 ** 3)} GiB`, ...hist('host.mem'), view: 'meter', max: 100, warn: 80 });
+      gauges.push({ key: 'disk', label: 'Disk', val: hw.disk.pct == null ? '—' : Math.round(hw.disk.pct), unit: '%', pct: hw.disk.pct, level: diskLevel, sub: hw.disk.name, ...hist(hostSvc ? hw.disk.metric : 'host.disk'), view: 'meter', max: 100, warn: th.storageAmberPct });
     }
     if (temps?.cpu != null) {
       const span = th.tempWarnC + 15 - th.tempMinC;
       const tp = Math.max(0, Math.min(100, ((temps.cpu - th.tempMinC) / span) * 100));
-      // the chart's dashed line shows the limit, so the corner gives the day's peak (15-minute averages); without
-      // history yet there is no chart, and the corner names the limit instead
+      // the chart's dashed line shows the limit and its legend the day's peak; without history yet there is no chart,
+      // and the corner names the limit instead
       const tempHist = hist('host.temp');
-      const peak = Math.max(...(tempHist.series ?? []).filter((v) => v != null));
-      gauges.push({ key: 'temp', label: 'CPU temp', val: Math.round(temps.cpu), unit: '°C', pct: tp, level: level(temps.cpu, th.tempWarnC, th.tempWarnC + 10), sub: tempHist.series ? `24 h peak ${Math.round(peak)} °C` : `warn ${th.tempWarnC} °C`, ...tempHist, max: null, warn: th.tempWarnC });
+      gauges.push({ key: 'temp', label: 'Thermals', val: Math.round(temps.cpu), unit: '°C', pct: tp, level: level(temps.cpu, th.tempWarnC, th.tempWarnC + 10), sub: tempHist.series ? 'CPU' : `limit ${th.tempWarnC} °C`, ...tempHist, view: 'chart', max: null, warn: th.tempWarnC });
       // the kernel's sensors are the Proxmox node's (the dashboard shares its kernel), so its tile carries them
       const whose = hostSvc ? { service: hostSvc } : { source: 'host' };
       if (temps.cpu >= th.tempWarnC) round.raise({ ...whose, key: 'cpu-temp', sev: temps.cpu >= th.tempWarnC + 10 ? 'crit' : 'warn', title: `CPU at ${Math.round(temps.cpu)} °C`, detail: `limit ${th.tempWarnC} °C` });
@@ -274,10 +275,19 @@ function hostPanel(engine: SnapshotInput, { service: hostSvc, hw }: ReturnType<t
         ...(hw?.uptime ? [{ label: 'Uptime', value: hw.uptime }] : []),
         ...(hw?.guestsTotal != null ? [{ label: 'Guests', value: `${hw.guestsRunning} of ${hw.guestsTotal} running` }] : [])
       ],
-      gauges
+      gauges,
+      io: hw?.io ? ioReading(hw.node, hw.io, now, mem) : null
     };
   }
   return host;
+}
+
+/** The node's disk read and write (MB/s) with their 24 h series, like Network's traffic. */
+function ioReading(source: string, io: { read: number; write: number }, now: number, mem: Memory): IoReading {
+  const r = series24(mem, now, 'host.io.read', 96);
+  const w = series24(mem, now, 'host.io.write', 96);
+  const charted = r.values.filter((v) => v != null).length > 1;
+  return { source, read: io.read, write: io.write, seriesRead: charted ? r.values : null, seriesWrite: charted ? w.values : null, from: charted ? r.from : null };
 }
 
 /** The Drives panel: one row per disk (a disk passed through whole is listed once), its problems raised. */
@@ -328,7 +338,7 @@ function networkPanel(engine: SnapshotInput, widgets: ReturnType<typeof widgetsO
   const traffic = (key: string, reading: NetworkReading, href: string | null): Traffic => {
     const sDown = series24(mem, now, `${key}.down`, 72);
     const sUp = series24(mem, now, `${key}.up`, 72);
-    return { source: reading.source, href, down: reading.down, up: reading.up, seriesDown: sDown.values, seriesUp: sUp.values, spanH: Math.max(1, Math.round((now - sDown.from) / H)), from: sDown.from };
+    return { source: reading.source, href, down: reading.down, up: reading.up, seriesDown: sDown.values, seriesUp: sUp.values, downLo: sDown.lo, downHi: sDown.hi, spanH: Math.max(1, Math.round((now - sDown.from) / H)), from: sDown.from };
   };
   if (net || dns || lan?.w.lan) {
     const nw = net?.w.network;
@@ -493,7 +503,7 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
     storage,
     drives,
     network,
-    infrastructure: infrastructure({ host, drives, network }, { storage: disks.panel, backups: backupsPanel }),
+    infrastructure: infrastructure({ host, drives, network }, { storage: disks.panel, backups: backupsPanel }, now),
     mostUsed,
     groups: groups.map((g) => {
       const ts = g.services.map((s) => (tiles.get(s.id) as Tile)); // every service got a tile above

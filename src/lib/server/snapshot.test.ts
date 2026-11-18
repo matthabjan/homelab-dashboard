@@ -337,3 +337,37 @@ test('Activity: outages under minOutageMinutes are left out, and each row says w
   const every = createSnapshot()(snapshotInput({ services: [], settings: { ...input.cfg.settings, thresholds: { ...input.cfg.settings.thresholds, minOutageMinutes: 0 } } }), now).feed;
   assert.ok(every.some((f) => f.title === 'Blip went down'), '0 shows every outage');
 });
+
+test('System and Network panels: charts with each bucket\'s low and high, slow readings as meters, Disk I/O, the strip\'s peak and range', () => {
+  const now = day(31);
+  // CPU: 10% averages with one 60% spike inside a bucket; LAN: one 300 Mbit/s burst two hours ago
+  for (let i = 1; i <= 40; i++) {
+    const ts = now - i * 15 * MIN;
+    insertMetric('host.cpu', ts, 10);
+    insertMetric('host.cpu', ts + 5 * MIN, i === 8 ? 60 : 10);
+    insertMetric('host.mem', ts, 50);
+    insertMetric('host.io.read', ts, 2);
+    insertMetric('host.io.write', ts, 1);
+    insertMetric('lan.down', ts, i === 8 ? 300 : 5);
+    insertMetric('lan.up', ts, 1);
+  }
+  const vitals = { node: 'pve', cpu: 12, cpus: 8, mem: 2, maxmem: 4, memPct: 50, disk: { name: 'local', pct: 30, sub: '30 / 100 GiB', metric: 'storage.pve.local' }, io: { read: 2.5, write: 0.5 }, uptime: null, guestsRunning: null, guestsTotal: null, updates: null };
+  const pve: TestService = { name: 'PVE', widget: { type: 'proxmox', url: 'https://pve.home.arpa:8006' }, state: { widget: { ...widget(now, []), host: vitals, lan: { down: 5, up: 1, source: 'pve' } } } };
+  const snap = createSnapshot()(snapshotInput({ services: [pve], temps: { cpu: 50, nvme: [], drives: [] } }), now);
+  const g = (k: string) => snap.host?.gauges.find((x) => x.key === k);
+
+  assert.deepEqual(snap.host?.gauges.map((x) => [x.key, x.view]), [['cpu', 'chart'], ['mem', 'meter'], ['disk', 'meter'], ['temp', 'chart']]);
+  const cpu = g('cpu');
+  assert.ok(cpu?.series && cpu.hi && cpu.lo);
+  assert.equal(Math.max(...cpu.series.filter((v) => v != null)), 35, 'the average flattens the spike');
+  assert.deepEqual([Math.max(...cpu.hi.filter((v) => v != null)), Math.min(...cpu.lo.filter((v) => v != null))], [60, 10], 'the band keeps it');
+  assert.deepEqual([snap.host?.io?.read, snap.host?.io?.write, snap.host?.io?.seriesRead?.some((v) => v === 2)], [2.5, 0.5, true]);
+
+  assert.deepEqual([panel(snap, 'system')?.peak, panel(snap, 'system')?.range], ['peak 60%', 'CPU 10–60% in 24 h']);
+  // the network cell's picture is the LAN when there is no WAN reading; its peak and when it was
+  const lan = snap.network?.lan;
+  assert.ok(lan?.downHi && lan.from != null);
+  const i = lan.downHi.indexOf(300);
+  const at = lan.from + ((i + 0.5) / lan.downHi.length) * (now - lan.from);
+  assert.deepEqual([panel(snap, 'network')?.peak, panel(snap, 'network')?.range], ['peak 300', `peak 300 Mbit/s at ${fmtClock(at)}`]);
+});
