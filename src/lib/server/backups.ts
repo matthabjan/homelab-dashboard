@@ -14,10 +14,10 @@ export interface PbsSource {
 const overdueOf = (b: PbsBackups) => b.guestOverdue + b.hostOverdue;
 
 /** A PBS server's guest backups as one row, its host backups as another (they run on their own schedules). */
-function pbsRows({ id, name, backups: b }: PbsSource): BackupRow[] {
+function pbsRows({ id, name, backups: b }: PbsSource, every: number | null): BackupRow[] {
   const stores = b.stores.length ? ` · ${b.stores.join(', ')}` : '';
   const row = (title: string, detail: string, last: number | null, overdue: number): BackupRow => ({
-    id, title: title + stores, detail, last, due: null, state: overdue ? `${overdue} overdue` : 'on schedule', level: overdue ? b.overdueSev : 'ok', source: name
+    id, title: title + stores, detail, last, due: null, every, state: overdue ? `${overdue} overdue` : 'on schedule', level: overdue ? b.overdueSev : 'ok', source: name
   });
   const hosts = b.hosts.length > 3 ? `${b.hosts.slice(0, 2).join(', ')} and ${b.hosts.length - 2} more` : b.hosts.join(', ');
   return [
@@ -26,7 +26,10 @@ function pbsRows({ id, name, backups: b }: PbsSource): BackupRow[] {
   ];
 }
 
-const jobRow = (j: Job): BackupRow => ({ id: j.id, title: j.name, detail: `every ${ago(0, j.every)}`, last: j.lastOk, due: j.due, state: j.status, level: j.level, source: null });
+const jobRow = (j: Job): BackupRow => ({ id: j.id, title: j.name, detail: `every ${ago(0, j.every)}`, last: j.lastOk, due: j.due, every: j.every, state: j.status, level: j.level, source: null });
+
+/** how far through its cycle a job is (0 just ran, 1 due); a job that never ran sorts last */
+const cycle = (j: Job, now: number) => (j.lastOk == null ? -1 : (now - j.lastOk) / j.every);
 
 /**
  * The card's row. Its figure counts backups only, as the sheet does: PBS and the jobs marked `backup: true`. Any late
@@ -79,7 +82,7 @@ export function days(history: BackupHistory, now: number): Backups['days'] {
  * The Backups sheet and the card's row from every PBS widget and every job. Only PBS servers that judged a group count;
  * a job that never ran adds nothing yet. The panel is null when there is nothing to show.
  */
-export function backups(pbs: PbsSource[], jobs: Job[], now: number, history: BackupHistory = { checks: [], events: [] }): { sheet: Backups; panel: InfraPanel | null } {
+export function backups(pbs: PbsSource[], jobs: Job[], now: number, history: BackupHistory = { checks: [], events: [] }, pbsEvery: number | null = null): { sheet: Backups; panel: InfraPanel | null } {
   const known = pbs.filter((p) => p.backups.known);
   const ran = jobs.filter((j) => j.backup && j.state !== 'pending');
   const lateBackups = ran.filter((j) => j.state === 'down');
@@ -93,8 +96,16 @@ export function backups(pbs: PbsSource[], jobs: Job[], now: number, history: Bac
     level: worst([...known.filter((p) => overdueOf(p.backups)).map((p) => p.backups.overdueSev), ...lateBackups.map((j) => j.level)]),
     oldestAge: oldest?.age ?? null,
     oldestName: oldest?.name ?? null,
-    rows: [...known.flatMap(pbsRows), ...[...jobs].sort((a, b) => a.due - b.due).map(jobRow)],
+    rows: [...known.flatMap((p) => pbsRows(p, pbsEvery)), ...[...jobs].sort((a, b) => cycle(b, now) - cycle(a, now)).map(jobRow)],
+    title: '',
+    sub: '',
     days: days(history, now)
   };
-  return { sheet, panel: known.length || jobs.length ? panel(sheet, known, jobs, now) : null };
+  const card = known.length || jobs.length ? panel(sheet, known, jobs, now) : null;
+  // the sheet's summary says what the card says, with a count when all is well
+  // (a late or failed job that makes no backup is not overdue, but still not "on schedule")
+  const bad = sheet.rows.filter((r) => r.level === 'warn' || r.level === 'crit').length;
+  sheet.title = sheet.overdue ? `${sheet.overdue} overdue` : bad ? plural(bad, 'problem') : `All ${sheet.rows.length} on schedule`;
+  sheet.sub = card?.sub ?? '';
+  return { sheet, panel: card };
 }

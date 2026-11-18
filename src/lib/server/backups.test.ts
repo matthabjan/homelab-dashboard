@@ -42,7 +42,7 @@ test('oldest backup: the oldest of every PBS server and every backup job that ra
   assert.deepEqual(oldest([pbs('A', { oldestAge: 90 * H })], [job('Sync', 'up', 2 * H, { backup: false })]), [90 * H, 'web'], 'nor does one that makes no backup');
 });
 
-test('rows: each PBS server\'s guests and hosts apart, then the jobs by when they are due', () => {
+test('rows: each PBS server\'s guests and hosts apart, then the jobs', () => {
   const four = ['a', 'b', 'c', 'd'];
   const { sheet } = backups([
     pbs('PBS', { stores: ['main', 'offsite'], guests: 1, guestOverdue: 1, hosts: four, hostOverdue: 0, hostLast: now - H }),
@@ -84,4 +84,18 @@ test('days: a day each, oldest first; a job found late or a critical report make
   // the same outage written before outages were marked: no `outage`, still no failed backup
   const old = { checks: [{ b: 6, n: 700, fails: 0 }], events: [{ ts: at(0) - 2 * H, sev: 'crit' as const, outage: null }] };
   assert.equal(days(old, now)[6], 'ok', 'an unmarked went down from an older database is not a failed backup either');
+});
+
+test('sheet: each row with its interval, jobs the furthest through their cycle first, and a summary that counts when all is well', () => {
+  const weekly = job('Verify', 'up', 6 * 24 * H, { every: 7 * 24 * H, due: now + 24 * H });
+  const quarterly = job('Offsite', 'up', 16 * 24 * H, { every: 90 * 24 * H, due: now + 74 * 24 * H });
+  const daily = job('Restic', 'up', 6 * H);
+  const ok = backups([pbs('PBS')], [quarterly, daily, weekly], now, undefined, 26 * H).sheet;
+  assert.deepEqual(ok.rows.map((r) => [r.title, r.every]), [['Guest backups · main', 26 * H], ['Verify', 7 * 24 * H], ['Restic', 24 * H], ['Offsite', 90 * 24 * H]], 'by share of the interval gone by, not by due date');
+  assert.deepEqual([ok.title, ok.sub], ['All 4 on schedule', 'next: Restic in 18 h']);
+
+  const late = backups([pbs('PBS', { guestOverdue: 2 })], [job('Borg', 'down', 30 * H)], now).sheet;
+  assert.deepEqual([late.title, late.sub], ['3 overdue', 'Borg, 2 PBS backups']);
+  // a failing job that makes no backup is not overdue, but not "on schedule" either
+  assert.equal(backups([], [job('Sync', 'down', 30 * H, { backup: false })], now).sheet.title, '1 problem');
 });

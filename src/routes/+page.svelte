@@ -459,11 +459,7 @@
               {:else}
                 <span class="days">{#each snap.backups.days as d, i (i)}<span class="lv-{d}" class:none={d === 'none'} class:bad={isProblem(d)}></span>{/each}</span>
               {/if}
-              <!-- the picture's 24 h peak, in its corner -->
-              {#if c.peak}<span class="pk">{c.peak}</span>{/if}
             </span>
-            <!-- phones: the day's range under the figure (the context line shows only for a problem there) -->
-            {#if c.range}<span class="rg">{c.range}</span>{/if}
             {#if c.sub}<span class="s">{c.sub}</span>{/if}
           </button>
         {/each}
@@ -561,34 +557,50 @@
   <!-- the Backups tab of the Infrastructure sheet: here, since its rows open service sheets -->
   {#snippet backupsTab()}
     {#if snap}
-      {#if snap.backups.oldestAge != null}
-        <div class="facts">
-          <div class="fact"><span class="muted k">Oldest backup</span><span class="fv">{ago(now - snap.backups.oldestAge, now)}</span>{#if snap.backups.oldestName}<span class="muted small">{snap.backups.oldestName}</span>{/if}</div>
-          <div class="fact lv-{snap.backups.level}"><span class="muted k">Overdue</span><span class="fv" class:hl={!!snap.backups.overdue}>{snap.backups.overdue}</span></div>
+      {@const b = snap.backups}
+      {@const bad = b.level === 'warn' || b.level === 'crit' || b.rows.some((r) => isProblem(r.level))}
+      <!-- the summary: one sentence (what the card says, with a count when all is well) and the week, as on the strip -->
+      <div class="bsum lv-{bad ? (b.level === 'none' ? 'crit' : b.level) : 'ok'}">
+        <div class="bverdict">
+          <span class="bic" aria-hidden="true">
+            {#if bad}<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 7v6M12 17h.01" /></svg>
+            {:else}<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10" /></svg>{/if}
+          </span>
+          <span class="txt"><span class="bt">{b.title}</span>{#if b.sub}<span class="muted small">{b.sub}</span>{/if}</span>
         </div>
-      {/if}
-      {#if snap.backups.rows.length}
-        <ul class="jobs">
-          {#each snap.backups.rows as r (r.id + r.title)}
-            <li>
-              <button class="job" onclick={() => details(r.id)}>
-                <span class="txt"><span class="t">{r.title}</span><span class="d muted">{r.detail} · last run {since(r.last)}</span></span>
-                <span class="jr"><span class="state-w lv-{r.level}"><span class="dot lv-{r.level}" aria-hidden="true"></span>{r.state}</span><span class="muted small">{r.due != null ? `next ${until(r.due, now)}` : r.source}</span></span>
-              </button>
-            </li>
-          {/each}
-        </ul>
-      {/if}
+        <div class="bweek" role="img" aria-label="Backups over the last 7 days: {b.days.map((d) => (d === 'none' ? 'nothing recorded' : d === 'ok' ? 'fine' : d === 'warn' ? 'warning' : 'late')).join(', ')}">
+          {#each b.days as d, i (i)}<span class="lv-{d}" class:none={d === 'none'}></span>{/each}
+        </div>
+        <div class="sh-row muted tiny"><span>7 days ago</span><span>today</span></div>
+      </div>
+      <!-- a line and a bar per backup: the bar is the share of its interval gone by since its last run, amber in the
+           last tenth; a backup with a problem (late, overdue, failed) is a full bar in its colour, with a dot. A tap opens
+           its service -->
+      {#each [{ name: 'Proxmox Backup Server', rows: b.rows.filter((r) => r.source != null) }, { name: 'Jobs', rows: b.rows.filter((r) => r.source == null) }].filter((g) => g.rows.length) as g (g.name)}
+        <section class="bgroup" aria-label={g.name}>
+          <h3>{g.name}</h3>
+          <ul class="brows">
+            {#each g.rows as r (r.id + r.title)}
+              {@const share = r.last != null && r.every ? (now - r.last) / r.every : null}
+              {@const lv = isProblem(r.level) ? r.level : share != null && share >= 0.9 ? 'warn' : r.level === 'none' ? 'none' : 'ok'}
+              <li>
+                <button class="brow lv-{lv}" class:bad={isProblem(r.level)} onclick={() => details(r.id)} aria-label="{r.title}: {r.state}, last run {since(r.last)}{r.every ? `, every ${ago(0, r.every)}` : ''}">
+                  <span class="bn">{#if isProblem(r.level)}<span class="dot lv-{r.level}" aria-hidden="true"></span>{/if}<span>{r.title}</span></span>
+                  <span class="ba num">{isProblem(r.level) || r.last == null ? r.state : since(r.last)}{r.every ? ` · every ${ago(0, r.every)}` : ''}</span>
+                  <span class="cyc" aria-hidden="true"><span style:width="{isProblem(r.level) ? 100 : Math.min(100, Math.max(0, (share ?? 0) * 100))}%"></span></span>
+                </button>
+              </li>
+            {/each}
+          </ul>
+        </section>
+      {/each}
+      <!-- what happened: folded into one row, since Activity and each service's sheet list it too -->
       <div class="sh-block">
-        <div class="sh-row"><span class="st">Recent</span><span class="muted small">Last 7 days</span></div>
-        {#if backupEvents.length}
-          <ul class="evs" id="backup-recent">{#each recentAll ? backupEvents : backupEvents.slice(0, RECENT) as a (a.ts + a.title)}{@render event(a)}{/each}</ul>
-          {#if backupEvents.length > RECENT}
-            <button class="link-btn" aria-expanded={recentAll} aria-controls="backup-recent" onclick={() => (recentAll = !recentAll)}>{recentAll ? 'Show fewer' : `Show all ${backupEvents.length}`}</button>
-          {/if}
-        {:else}
-          <p class="muted small">No backup events in the last 7 days.</p>
-        {/if}
+        <button class="brecent" aria-expanded={recentAll} aria-controls="backup-recent" onclick={() => (recentAll = !recentAll)} disabled={!backupEvents.length}>
+          <span><span class="st">Recent</span> <span class="muted small">· {backupEvents.length ? `${backupEvents.length} ${backupEvents.length === 1 ? 'event' : 'events'} in 7 days` : 'nothing in 7 days'}</span></span>
+          {#if backupEvents.length}<svg class="chev" class:open={recentAll} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>{/if}
+        </button>
+        {#if recentAll}<ul class="evs" id="backup-recent">{#each backupEvents as a (a.ts + a.title)}{@render event(a)}{/each}</ul>{/if}
       </div>
     {/if}
   {/snippet}
@@ -731,8 +743,10 @@
   /* a rule between cells, left out next to a hovered one */
   .cell + .cell::before { content: ''; position: absolute; left: 0; top: 14px; bottom: 14px; border-left: 1px solid var(--line); }
   .cell:hover::before, .cell:hover + .cell::before { display: none; }
-  /* a cell of several figures (System: CPU, RAM, temperature) gets half again the room, enough for one line */
-  .cell:has(.ist + .ist + .ist) { flex-grow: 1.5; }
+  /* a cell of several figures (System: CPU, RAM, temperature) gets half again the room, and never less than its
+     figures on one line: they don't wrap, the other cells give way */
+  .cell:has(.ist + .ist + .ist) { flex-grow: 1.5; min-width: min-content; }
+  .cell:has(.ist + .ist + .ist) .fig { flex-wrap: nowrap; }
   .clab { display: flex; align-items: center; gap: 7px; min-width: 0; font-size: 13px; color: var(--muted); }
   .kw::before { content: '·'; margin-right: 7px; }
   .fig { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 12px; min-width: 0; }
@@ -742,8 +756,6 @@
   .isk { font-size: 13px; color: var(--muted); }
   .isv.hl, .cell.alert .fig .v { color: var(--lv); }
   .viz { position: relative; display: flex; align-items: flex-end; height: 34px; --fill: var(--acc); }
-  .pk { position: absolute; right: 0; top: -4px; font-size: 10.5px; line-height: 1; color: var(--muted); font-variant-numeric: tabular-nums; }
-  .rg { display: none; }
   .cell.alert .viz { --fill: var(--lv); }
   .meter { position: relative; width: 100%; height: 6px; margin-bottom: 5px; border-radius: 3px; background: var(--track); }
   .meter span { display: block; height: 100%; border-radius: 3px; background: var(--fill); }
@@ -842,12 +854,33 @@
   .kv > div { display: flex; justify-content: space-between; gap: 16px; padding: 12px 0; border-top: 1px solid var(--line); font-size: 15px; }
   .kv dt { color: var(--muted); flex: none; }
   .kv dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
-  .jobs { list-style: none; margin: 0; padding: 0; }
-  .job { width: 100%; display: flex; align-items: center; gap: 12px; padding: 12px 0; border: 0; border-top: 1px solid var(--line); background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
-  .jobs li:first-child .job { border-top: 0; }
-  .job:hover .t { color: var(--acc); }
-  .jr { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex: none; }
-  .jr .state-w { font-size: 13px; font-weight: 500; }
+  /* backups: a summary (sentence and week), then a line and a cycle bar per backup, then Recent folded */
+  .bsum { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 14px; background: var(--surface-2); }
+  .bverdict { display: flex; align-items: center; gap: 12px; }
+  .bic { width: 30px; height: 30px; flex: none; display: grid; place-items: center; border-radius: 50%; background: var(--lv-soft); color: var(--lv); }
+  .bt { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
+  .bweek { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+  .bweek span { height: 18px; border-radius: 4px; background: var(--lv); opacity: 0.85; }
+  .bweek span.none { background: var(--surface-3); opacity: 1; }
+  .tiny { font-size: 11px; }
+  .bgroup { display: flex; flex-direction: column; gap: 2px; }
+  .brows { list-style: none; margin: 0; padding: 0; }
+  .brow { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'n a' 'b b'; align-items: center; gap: 7px 12px; padding: 11px 0; border: 0; border-top: 1px solid var(--line); background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+  .brows li:first-child .brow { border-top: 0; }
+  .brow:hover .bn { color: var(--acc); }
+  .brow:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; border-radius: 6px; }
+  .bn { grid-area: n; display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 14.5px; font-weight: 500; }
+  .bn > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ba { grid-area: a; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+  .brow.bad .ba { color: color-mix(in srgb, var(--lv) 85%, var(--text)); font-weight: 500; }
+  .cyc { grid-area: b; height: 6px; border-radius: 4px; background: var(--track); overflow: hidden; }
+  .cyc span { display: block; height: 100%; border-radius: 4px; background: var(--lv); transition: width 0.6s cubic-bezier(0.2, 0.8, 0.2, 1); }
+  .brow.lv-none .cyc span { background: var(--surface-3); }
+  .brecent { display: flex; justify-content: space-between; align-items: center; gap: 12px; width: 100%; padding: 12px 0 4px; border: 0; border-top: 1px solid var(--line); background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+  .brecent:disabled { cursor: default; }
+  .brecent:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; border-radius: 6px; }
+  .chev { color: var(--muted); transition: transform 0.2s; }
+  .chev.open { transform: rotate(180deg); }
 
   :global(html) { scroll-padding-top: 12px; }
   /* connection lost or data stale: say so, and stop showing status colour as if it were current */
@@ -873,7 +906,7 @@
     .most { padding: 0 22px 20px; }
     .lower { grid-template-columns: minmax(0, 1fr); }
     .side { position: static; }
-    /* the strip stays one row: System a little wider, its figures wrap onto a second line rather than taking a row */
+    /* the strip stays one row: System a little wider, its figures still on one line */
     .cell:has(.ist + .ist + .ist) { flex-grow: 1.15; }
     .cell { padding: 12px 12px; }
     .fig { gap: 0 8px; }
@@ -904,10 +937,11 @@
     .most { padding: 0 12px 14px; }
     .apps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
     .app { width: auto; }
-    /* the strip as a compact list: a row per area, its label over its figure, the picture on the right. The line of
-       context shows only for an area with a problem (the sheet has the rest) */
+    /* the strip as a compact list: a row per area, its label over its figure, the picture on the right, as wide in every
+       row: 112 px, narrower on small phones (56 px, 40 if it must) so System's figures stay on one line. The line of context shows only for an area with
+       a problem (the sheet has the rest) */
     .infra { display: flex; flex-direction: column; padding: 4px 6px; border-radius: 22px; }
-    .cell { flex: none; display: grid; grid-template-columns: minmax(0, 1fr) 112px; grid-template-areas: 'lab viz' 'fig viz' 'rg viz' 's s'; align-items: center; gap: 1px 14px; padding: 10px 10px; }
+    .cell { flex: none; display: grid; grid-template-columns: minmax(min-content, 1fr) minmax(40px, clamp(56px, 100vw - 300px, 112px)); grid-template-areas: 'lab viz' 'fig viz' 's s'; align-items: center; gap: 1px 14px; padding: 10px 10px; }
     .cell + .cell::before { display: block; left: 10px; right: 10px; top: 0; bottom: auto; border-left: 0; border-top: 1px solid var(--line); }
     .cell:hover::before, .cell:hover + .cell::before { display: block; }
     .cell:active { background: var(--surface-2); }
@@ -918,8 +952,6 @@
     .fig .u { margin-left: -5px; }
     .viz { grid-area: viz; height: 30px; align-items: center; }
     .viz :global(.spark) { height: 30px !important; }
-    .pk { display: none; }
-    .rg { grid-area: rg; display: block; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
     .meter { margin: 0; }
     .pips { gap: 3px; margin: 0; align-items: center; }
     .pips span { width: 10px; height: 12px; border-radius: 2px; }

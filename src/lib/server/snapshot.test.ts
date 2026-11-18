@@ -338,7 +338,7 @@ test('Activity: outages under minOutageMinutes are left out, and each row says w
   assert.ok(every.some((f) => f.title === 'Blip went down'), '0 shows every outage');
 });
 
-test('System and Network panels: charts with each bucket\'s low and high, slow readings as meters, Disk I/O, the strip\'s peak and range', () => {
+test('System and Network panels: charts with each bucket\'s low and high, slow readings as meters, Disk I/O', () => {
   const now = day(31);
   // CPU: 10% averages with one 60% spike inside a bucket; LAN: one 300 Mbit/s burst two hours ago
   for (let i = 1; i <= 40; i++) {
@@ -362,12 +362,6 @@ test('System and Network panels: charts with each bucket\'s low and high, slow r
   assert.equal(Math.max(...cpu.series.filter((v) => v != null)), 35, 'the average flattens the spike');
   assert.deepEqual([Math.max(...cpu.hi.filter((v) => v != null)), Math.min(...cpu.lo.filter((v) => v != null))], [60, 10], 'the band keeps it');
   assert.deepEqual([snap.host?.io?.read, snap.host?.io?.write, snap.host?.io?.seriesRead?.some((v) => v === 2)], [2.5, 0.5, true]);
-
-  assert.deepEqual([panel(snap, 'system')?.peak, panel(snap, 'system')?.range], ['peak 60%', 'CPU 10–60% in 24 h']);
-  // the network cell's picture is the LAN when there is no WAN reading; its peak and when it was
-  const lan = snap.network?.lan;
-  assert.ok(lan?.downHi && lan.from != null);
-  const i = lan.downHi.indexOf(300);
-  const at = lan.from + ((i + 0.5) / lan.downHi.length) * (now - lan.from);
-  assert.deepEqual([panel(snap, 'network')?.peak, panel(snap, 'network')?.range], ['peak 300', `peak 300 Mbit/s at ${fmtClock(at)}`]);
+  // the LAN's burst survives in the band of its download
+  assert.equal(Math.max(...(snap.network?.lan?.downHi ?? []).filter((v) => v != null)), 300);
 });
