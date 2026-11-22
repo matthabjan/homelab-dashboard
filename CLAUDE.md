@@ -61,4 +61,4 @@ One Node process, no worker or external DB. `src/hooks.server.ts` starts a singl
 
 ## Branches and releases
 
-Work on `development` (image `:dev`), PR to `main` (`:edge`). To release: bump `version` in `package.json`, merge to `main`, push tag `vX.Y.Z`. The workflow checks the tag against `package.json`, promotes the `:dev` image (or builds, if `development` has moved on), publishes `X.Y.Z`/`X.Y`/`X`/`latest` to Docker Hub (`matthabjan/homelab-dashboard`), and creates the GitHub Release. Dependabot targets `development`; majors are upgraded deliberately.
+Work on `development` (image `:dev`), PR to `main` (`:edge`). To release: bump `version` in `package.json`, merge to `main` through a PR whose `## Changes` section (or, without one, its body above the first `---`) becomes the release notes, push tag `vX.Y.Z`. The workflow checks the tag against `package.json`, promotes the `:dev` image (or builds, if `development` has moved on), publishes `X.Y.Z`/`X.Y`/`X`/`latest` to Docker Hub (`matthabjan/homelab-dashboard`), and creates the GitHub Release. Dependabot targets `development`; majors are upgraded deliberately.

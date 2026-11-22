@@ -250,19 +250,27 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: write
+      pull-requests: read
     steps:
       - name: GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           PRERELEASE: ${{ contains(github.ref_name, '-') }}
-        # a release drafted in the GitHub UI creates the tag too, and so already exists: keep it
+        # a release drafted in the GitHub UI creates the tag too, and so already exists: keep it.
+        # The notes start with what the release pull request (the one merged into main as the tagged commit) says:
+        # its "## Changes" section, or without one its body up to the first "---"; GitHub's generated list follows
         run: |
           if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "Release $GITHUB_REF_NAME already exists, leaving it as is"
-          else
-            gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes \
-              $([ "$PRERELEASE" = true ] && echo --prerelease)
+            exit 0
           fi
+          body=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" \
+            --jq '[.[] | select(.merged_at != null and .base.ref == "main")][0].body // ""' | tr -d '\r')
+          changes=$(printf '%s\n' "$body" | awk '/^## /{on = ($0 ~ /^## +Changes *$/); next} /^---+ *$/{on = 0} on')
+          [ -n "${changes//[[:space:]]/}" ] || changes=$(printf '%s\n' "$body" | awk '/^---+ *$/{exit} 1')
+          if [ -n "${changes//[[:space:]]/}" ]; then printf '## Changes\n%s\n' "$changes"; fi > "$RUNNER_TEMP/notes.md"
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes \
+            --notes-file "$RUNNER_TEMP/notes.md" $([ "$PRERELEASE" = true ] && echo --prerelease)
 
   hub-description:
     if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') && (needs.image.result == 'success' || needs.promote.result == 'success') }}
