@@ -455,7 +455,7 @@
                 {@const t = snap.network?.seriesDown ? snap.network : snap.network?.lan}
                 <Sparkline values={t?.seriesDown} values2={t?.seriesUp} area dot minSpan={1} height={34} />
               {:else}
-                <span class="days">{#each snap.backups.days as d, i (i)}<span class="lv-{d}" class:none={d === 'none'} class:bad={isProblem(d)}></span>{/each}</span>
+                <span class="pips">{#each snap.backups.days as d, i (i)}<span class="lv-{d}" class:none={d === 'none'} class:bad={isProblem(d)}></span>{/each}</span>
               {/if}
             </span>
             {#if c.sub}<span class="s">{c.sub}</span>{/if}
@@ -713,19 +713,14 @@
   .meter { position: relative; width: 100%; height: 6px; margin-bottom: 5px; border-radius: 3px; background: var(--track); }
   .meter span { display: block; height: 100%; border-radius: 3px; background: var(--fill); }
   .meter i { position: absolute; top: -2px; bottom: -2px; width: 2px; margin-left: -1px; background: var(--warn); opacity: 0.7; }
-  /* pictures of a state (a drive each, a day of backups) speak in status colours: full height and green when fine, a
-     short bar in its colour where something needs a look, a stub where nothing is known. Pictures of an amount
-     (CPU, storage, traffic) stay in the accent colour */
-  .pips { display: flex; align-items: flex-end; gap: 5px; margin-bottom: 3px; }
-  .pips span { width: 22px; height: 14px; border-radius: 4px; background: var(--lv); opacity: 0.85; }
+  /* pictures of a state (a drive each, a day of backups with today on the right) speak in status colours: full height
+     and green when fine, a short bar in its colour where something needs a look, a stub where nothing is known. Both
+     use one cell size, a seventh of the picture's width (a week of backups fills it) up to 22 px, so a drive and a day
+     look alike in every layout. Pictures of an amount (CPU, storage, traffic) stay in the accent colour */
+  .pips { --gap: 4px; display: flex; align-items: flex-end; gap: var(--gap); width: 100%; margin-bottom: 3px; }
+  .pips span { flex: 0 1 calc((100% - 6 * var(--gap)) / 7); max-width: 22px; height: 14px; border-radius: 4px; background: var(--lv); opacity: 0.85; }
   .pips span.bad { height: 7px; }
   .pips span.none { height: 3px; background: var(--surface-3); opacity: 1; }
-  /* the last seven days of backups, today on the right: a short bar where something was late or failed, a stub where
-     nothing was recorded */
-  .days { display: flex; align-items: flex-end; gap: 3px; width: 100%; margin-bottom: 3px; }
-  .days span { flex: 1; height: 14px; border-radius: 3px; background: var(--lv); opacity: 0.85; }
-  .days span.bad { height: 7px; }
-  .days span.none { height: 3px; background: var(--surface-3); opacity: 1; }
   .cell .s { font-size: 12.5px; color: var(--muted); min-width: 0; overflow-wrap: anywhere; }
 
   /* services, and beside them activity and links */
@@ -877,12 +872,9 @@
     .viz { grid-area: viz; height: 30px; align-items: center; }
     .viz :global(.spark) { height: 30px !important; }
     .meter { margin: 0; }
-    .pips { gap: 3px; margin: 0; align-items: center; }
-    .pips span { width: 10px; height: 12px; border-radius: 2px; }
+    .pips { --gap: 3px; margin: 0; align-items: center; }
+    .pips span { height: 12px; border-radius: 3px; }
     .pips span.bad { height: 6px; }
-    .days { gap: 2px; margin: 0; align-items: center; }
-    .days span { height: 12px; border-radius: 2px; }
-    .days span.bad { height: 6px; }
     .cell .s { grid-area: s; display: none; font-size: 12px; margin-top: 2px; }
     .cell.alert .s { display: block; color: color-mix(in srgb, var(--lv) 75%, var(--text)); }
     .sec { padding: 16px 14px; border-radius: 20px; }
