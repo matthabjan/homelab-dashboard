@@ -80,7 +80,6 @@
   .sw { width: 8px; height: 8px; border-radius: 50%; align-self: center; background: var(--chart); }
   .s1 .sw { background: var(--chart-2); }
   .k { font-size: 12px; color: var(--muted); white-space: nowrap; }
-  .num { font-variant-numeric: tabular-nums; }
   .v { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.15; color: var(--chart); }
   .s1 .v { color: var(--chart-2); }
   .detail { font-size: 12px; margin-top: -4px; }

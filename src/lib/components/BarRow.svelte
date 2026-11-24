@@ -63,8 +63,7 @@
   .row-head .name { flex: 1 1 auto; min-width: 0; font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .row-line { display: flex; align-items: center; gap: 12px; min-height: 16px; }
   .meta-t { flex: 1 1 auto; min-width: 0; font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  /* words in the text font, figures with even digits */
-  .num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .num { white-space: nowrap; }
   .pct { flex: none; font-size: 14px; font-weight: 600; }
   .bar { --fill: var(--acc); }
   .bar.lv-warn, .bar.lv-crit { --fill: var(--lv); }

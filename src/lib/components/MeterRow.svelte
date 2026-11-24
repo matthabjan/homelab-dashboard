@@ -39,7 +39,7 @@
   .v { grid-area: v; font-size: 15px; font-weight: 600; text-align: right; }
   .meter.alert .v { color: var(--lv); }
   .unit { margin-left: 2px; font-size: 12px; font-weight: 400; color: var(--muted); }
-  .num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .num { white-space: nowrap; }
   .track { grid-area: b; position: relative; height: 6px; border-radius: 4px; background: var(--track); }
   .fill { position: absolute; inset: 0 auto 0 0; border-radius: 4px; background: var(--fill); transition: width 0.6s cubic-bezier(0.2, 0.8, 0.2, 1); }
   .tick { position: absolute; top: -2px; bottom: -2px; width: 2px; margin-left: -1px; background: var(--warn); opacity: 0.75; }

@@ -81,7 +81,7 @@
       <div class="tabs" role="tablist" aria-label="Infrastructure" style:--n={panels.length}>
         {#each panels as p (p.id)}
           <button role="tab" id="vt-{p.id}" aria-selected={view === p.id} aria-controls="vp-{p.id}" tabindex={view === p.id ? 0 : -1} onclick={() => show(p.id)} onkeydown={tabKey}>
-            {p.name}{#if p.level}<span class="dot lv-{p.level}" aria-hidden="true"></span><span class="vh">, {p.level === 'crit' ? 'critical' : 'warning'}</span>{/if}
+            {p.name}{#if p.level}<span class="dot lv-{p.level}" aria-hidden="true"></span><span class="sr">, {p.level === 'crit' ? 'critical' : 'warning'}</span>{/if}
           </button>
         {/each}
       </div>
@@ -125,7 +125,6 @@
   /* in the sheet, so no frame of its own: the sheet's padding is the only inset */
   .infra-card { container: infra / inline-size; display: flex; flex-direction: column; gap: 16px; }
   .solo { font-size: 14px; font-weight: 600; }
-  .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
   /* tabs on the left, what the open panel shows on the right; the context wraps below when it doesn't fit */
   .head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; min-height: 34px; }

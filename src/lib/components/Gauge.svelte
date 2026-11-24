@@ -56,7 +56,6 @@
   .label { font-size: 13px; font-weight: 500; flex: none; }
   .sub { font-size: 12px; color: var(--muted); min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .val { display: flex; align-items: baseline; gap: 3px; min-width: 0; white-space: nowrap; margin-bottom: 4px; }
-  .num { font-variant-numeric: tabular-nums; }
   .big { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.15; }
   .unit { font-size: 12px; color: var(--muted); }
   .peak { margin-left: 6px; font-size: 12px; color: var(--muted); }

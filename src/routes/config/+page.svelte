@@ -273,7 +273,6 @@
   .ttl { min-width: 0; padding-top: 4px; }
   .ttl h1 { font-size: 26px; font-weight: 600; letter-spacing: -0.02em; }
   .ttl p { margin: 2px 0 0; font-size: 14px; }
-  .small { font-size: 13px; }
 
   /* summary: four answers in one strip, like the dashboard's infrastructure */
   .strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 6px; }
@@ -296,10 +295,6 @@
   .intro { margin: -4px 0 0; font-size: 13px; }
   code { font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12px; }
   .sub { display: block; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
-  .chip { display: inline-flex; align-items: center; gap: 7px; min-height: 30px; padding: 0 11px; border: 0; border-radius: 999px; background: var(--surface-2); color: var(--muted); font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; }
-  .chip[aria-pressed='true'] { background: var(--text); color: var(--bg); }
-  .chip[aria-pressed='true'] .dot { background: currentColor; }
 
   .problems { list-style: none; margin: 0; padding: 0; }
   .problems li { display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; align-items: baseline; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); font-size: 14px; }
@@ -384,6 +379,5 @@
     .end { padding-top: 12px; }
     /* a service that needs a fix, tinted so it is found while scrolling */
     .row:has(.perr) { background: color-mix(in srgb, var(--crit) 8%, transparent); }
-    .chip { min-height: 36px; }
   }
 </style>
