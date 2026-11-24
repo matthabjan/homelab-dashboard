@@ -69,6 +69,8 @@ export class Engine extends EventEmitter {
     this.setMaxListeners(200);
     openDb();
     this.reload();
+    // at every start too: a container that restarts more often than the timer below would never be pruned
+    prune(this.cfg.settings.retentionDays);
     let t: ReturnType<typeof setTimeout> | undefined;
     try {
       const watcher = fs.watch(CONFIG_DIR, { recursive: false }, (_, file) => {
