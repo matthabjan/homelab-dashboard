@@ -11,84 +11,67 @@
   font-display: swap;
 }
 
+/* The palette. Each colour is written once, as its light and its dark value: `light-dark()` picks by the page's
+   colour scheme, which follows the system unless the viewer chose a theme (data-theme, set before first paint). */
 :root {
-  --bg: #f4f5f7;
-  --surface: #ffffff;
-  --surface-2: #eef0f3;
-  --surface-3: #e4e8ed;
-  --raised: #ffffff;
-  --line: #e2e6eb;
-  --track: #e4e8ed;
-  --text: #0e1116;
-  --muted: #5b6573;
-  --acc: var(--accent, #1f6fe0);
-  --acc-2: #7c4ddb;
-  /* as text these reach 4.5:1 on white and on their own tint; --none (no data) 3:1 */
-  --ok: #0e7f50;
-  --ok-soft: rgba(14, 127, 80, 0.12);
-  --warn: #935600;
-  --warn-soft: rgba(201, 120, 0, 0.1);
-  --crit: #bf3434;
-  --crit-soft: rgba(191, 52, 52, 0.09);
-  --none: #8a94a0;
-  --shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.04);
-  --shadow-lg: 0 24px 64px rgba(16, 24, 40, 0.18);
-  --scrim: rgba(15, 20, 30, 0.35);
-  --glass: rgba(255, 255, 255, 0.82);
-  color-scheme: light;
+  color-scheme: light dark;
+  --bg: light-dark(#f4f5f7, #0a0d12);
+  --surface: light-dark(#ffffff, #12161c);
+  --surface-2: light-dark(#eef0f3, #191e26);
+  --surface-3: light-dark(#e4e8ed, #222833);
+  --raised: light-dark(#ffffff, #262d38);
+  --line: light-dark(#e2e6eb, #222932);
+  --track: light-dark(#e4e8ed, #252c36);
+  --text: light-dark(#0e1116, #e8ecf1);
+  --muted: light-dark(#5b6573, #95a1af);
+  --acc: light-dark(var(--accent, #1f6fe0), var(--accent-dark, #6ea8ff));
+  --acc-2: light-dark(#7c4ddb, #b79cff);
+  /* as text the light values reach 4.5:1 on white and on their own tint; --none (no data) 3:1 */
+  --ok: light-dark(#0e7f50, #3ddc97);
+  --ok-soft: light-dark(rgba(14, 127, 80, 0.12), rgba(61, 220, 151, 0.15));
+  --warn: light-dark(#935600, #f5b544);
+  --warn-soft: light-dark(rgba(201, 120, 0, 0.1), rgba(245, 181, 68, 0.12));
+  --crit: light-dark(#bf3434, #ff6b6b);
+  --crit-soft: light-dark(rgba(191, 52, 52, 0.09), rgba(255, 107, 107, 0.12));
+  --none: light-dark(#8a94a0, #5c6673);
+  --scrim: light-dark(rgba(15, 20, 30, 0.35), rgba(5, 7, 10, 0.7));
+  --glass: light-dark(rgba(255, 255, 255, 0.82), rgba(22, 27, 34, 0.82));
+  /* a shadow's shape differs per theme (light: a soft drop; dark: a lit top edge), so each theme's layers are
+     transparent in the other */
+  --shadow: 0 1px 2px light-dark(rgba(16, 24, 40, 0.06), transparent), 0 1px 3px light-dark(rgba(16, 24, 40, 0.04), transparent), inset 0 1px 0 light-dark(transparent, rgba(255, 255, 255, 0.04));
+  --shadow-lg: 0 24px 64px light-dark(rgba(16, 24, 40, 0.18), transparent), 0 30px 80px light-dark(transparent, rgba(0, 0, 0, 0.55));
 }
+:root[data-theme='light'] { color-scheme: light; }
+:root[data-theme='dark'] { color-scheme: dark; }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) {
-    --bg: #0a0d12;
-    --surface: #12161c;
-    --surface-2: #191e26;
-    --surface-3: #222833;
-    --raised: #262d38;
-    --line: #222932;
-    --track: #252c36;
-    --text: #e8ecf1;
-    --muted: #95a1af;
-    --acc: var(--accent-dark, #6ea8ff);
-    --acc-2: #b79cff;
-    --ok: #3ddc97;
-    --ok-soft: rgba(61, 220, 151, 0.15);
-    --warn: #f5b544;
-    --warn-soft: rgba(245, 181, 68, 0.12);
-    --crit: #ff6b6b;
-    --crit-soft: rgba(255, 107, 107, 0.12);
-    --none: #5c6673;
-    --shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
-    --shadow-lg: 0 30px 80px rgba(0, 0, 0, 0.55);
-    --scrim: rgba(5, 7, 10, 0.7);
-    --glass: rgba(22, 27, 34, 0.82);
-    color-scheme: dark;
+/* Browsers from before light-dark() (Chrome 123, Firefox 120, Safari 17.5; mid-2024) get the light theme: the light
+   half of each colour above, repeated. app-css.test.ts fails when the two drift apart. */
+@supports not (color: light-dark(#000, #fff)) {
+  :root {
+    color-scheme: light;
+    --bg: #f4f5f7;
+    --surface: #ffffff;
+    --surface-2: #eef0f3;
+    --surface-3: #e4e8ed;
+    --raised: #ffffff;
+    --line: #e2e6eb;
+    --track: #e4e8ed;
+    --text: #0e1116;
+    --muted: #5b6573;
+    --acc: var(--accent, #1f6fe0);
+    --acc-2: #7c4ddb;
+    --ok: #0e7f50;
+    --ok-soft: rgba(14, 127, 80, 0.12);
+    --warn: #935600;
+    --warn-soft: rgba(201, 120, 0, 0.1);
+    --crit: #bf3434;
+    --crit-soft: rgba(191, 52, 52, 0.09);
+    --none: #8a94a0;
+    --scrim: rgba(15, 20, 30, 0.35);
+    --glass: rgba(255, 255, 255, 0.82);
+    --shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.04);
+    --shadow-lg: 0 24px 64px rgba(16, 24, 40, 0.18);
   }
-}
-:root[data-theme='dark'] {
-  --bg: #0a0d12;
-  --surface: #12161c;
-  --surface-2: #191e26;
-  --surface-3: #222833;
-  --raised: #262d38;
-  --line: #222932;
-  --track: #252c36;
-  --text: #e8ecf1;
-  --muted: #95a1af;
-  --acc: var(--accent-dark, #6ea8ff);
-  --acc-2: #b79cff;
-  --ok: #3ddc97;
-  --ok-soft: rgba(61, 220, 151, 0.15);
-  --warn: #f5b544;
-  --warn-soft: rgba(245, 181, 68, 0.12);
-  --crit: #ff6b6b;
-  --crit-soft: rgba(255, 107, 107, 0.12);
-  --none: #5c6673;
-  --shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
-  --shadow-lg: 0 30px 80px rgba(0, 0, 0, 0.55);
-  --scrim: rgba(5, 7, 10, 0.7);
-  --glass: rgba(22, 27, 34, 0.82);
-  color-scheme: dark;
 }
 
 /* logo variants: .on-light shows in light theme, .on-dark in dark theme */
