@@ -1,6 +1,7 @@
 <script lang="ts">
   import ThemeToggle from './ThemeToggle.svelte';
   import type { Settings } from '#lib/types';
+  import Glyph from './Glyph.svelte';
 
   // The header every page shares: the brand (home), search, the live state, the monitoring link and Setup. On phones
   // search moves to the tab bar, so the header keeps room for the title.
@@ -30,7 +31,7 @@
 </script>
 
 {#snippet searchInner()}
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+  <Glyph name="search" />
   <span class="ph">Open a service…</span>
   <kbd class="mono">/</kbd>
 {/snippet}
@@ -57,12 +58,12 @@
     {#if deepLink?.href}
       <a class="deep lift" href={deepLink.href} {target} rel="noopener">
         {deepLink.name ?? 'Monitoring'}
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8" /></svg>
+        <Glyph name="out" size={13} stroke={2.4} />
       </a>
     {/if}
     <ThemeToggle />
     <a class="hbtn" class:on={current === 'setup'} href={current === 'setup' ? '/' : '/config'} aria-label={setupLabel} title={setupLabel}>
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1" /><circle cx="15" cy="6" r="2" /><circle cx="9" cy="12" r="2" /><circle cx="17" cy="18" r="2" /></svg>
+      <Glyph bare name="setup" />
       {#if configProblems && current !== 'setup'}<span class="cfg-badge mono" aria-hidden="true">{configProblems}</span>{/if}
     </a>
   </div>
@@ -85,7 +86,7 @@
   .demo { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; padding: 2px 6px; border-radius: 5px; background: var(--surface-3); color: var(--text); }
   .hbtn { position: relative; display: flex; align-items: center; justify-content: center; width: 42px; height: 42px; border-radius: 12px; background: var(--surface); box-shadow: var(--shadow); color: var(--text); }
   .hbtn.on { background: var(--text); color: var(--bg); }
-  .hbtn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+  .hbtn :global(svg) { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
   .cfg-badge { position: absolute; top: -4px; right: -4px; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 9px; background: var(--warn); color: var(--bg); font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center; }
   .deep { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; padding: 0 14px; min-height: 42px; border-radius: 12px; background: var(--surface); box-shadow: var(--shadow); }
   @keyframes breathe { 50% { box-shadow: 0 0 0 7px transparent; } }

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import Glyph from './Glyph.svelte';
 
   type Theme = 'system' | 'light' | 'dark';
 
@@ -40,12 +41,12 @@
 <div class="seg only-desktop" role="radiogroup" aria-label="Theme">
   {#each OPTIONS as o (o.id)}
     <button role="radio" aria-checked={current === o.id} aria-label={o.label} title={o.label} onclick={() => pick(o.id)}>
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={o.d} /></svg>
+      <Glyph d={o.d} />
     </button>
   {/each}
 </div>
 <button class="step only-phone" aria-label="{opt.label}. Switch to {next.label.toLowerCase()}" title="{opt.label} · switch to {next.label.toLowerCase()}" onclick={() => pick(next.id)}>
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={opt.d} /></svg>
+  <Glyph d={opt.d} size={18} />
 </button>
 
 <style>

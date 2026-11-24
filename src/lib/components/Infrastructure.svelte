@@ -1,12 +1,14 @@
 <script lang="ts">
-  import { onMount, type Snippet } from 'svelte';
+  import { onMount } from 'svelte';
   import { ago } from '#lib/ago.ts';
-  import type { Backups, Level, Snapshot, Traffic } from '#lib/types';
+  import type { Backups, FeedItem, Level, Snapshot, Traffic } from '#lib/types';
   import { grouped, moved } from '#lib/logic.ts';
   import { fmtCount, fmtMBs, fmtRate, isProblem, since } from '#lib/format.ts';
   import Gauge from './Gauge.svelte';
   import MeterRow from './MeterRow.svelte';
   import Reading from './Reading.svelte';
+  import EventList from './EventList.svelte';
+  import Glyph from './Glyph.svelte';
 
   interface Props {
     /** the strip's panels: each is a tab, with its level and line */
@@ -24,11 +26,25 @@
     backups?: Backups | null;
     /** a backup row opens its service's sheet, which the page keeps */
     onbackup?: (id: string) => void;
-    /** the tab's Recent list (the page's event rows) and how many there are */
-    recent?: Snippet;
-    recentCount?: number;
+    /** when something last happened: the Backups tab's Recent list is read again */
+    lastChange?: number | null;
+    /** the page's clock, which the Recent list's times are measured from */
+    clock?: number;
   }
-  let { panels: summaries, host, storage, drives, network, target, now, initial, backups, onbackup, recent, recentCount = 0 }: Props = $props();
+  let { panels: summaries, host, storage, drives, network, target, now, initial, backups, onbackup, lastChange = null, clock }: Props = $props();
+
+  // the Backups tab's Recent list: the last 7 days of PBS and backup-job events, refreshed when something changes
+  let events = $state<FeedItem[]>([]);
+  $effect(() => {
+    void lastChange;
+    const ctl = new AbortController();
+    fetch('/api/events?backups', { signal: ctl.signal })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((items: FeedItem[]) => (events = items))
+      .catch(() => {});
+    return () => ctl.abort();
+  });
+  const recentCount = $derived(events.length);
 
   /** a tab of the card: its panel id, its name and the dot it shows */
   interface Panel {
@@ -115,7 +131,7 @@
     <!-- what the open panel shows; System labels each value -->
     {#if view === 'system' && host}
       <dl class="meta host-facts">
-        <div><dt>Node</dt><dd>{#if host.href}<a class="node" href={host.href} target={target} rel="noopener">{host.name}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9" /></svg></a>{:else}{host.name}{/if}</dd></div>
+        <div><dt>Node</dt><dd>{#if host.href}<a class="node" href={host.href} target={target} rel="noopener">{host.name}<Glyph name="out-wide" size={12} /></a>{:else}{host.name}{/if}</dd></div>
         {#each host.facts as f (f.label)}<div><dt>{f.label}</dt><dd>{f.value}</dd></div>{/each}
       </dl>
     {:else if active?.meta}
@@ -258,9 +274,9 @@
             <section class="group recent">
               <button class="recent-head" aria-expanded={recentOpen} disabled={!recentCount} onclick={() => (recentOpen = !recentOpen)}>
                 <span><span class="rt">Recent</span> <span class="muted">· {recentCount ? `${recentCount} ${recentCount === 1 ? 'event' : 'events'} in 7 days` : 'nothing in 7 days'}</span></span>
-                {#if recentCount}<svg class="chev" class:open={recentOpen} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>{/if}
+                {#if recentCount}<Glyph name="down" class={recentOpen ? 'chev open' : 'chev'} />{/if}
               </button>
-              {#if recentOpen && recentCount}<div class="recent-list">{@render recent?.()}</div>{/if}
+              {#if recentOpen && recentCount}<div class="recent-list"><EventList items={events} now={clock ?? now} /></div>{/if}
             </section>
           </div>
         {/if}
@@ -367,8 +383,8 @@
   .recent-head:disabled { cursor: default; }
   .recent-head:focus-visible { outline: 2px solid var(--acc); outline-offset: -2px; }
   .rt { font-weight: 500; }
-  .chev { color: var(--muted); transition: transform 0.2s; }
-  .chev.open { transform: rotate(180deg); }
+  .recent-head :global(.chev) { color: var(--muted); transition: transform 0.2s; }
+  .recent-head :global(.chev.open) { transform: rotate(180deg); }
   .recent-list { padding: 0 14px 6px; }
   .net { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: 12px; }
 

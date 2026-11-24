@@ -1,6 +1,7 @@
 <script lang="ts">
   import { untrack, type Snippet } from 'svelte';
   import { fly } from 'svelte/transition';
+  import Glyph from './Glyph.svelte';
 
   // Details on demand: a modal side panel on desktop, a bottom sheet on phones. The native <dialog> brings focus
   // handling, Esc, Android's back gesture and the backdrop; a click on the backdrop closes it too. On phones the
@@ -169,7 +170,7 @@
       <!-- a level deeper: a round button back to the one below, beside the title; where it leads is its label -->
       {#if backTo}
         <button class="back" onclick={onback} aria-label="Back to {backTo}" title="Back to {backTo}">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
+          <Glyph name="left" size={20} stroke={2.4} />
         </button>
       {/if}
       <div class="ttl">
@@ -177,7 +178,7 @@
         {#if sub}<p class="muted">{sub}</p>{/if}
       </div>
       <button class="close" onclick={onclose} aria-label={backTo ? 'Close all' : 'Close'}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
+        <Glyph name="close" stroke={2.2} />
       </button>
     </header>
     {#if open}
@@ -208,7 +209,7 @@
   /* the same size and fill as the close button, round so the two read apart */
   .back { flex: none; width: 40px; height: 40px; margin-right: 2px; border: 0; border-radius: 50%; background: var(--surface-2); color: var(--text); display: flex; align-items: center; justify-content: center; cursor: pointer; }
   .back:hover { background: var(--surface-3); }
-  .back svg { margin-left: -2px; }
+  .back :global(svg) { margin-left: -2px; }
   .grabber { display: none; }
   @media (prefers-reduced-motion: no-preference) {
     .sheet[open] { animation: in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1); }

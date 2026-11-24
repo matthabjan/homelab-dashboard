@@ -3,6 +3,7 @@
   import type { Bookmark, Tile } from '#lib/types';
   import Icon from './Icon.svelte';
   import { score } from '#lib/logic.ts';
+  import Glyph from './Glyph.svelte';
 
   /** Command palette: fuzzy search over services and bookmarks. */
   interface Props {
@@ -101,7 +102,7 @@
   <div class="scrim" role="presentation" onclick={(e) => e.target === e.currentTarget && (open = false)}>
     <div class="panel" bind:this={panel} role="dialog" aria-modal="true" aria-label="Search services">
       <div class="search">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+        <Glyph name="search" size={18} />
         <label class="sr" for="palette-q">Search services and links</label>
         <input
           id="palette-q"
@@ -134,7 +135,7 @@
             >
               <span class="ic">
                 {#if r.icon}<Icon src={r.icon} dark={r.iconDark} name={r.name} size={22} />
-                {:else}<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0" /><circle cx="16" cy="6" r="2" /><circle cx="10" cy="12" r="2" /><circle cx="18" cy="18" r="2" /></svg>{/if}
+                {:else}<Glyph name="setup-row" size={18} />{/if}
               </span>
               <span class="name">{r.name}</span>
               <span class="mono sub">{r.sub}</span>
