@@ -70,17 +70,17 @@
   .sgroup h3 { padding: 6px 8px 2px; }
   .tiles { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 2px 8px; }
   /* a tile: the service to open, with its line, and at its end the way to its details */
-  .tile { display: flex; align-items: center; min-width: 0; border-radius: 12px; transition: background-color 0.15s; }
+  .tile { display: flex; align-items: center; min-width: 0; border-radius: var(--r-12); transition: background-color 0.15s; }
   .tile:hover, .tile:focus-within { background: var(--surface-2); }
-  .tmain { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 9px 2px 9px 8px; border: 0; border-radius: 12px; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; -webkit-touch-callout: none; user-select: none; }
+  .tmain { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 9px 2px 9px 8px; border: 0; border-radius: var(--r-12); background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; -webkit-touch-callout: none; user-select: none; }
   .tmain:focus-visible { outline: 2px solid var(--acc); outline-offset: -2px; }
   .tx { display: flex; flex-direction: column; min-width: 0; flex: 1; }
-  .tx .t { font-size: 14.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .tx .d { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tx .t { font-size: var(--fs-14); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tx .d { font-size: var(--fs-12); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .tx .d.hl { color: color-mix(in srgb, var(--lv) 85%, var(--text)); }
   /* a tile with a problem says it in full, on two lines at most; healthy tiles keep to one */
   .tile.alert .tx .d { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
-  .inf { flex: none; width: 36px; height: 36px; margin-right: 4px; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 10px; background: none; color: var(--muted); cursor: pointer; }
+  .inf { flex: none; width: 36px; height: 36px; margin-right: 4px; display: flex; align-items: center; justify-content: center; border: 0; border-radius: var(--r-12); background: none; color: var(--muted); cursor: pointer; }
   .inf:hover { background: var(--surface-3); color: var(--text); }
   /* the details button of a healthy tile shows when the tile is pointed at or focused; a problem's shape always */
   .inf :global(svg) { opacity: 0; transition: opacity 0.15s; }

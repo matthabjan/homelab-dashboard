@@ -69,11 +69,11 @@
   .row { display: flex; flex-direction: column; gap: 5px; min-width: 0; padding: 10px 0 11px; border-top: 1px solid var(--line); }
   .row:first-child { border-top: 0; padding-top: 6px; }
   .row-head { display: flex; align-items: baseline; gap: 10px; }
-  .row-head .name { flex: 1 1 auto; min-width: 0; font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row-head .name { flex: 1 1 auto; min-width: 0; font-size: var(--fs-14); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .row-line { display: flex; align-items: center; gap: 12px; min-height: 16px; }
-  .meta-t { flex: 1 1 auto; min-width: 0; font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .meta-t { flex: 1 1 auto; min-width: 0; font-size: var(--fs-12); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .num { white-space: nowrap; }
-  .pct { flex: none; font-size: 14px; font-weight: 600; }
+  .pct { flex: none; font-size: var(--fs-14); font-weight: 600; }
   .bar { --fill: var(--acc); }
   .bar.lv-warn, .bar.lv-crit { --fill: var(--lv); }
   .bar.lv-warn .pct, .bar.lv-crit .pct { color: var(--lv); }
@@ -83,29 +83,29 @@
   /* the words in a fixed slot, so every bar starts at the same place */
   .size { flex: none; width: 8.5em; }
   .row-line > .track { flex: 1 1 auto; }
-  .dstatus { flex: none; font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 999px; color: var(--lv); background: var(--lv-soft); }
-  .dfact { flex: none; font-size: 12px; color: var(--muted); }
+  .dstatus { flex: none; font-size: var(--fs-11); font-weight: 600; padding: 1px 8px; border-radius: var(--r-pill); color: var(--lv); background: var(--lv-soft); }
+  .dfact { flex: none; font-size: var(--fs-12); color: var(--muted); }
   .dfact.lv-warn { color: var(--lv); }
-  .life { flex: none; display: flex; align-items: center; gap: 6px; font-size: 12px; }
+  .life { flex: none; display: flex; align-items: center; gap: 6px; font-size: var(--fs-12); }
   /* fixed track and a right-aligned slot wide enough for "100%", so every drive's bar lines up */
   .life .track { display: block; flex: none; width: 56px; }
   .lpct { min-width: 4ch; text-align: right; }
-  .track { position: relative; display: block; height: 5px; border-radius: 4px; background: var(--track); overflow: hidden; }
+  .track { position: relative; display: block; height: 5px; border-radius: var(--r-4); background: var(--track); overflow: hidden; }
   /* where the bar turns amber, like the dashed line on the charts */
   .tick { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--warn); opacity: 0.7; }
   .bar.lv-off .tick { display: none; }
-  .fill { display: block; height: 100%; border-radius: 4px; background: var(--fill); transition: width 0.6s cubic-bezier(0.2, 0.8, 0.2, 1); }
+  .fill { display: block; height: 100%; border-radius: var(--r-4); background: var(--fill); transition: width 0.6s cubic-bezier(0.2, 0.8, 0.2, 1); }
   /* a row that opens something: a button that looks like the others */
   .brow { width: 100%; border-left: 0; border-right: 0; border-bottom: 0; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
   .brow:hover .name { color: var(--acc); }
-  .brow:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; border-radius: 6px; }
+  .brow:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; border-radius: var(--r-8); }
   .brow .row-head, .brow .row-line { width: 100%; }
   /* a row that opens in place: a chevron at its end, and under it the rest as labelled lines */
   .opens:hover .name { color: var(--text); }
   .row-head :global(.chev) { flex: none; align-self: center; margin-left: -4px; color: var(--muted); transition: transform 0.15s; }
   .row-head :global(.chev.open) { transform: rotate(180deg); }
-  .more { display: flex; flex-direction: column; width: 100%; margin-top: 4px; padding: 2px 10px; border-radius: 10px; background: var(--surface); }
-  .fact { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; font-size: 12px; }
+  .more { display: flex; flex-direction: column; width: 100%; margin-top: 4px; padding: 2px 10px; border-radius: var(--r-12); background: var(--surface); }
+  .fact { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; font-size: var(--fs-12); }
   .fact + .fact { border-top: 1px solid var(--line); }
   .fact .k { color: var(--muted); }
   .fact .v { text-align: right; white-space: normal; overflow-wrap: anywhere; }

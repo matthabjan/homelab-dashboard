@@ -196,14 +196,14 @@
   :global(html) { scroll-padding-top: 12px; }
   /* connection lost or data stale: say so, and stop showing status colour as if it were current */
   .banner {
-    display: flex; align-items: center; gap: 12px; padding: 12px 12px 12px 16px; border-radius: 16px;
+    display: flex; align-items: center; gap: 12px; padding: 12px 12px 12px 16px; border-radius: var(--r-14);
     background: var(--warn-soft); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--warn) 40%, transparent); color: var(--text);
     animation: drop 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
   }
   .banner > :global(svg) { color: var(--warn); flex: none; }
   .banner .txt .t { font-weight: 600; }
-  .banner .txt .d { font-size: 13px; color: var(--muted); }
-  .banner button { min-height: 36px; padding: 0 14px; border: 0; border-radius: 10px; background: var(--surface); box-shadow: var(--shadow); font-weight: 500; cursor: pointer; }
+  .banner .txt .d { font-size: var(--fs-13); color: var(--muted); }
+  .banner button { min-height: 36px; padding: 0 14px; border: 0; border-radius: var(--r-12); background: var(--surface); box-shadow: var(--shadow); font-weight: 500; cursor: pointer; }
   /* the sections under the banner: the top card, the strip, and the services with activity and links */
   .page:has(.banner) > :global(section), .page:has(.banner) > .lower { filter: grayscale(0.7); opacity: 0.8; transition: filter 0.3s, opacity 0.3s; }
   @keyframes drop { from { opacity: 0; transform: translateY(-6px); } }

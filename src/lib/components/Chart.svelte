@@ -222,9 +222,9 @@
 
 <style>
   .chart { --c: var(--chart, var(--acc)); display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 6px; }
-  .yax { position: relative; min-width: 2.4ch; font-size: 10.5px; line-height: 1; color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
+  .yax { position: relative; min-width: 2.4ch; font-size: var(--fs-11); line-height: 1; color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
   .yax span { position: absolute; right: 0; transform: translateY(-50%); white-space: nowrap; }
-  .plot { position: relative; height: var(--chart-h, 120px); cursor: crosshair; touch-action: pan-y; outline: none; border-radius: 4px; }
+  .plot { position: relative; height: var(--chart-h, 120px); cursor: crosshair; touch-action: pan-y; outline: none; border-radius: var(--r-4); }
   .plot:focus-visible { box-shadow: 0 0 0 2px var(--acc); }
   svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
   .grid { stroke: var(--line); stroke-width: 1; vector-effect: non-scaling-stroke; }
@@ -233,7 +233,7 @@
   .line.two, .dot.two { --c: var(--chart-2, var(--acc-2)); }
   .line.two { stroke-width: 1.5; }
   .warn { stroke: var(--warn); stroke-width: 1; stroke-dasharray: 3 3; opacity: 0.75; vector-effect: non-scaling-stroke; }
-  .warn-label { position: absolute; right: 0; transform: translateY(calc(-100% - 2px)); font-size: 10px; line-height: 1; font-variant-numeric: tabular-nums; color: var(--warn); opacity: 0.9; pointer-events: none; }
+  .warn-label { position: absolute; right: 0; transform: translateY(calc(-100% - 2px)); font-size: var(--fs-11); line-height: 1; font-variant-numeric: tabular-nums; color: var(--warn); opacity: 0.9; pointer-events: none; }
   .warn-label.above { top: 0; transform: translateY(calc(-100% - 3px)); }
   .cross { position: absolute; top: 0; bottom: 0; width: 1px; transform: translateX(-0.5px); background: color-mix(in srgb, var(--text) 35%, transparent); pointer-events: none; }
   .dot { position: absolute; width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 2px var(--surface-2, var(--surface)); pointer-events: none; }
@@ -243,7 +243,7 @@
     @keyframes ping { 0% { transform: scale(1); opacity: 0.5; } 60%, 100% { transform: scale(2.6); opacity: 0; } }
   }
   /* times: every 6 h, "now" at the right; while scrubbing the others fade and the point's time sits under the cross */
-  .xax { grid-column: 2; position: relative; height: 17px; font-size: 10.5px; line-height: 1; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .xax { grid-column: 2; position: relative; height: 17px; font-size: var(--fs-11); line-height: 1; color: var(--muted); font-variant-numeric: tabular-nums; }
   .xax span { position: absolute; top: 5px; transform: translateX(-50%); white-space: nowrap; transition: opacity 0.15s; }
   .xax .end { left: auto; right: 0; transform: none; }
   .xax.scrubbing span:not(.at) { opacity: 0.25; }

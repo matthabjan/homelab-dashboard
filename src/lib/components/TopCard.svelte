@@ -133,35 +133,35 @@
   .mark :global(svg) { width: 23px; height: 23px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
   .top.lv-none .mark { color: var(--muted); }
   .say { display: flex; flex-direction: column; gap: 6px; min-width: 0; flex: 1; }
-  .tag { font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+  .tag { font-size: var(--fs-12); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
   h1 { font-size: clamp(26px, 2.9vw, 34px); line-height: 1.1; font-weight: 700; letter-spacing: -0.025em; text-wrap: balance; }
-  .say p { margin: 0; font-size: 14.5px; }
+  .say p { margin: 0; font-size: var(--fs-14); }
   .acts { display: flex; flex-wrap: wrap; gap: 8px; }
   .triage { padding: 20px 22px 14px; border-left: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; min-width: 0; }
   .rows { list-style: none; margin: 0; padding: 0; }
   .rows li + li { border-top: 1px solid var(--line); }
   .rows li.extra { display: none; }
-  .rows li.flash { border-radius: 10px; }
+  .rows li.flash { border-radius: var(--r-12); }
   /* a problem: its shape, what it is in full, how long it has been raised, and the detail under it */
-  .arow { width: 100%; box-sizing: border-box; display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; align-items: baseline; gap: 2px 10px; padding: 10px 6px; border: 0; border-radius: 10px; background: none; color: var(--text); font: inherit; text-align: left; }
+  .arow { width: 100%; box-sizing: border-box; display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; align-items: baseline; gap: 2px 10px; padding: 10px 6px; border: 0; border-radius: var(--r-12); background: none; color: var(--text); font: inherit; text-align: left; }
   .arow.tap { cursor: pointer; transition: background-color 0.15s; }
   .arow.tap:hover { background: var(--surface-2); }
   .arow.tap:focus-visible { outline: 2px solid var(--acc); outline-offset: -2px; }
   .arow .dot { align-self: center; justify-self: center; }
-  .arow .t { font-size: 14.5px; font-weight: 500; overflow-wrap: anywhere; }
-  .arow .w { font-size: 12.5px; color: var(--muted); }
-  .arow .d { grid-column: 2; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+  .arow .t { font-size: var(--fs-14); font-weight: 500; overflow-wrap: anywhere; }
+  .arow .w { font-size: var(--fs-12); color: var(--muted); }
+  .arow .d { grid-column: 2; font-size: var(--fs-13); color: var(--muted); overflow-wrap: anywhere; }
   .quiet { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 36px 24px 32px; text-align: center; }
   .quiet .mark { width: 56px; height: 56px; margin: 0 0 6px; }
   .quiet .mark :global(svg) { width: 28px; height: 28px; }
   .quiet p { margin: 0; text-wrap: balance; }
-  .quiet .qt { font-size: 20px; font-weight: 600; letter-spacing: -0.015em; }
-  .quiet .muted { font-size: 14px; }
+  .quiet .qt { font-size: var(--fs-20); font-weight: 600; letter-spacing: -0.015em; }
+  .quiet .muted { font-size: var(--fs-14); }
   .most { display: flex; flex-direction: column; gap: 6px; padding: 20px 26px 20px 8px; }
   .most .k { padding-left: 10px; }
   @media not all and (max-width: 760px) { .most.need { display: none; } }
   .apps { display: flex; flex-wrap: wrap; gap: 4px; }
-  .app { width: 92px; display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 10px 2px; border-radius: 14px; text-align: center; font-size: 13px; }
+  .app { width: 92px; display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 10px 2px; border-radius: var(--r-14); text-align: center; font-size: var(--fs-13); }
   .app:hover { background: var(--surface-2); }
   /* a name wraps at its spaces onto two lines at most; a single word too long for the tile ends in an ellipsis, never split */
   .an { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: normal; word-break: normal; line-height: 1.25; max-width: 100%; }
@@ -176,13 +176,13 @@
     .most { padding: 0 22px 20px; }
   }
   @media (max-width: 760px) {
-    .top { border-radius: 22px; }
+    .top { border-radius: var(--r-20); }
     .verdict { padding: 20px; gap: 16px; }
     .mark { width: 36px; height: 36px; margin-top: 0; }
     .mark :global(svg) { width: 19px; height: 19px; }
     .vrow { gap: 12px; }
-    h1 { font-size: 26px; }
-    .say p { font-size: 14px; }
+    h1 { font-size: var(--fs-26); }
+    .say p { font-size: var(--fs-14); }
     .acts { flex-direction: column; }
     /* the Alerts view is the list, whole */
     .triage { border-top: 0; padding: 16px 14px; }

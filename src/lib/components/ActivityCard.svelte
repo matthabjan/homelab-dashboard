@@ -36,12 +36,12 @@
 <style>
   /* the notes, folded: one row that opens them */
   .notes { border-top: 1px solid var(--line); margin-top: -6px; }
-  .notes summary { display: flex; align-items: center; gap: 12px; margin: 4px -8px 0; padding: 8px; border-radius: 12px; list-style: none; cursor: pointer; --lv: var(--acc); --lv-soft: var(--surface-2); }
+  .notes summary { display: flex; align-items: center; gap: 12px; margin: 4px -8px 0; padding: 8px; border-radius: var(--r-12); list-style: none; cursor: pointer; --lv: var(--acc); --lv-soft: var(--surface-2); }
   .notes summary::-webkit-details-marker { display: none; }
   .notes summary:hover { background: var(--surface-2); }
-  .notes summary .t { font-size: 15px; font-weight: 500; }
+  .notes summary .t { font-size: var(--fs-15); font-weight: 500; }
   .notes summary .small { flex: 1; }
-  .ev-ico { width: 32px; height: 32px; border-radius: 10px; display: flex; align-items: center; justify-content: center; background: var(--lv-soft); color: var(--lv); flex: none; }
+  .ev-ico { width: 32px; height: 32px; border-radius: var(--r-12); display: flex; align-items: center; justify-content: center; background: var(--lv-soft); color: var(--lv); flex: none; }
   .notes summary :global(.nchev) { flex: none; color: var(--muted); transition: transform 0.15s; }
   .notes[open] summary :global(.nchev) { transform: rotate(180deg); }
 </style>

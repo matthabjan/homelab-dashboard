@@ -160,22 +160,22 @@
   }
   .panel {
     width: 100%; max-width: 620px; background: var(--surface); border: 1px solid var(--line);
-    border-radius: 18px; box-shadow: var(--shadow-lg); overflow: hidden;
+    border-radius: var(--r-20); box-shadow: var(--shadow-lg); overflow: hidden;
     animation: rise 0.16s cubic-bezier(0.2, 0.8, 0.2, 1);
   }
   .search { display: flex; align-items: center; gap: 10px; padding: 0 12px 0 16px; border-bottom: 1px solid var(--line); color: var(--muted); }
-  input { flex: 1; min-width: 0; min-height: 56px; border: 0; background: transparent; color: var(--text); font: inherit; font-size: 16px; outline: none; }
-  .esc { border: 0; border-radius: 6px; background: var(--surface-2); color: var(--muted); min-height: 28px; min-width: 44px; font-size: 11px; cursor: pointer; }
-  .label { font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding: 12px 18px 4px; }
+  input { flex: 1; min-width: 0; min-height: 56px; border: 0; background: transparent; color: var(--text); font: inherit; font-size: var(--fs-16); outline: none; }
+  .esc { border: 0; border-radius: var(--r-8); background: var(--surface-2); color: var(--muted); min-height: 28px; min-width: 44px; font-size: var(--fs-11); cursor: pointer; }
+  .label { font-size: var(--fs-11); font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding: 12px 18px 4px; }
   ul { list-style: none; margin: 0; padding: 4px 8px 8px; max-height: min(420px, 55vh); overflow: auto; }
-  a { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border-radius: 10px; min-height: 46px; }
+  a { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border-radius: var(--r-12); min-height: 46px; }
   a.active { background: var(--surface-2); }
-  .ic { width: 30px; height: 30px; border-radius: 9px; background: var(--surface-2); display: flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+  .ic { width: 30px; height: 30px; border-radius: var(--r-8); background: var(--surface-2); display: flex; align-items: center; justify-content: center; flex: 0 0 auto; }
   a.active .ic { background: var(--surface); }
-  .name { flex: 1; font-size: 14px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .sub { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40%; }
+  .name { flex: 1; font-size: var(--fs-14); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sub { font-size: var(--fs-11); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40%; }
   .empty { padding: 20px 10px; color: var(--muted); text-align: center; }
-  .hints { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 10px 16px; font-size: 11px; color: var(--muted); border-top: 1px solid var(--line); }
+  .hints { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 10px 16px; font-size: var(--fs-11); color: var(--muted); border-top: 1px solid var(--line); }
   @media (hover: none) { .hints { display: none; } }
   /* phones, also in landscape: the Search view. It fills the screen from the top, as tall as the visual viewport */
   @media (max-width: 760px), (max-height: 500px) and (pointer: coarse) {
@@ -184,7 +184,7 @@
       max-width: none; height: var(--vvh, 100dvh); border: 0; border-radius: 0; box-shadow: none; display: flex; flex-direction: column;
       padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left); animation: fade 0.12s ease-out;
     }
-    .esc { min-height: 36px; padding: 0 12px; font-size: 13px; font-family: inherit; }
+    .esc { min-height: 36px; padding: 0 12px; font-size: var(--fs-13); font-family: inherit; }
     ul { flex: 1; max-height: none; padding-bottom: calc(12px + env(safe-area-inset-bottom)); overscroll-behavior: contain; }
     a { min-height: 52px; }
   }

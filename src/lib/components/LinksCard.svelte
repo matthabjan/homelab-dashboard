@@ -31,7 +31,7 @@
 <style>
   .lgroup { display: flex; flex-direction: column; gap: 4px; }
   .chipsrow { display: flex; flex-wrap: wrap; gap: 4px 6px; margin: 0 -6px; }
-  .lnk { display: inline-flex; align-items: center; gap: 9px; padding: 6px 12px 6px 6px; border-radius: 12px; font-size: 14px; }
+  .lnk { display: inline-flex; align-items: center; gap: 9px; padding: 6px 12px 6px 6px; border-radius: var(--r-12); font-size: var(--fs-14); }
   .lnk:hover { background: var(--surface-2); }
-  .lnk .ic { width: 30px; height: 30px; border-radius: 9px; }
+  .lnk .ic { width: 30px; height: 30px; border-radius: var(--r-8); }
 </style>

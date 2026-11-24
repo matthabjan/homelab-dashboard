@@ -1,8 +1,9 @@
 // app.css writes each colour once as light-dark(light, dark), and repeats the light half for browsers without
-// light-dark(). The two must not drift apart.
+// light-dark(): the two must not drift apart. And every font size and corner radius in the app is a step of its scale.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import path from 'node:path';
 
 const css = fs.readFileSync(new URL('../app.css', import.meta.url), 'utf8');
 /** the declarations of a block, by custom property */
@@ -37,4 +38,22 @@ test('the light theme for old browsers repeats the light half of every colour', 
     assert.ok(value.includes('light-dark('), `${name} is written as light-dark()`);
     assert.equal(fallback.get(name), withoutTransparent(lightHalf(value)), name);
   }
+});
+
+test('font sizes and corner radii are steps of the scale, never values of their own', () => {
+  const src = new URL('..', import.meta.url).pathname;
+  const files = fs.readdirSync(src, { recursive: true, encoding: 'utf8' }).filter((f) => /\.(svelte|css)$/.test(f));
+  assert.ok(files.length > 20, 'the components were found');
+  const off: string[] = [];
+  for (const f of files) {
+    const text = fs.readFileSync(path.join(src, f), 'utf8');
+    // the scale's own definition, the fluid headline, and the diamond's 1.5px are the only literals
+    for (const m of text.matchAll(/(font-size|border-radius):\s*([^;}]+)/g)) {
+      const value = m[2].trim();
+      if (m[1] === 'font-size' && (/^var\(--fs-\d+\)$/.test(value) || /^clamp\(/.test(value) || /^[\d.]+em$/.test(value) || value === 'inherit')) continue;
+      if (m[1] === 'border-radius' && value.split(/\s+/).every((x) => /^var\(--r-(\d+|pill)\)$/.test(x) || x === '0' || x === '50%' || x === '1.5px' || x === 'inherit')) continue;
+      off.push(`${f}: ${m[0]}`);
+    }
+  }
+  assert.deepEqual(off, []);
 });

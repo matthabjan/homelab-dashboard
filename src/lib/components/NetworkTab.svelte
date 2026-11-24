@@ -51,6 +51,6 @@
 </div>
 
 <style>
-  .span { margin: 0 0 10px; font-size: 12px; color: var(--muted); }
+  .span { margin: 0 0 10px; font-size: var(--fs-12); color: var(--muted); }
   .net { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: 12px; }
 </style>

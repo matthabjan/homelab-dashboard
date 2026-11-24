@@ -2,28 +2,28 @@
    sheet's blocks. It applies inside `.dash` (the page, and a sheet's content), so nothing here reaches the header, the
    palette or Setup. */
 .dash-c { display: contents; }
-.dash h2 { font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
-.dash h2.k, .dash .k { font-size: 13px; font-weight: 500; color: var(--muted); letter-spacing: 0; }
-.dash h3 { font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; }
+.dash h2 { font-size: var(--fs-16); font-weight: 600; letter-spacing: -0.01em; }
+.dash h2.k, .dash .k { font-size: var(--fs-13); font-weight: 500; color: var(--muted); letter-spacing: 0; }
+.dash h3 { font-size: var(--fs-12); font-weight: 600; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; }
 .dash .thead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; }
 .dash .txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
-.dash .txt .t { font-size: 15px; font-weight: 500; }
-.dash .txt .d { font-size: 13.5px; overflow-wrap: anywhere; }
+.dash .txt .t { font-size: var(--fs-15); font-weight: 500; }
+.dash .txt .d { font-size: var(--fs-13); overflow-wrap: anywhere; }
 .dash .hl { color: color-mix(in srgb, var(--lv) 85%, var(--text)); }
 .dash .btn.primary, .dash .primary { background: var(--text); color: var(--bg); }
 /* the chip a service's icon sits on */
-.dash .ic { position: relative; width: 38px; height: 38px; border-radius: 11px; background: var(--surface-2); display: flex; align-items: center; justify-content: center; flex: none; }
-.dash .ic.big { width: 50px; height: 50px; border-radius: 15px; }
+.dash .ic { position: relative; width: 38px; height: 38px; border-radius: var(--r-12); background: var(--surface-2); display: flex; align-items: center; justify-content: center; flex: none; }
+.dash .ic.big { width: 50px; height: 50px; border-radius: var(--r-14); }
 /* a card with a heading: services, activity, links */
 .dash .sec { padding: 20px 22px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 /* a block of a sheet: a heading row over what it is about */
 .dash .sh-block { display: flex; flex-direction: column; gap: 8px; --beats-h: 22px; }
 .dash .sh-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
-.dash .st { font-size: 15px; font-weight: 600; }
+.dash .st { font-size: var(--fs-15); font-weight: 600; }
 /* a status that just changed: one soft ring in its new colour */
 .dash .flash { animation: dash-flash 2.4s ease-out; }
 @keyframes dash-flash { 0%, 30% { box-shadow: 0 0 0 3px var(--lv), var(--shadow); } }
 
 @media (max-width: 760px) {
-  .dash .sec { padding: 16px 14px; border-radius: 20px; }
+  .dash .sec { padding: 16px 14px; border-radius: var(--r-20); }
 }

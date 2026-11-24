@@ -38,8 +38,8 @@
 </div>
 
 <style>
-  .meters { display: flex; flex-direction: column; padding: 0 14px; margin-bottom: 14px; border-radius: 14px; background: var(--surface-2); }
+  .meters { display: flex; flex-direction: column; padding: 0 14px; margin-bottom: 14px; border-radius: var(--r-14); background: var(--surface-2); }
   /* chart tiles like Network's, one per row in the sheet, side by side only where the card is wide */
   .gauges { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: 12px; }
-  .span { margin: 0 0 10px; font-size: 12px; color: var(--muted); }
+  .span { margin: 0 0 10px; font-size: var(--fs-12); color: var(--muted); }
 </style>

@@ -124,25 +124,25 @@
   /* panels lay out by the card's width, not the viewport's, so they look the same wherever the card is */
   /* in the sheet, so no frame of its own: the sheet's padding is the only inset */
   .infra-card { container: infra / inline-size; display: flex; flex-direction: column; gap: 16px; }
-  .solo { font-size: 14px; font-weight: 600; }
+  .solo { font-size: var(--fs-14); font-weight: 600; }
 
   /* tabs on the left, what the open panel shows on the right; the context wraps below when it doesn't fit */
   .head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; min-height: 34px; }
-  .meta { font-size: 12px; }
+  .meta { font-size: var(--fs-12); }
   /* the line of a panel with a problem (Backups: what is overdue) in its colour */
   .meta.hl { color: color-mix(in srgb, var(--lv) 85%, var(--text)); }
   .host-facts { display: flex; flex-wrap: wrap; gap: 4px 20px; margin: 0; }
   .host-facts div { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
   .host-facts dt { color: var(--muted); }
-  .host-facts dd { margin: 0; font-size: 13px; font-weight: 500; }
+  .host-facts dd { margin: 0; font-size: var(--fs-13); font-weight: 500; }
   .host-facts .node { display: inline-flex; align-items: center; gap: 3px; }
   .host-facts .node:hover { color: var(--acc); }
 
   /* segmented control: a recessed track with the selected view raised on it */
-  .tabs { display: inline-flex; gap: 2px; padding: 3px; border-radius: 11px; background: var(--surface-2); }
+  .tabs { display: inline-flex; gap: 2px; padding: 3px; border-radius: var(--r-12); background: var(--surface-2); }
   .tabs button {
     all: unset; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 7px;
-    font-size: 14px; font-weight: 600; color: var(--muted); padding: 6px 16px; min-height: 22px; border-radius: 8px;
+    font-size: var(--fs-14); font-weight: 600; color: var(--muted); padding: 6px 16px; min-height: 22px; border-radius: var(--r-8);
     transition: background-color 0.15s, color 0.15s, box-shadow 0.15s;
   }
   .tabs button:hover { color: var(--text); }
@@ -165,10 +165,10 @@
   @container infra (max-width: 519.98px) {
     /* phones: equal segments across the card */
     .tabs { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); flex: 1 1 100%; }
-    .tabs button { padding: 8px 0; gap: 3px; font-size: 13px; }
+    .tabs button { padding: 8px 0; gap: 3px; font-size: var(--fs-13); }
   }
   /* the smallest phones: a label and its dot must still fit a quarter of the card */
-  @container infra (max-width: 339.98px) { .tabs button { font-size: 12px; gap: 2px; } }
+  @container infra (max-width: 339.98px) { .tabs button { font-size: var(--fs-12); gap: 2px; } }
   @media (max-width: 760px) {
     .infra-card { gap: 14px; }
     /* phones: each panel only as tall as it needs */

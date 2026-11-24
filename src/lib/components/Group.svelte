@@ -16,7 +16,7 @@
 </section>
 
 <style>
-  .group { padding: 10px 14px 2px; border-radius: 14px; background: var(--surface-2); }
+  .group { padding: 10px 14px 2px; border-radius: var(--r-14); background: var(--surface-2); }
   .rows { display: flex; flex-direction: column; }
-  .ghead { font-size: 12px; font-weight: 500; color: var(--muted); margin: 0 0 1px; }
+  .ghead { font-size: var(--fs-12); font-weight: 500; color: var(--muted); margin: 0 0 1px; }
 </style>

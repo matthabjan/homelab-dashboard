@@ -49,17 +49,17 @@
   .tile {
     --chart: var(--acc);
     display: flex; flex-direction: column; gap: 6px; min-width: 0;
-    padding: 12px 14px 8px; border-radius: 14px; background: var(--surface-2);
+    padding: 12px 14px 8px; border-radius: var(--r-14); background: var(--surface-2);
   }
   .tile.lv-warn, .tile.lv-crit { --chart: var(--lv); }
   .head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-  .label { font-size: 13px; font-weight: 500; flex: none; }
-  .sub { font-size: 12px; color: var(--muted); min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .label { font-size: var(--fs-13); font-weight: 500; flex: none; }
+  .sub { font-size: var(--fs-12); color: var(--muted); min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .val { display: flex; align-items: baseline; gap: 3px; min-width: 0; white-space: nowrap; margin-bottom: 4px; }
-  .big { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.15; }
-  .unit { font-size: 12px; color: var(--muted); }
-  .peak { margin-left: 6px; font-size: 12px; color: var(--muted); }
+  .big { font-size: var(--fs-20); font-weight: 600; letter-spacing: -0.01em; line-height: 1.15; }
+  .unit { font-size: var(--fs-12); color: var(--muted); }
+  .peak { margin-left: 6px; font-size: var(--fs-12); color: var(--muted); }
   .tile.lv-warn .big, .tile.lv-crit .big { color: var(--lv); }
-  .bar { height: 6px; border-radius: 4px; background: var(--track); overflow: hidden; margin: 2px 0 6px; }
-  .bar > div { height: 100%; border-radius: 4px; background: var(--chart); transition: width 0.6s cubic-bezier(0.2, 0.8, 0.2, 1); }
+  .bar { height: 6px; border-radius: var(--r-4); background: var(--track); overflow: hidden; margin: 2px 0 6px; }
+  .bar > div { height: 100%; border-radius: var(--r-4); background: var(--chart); transition: width 0.6s cubic-bezier(0.2, 0.8, 0.2, 1); }
 </style>

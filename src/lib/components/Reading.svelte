@@ -69,18 +69,18 @@
 
 <style>
   /* the System tile's look (Gauge.svelte), with a legend for up to two series */
-  .tile { --chart: var(--acc); --chart-2: var(--acc-2); display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 12px 14px 8px; border-radius: 14px; background: var(--surface-2); }
+  .tile { --chart: var(--acc); --chart-2: var(--acc-2); display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 12px 14px 8px; border-radius: var(--r-14); background: var(--surface-2); }
   .head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-  .label { font-size: 13px; font-weight: 500; flex: none; }
-  .sub { font-size: 12px; color: var(--muted); min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .src { color: var(--muted); text-decoration: none; font-size: 12px; }
+  .label { font-size: var(--fs-13); font-weight: 500; flex: none; }
+  .sub { font-size: var(--fs-12); color: var(--muted); min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .src { color: var(--muted); text-decoration: none; font-size: var(--fs-12); }
   .src:hover { color: var(--acc); }
   .legend { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; min-width: 0; margin-bottom: 4px; }
   .item { display: inline-flex; align-items: baseline; gap: 6px; white-space: nowrap; }
   .sw { width: 8px; height: 8px; border-radius: 50%; align-self: center; background: var(--chart); }
   .s1 .sw { background: var(--chart-2); }
-  .k { font-size: 12px; color: var(--muted); white-space: nowrap; }
-  .v { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.15; color: var(--chart); }
+  .k { font-size: var(--fs-12); color: var(--muted); white-space: nowrap; }
+  .v { font-size: var(--fs-20); font-weight: 600; letter-spacing: -0.01em; line-height: 1.15; color: var(--chart); }
   .s1 .v { color: var(--chart-2); }
-  .detail { font-size: 12px; margin-top: -4px; }
+  .detail { font-size: var(--fs-12); margin-top: -4px; }
 </style>

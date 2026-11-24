@@ -89,15 +89,15 @@
 </div>
 
 <style>
-  .primary.wide { display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%; box-sizing: border-box; min-height: 46px; border-radius: 12px; font-size: 14px; font-weight: 600; }
+  .primary.wide { display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%; box-sizing: border-box; min-height: 46px; border-radius: var(--r-12); font-size: var(--fs-14); font-weight: 600; }
   .sh-head { display: flex; align-items: center; gap: 14px; }
-  .state-w { display: inline-flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 600; }
+  .state-w { display: inline-flex; align-items: center; gap: 7px; font-size: var(--fs-14); font-weight: 600; }
   .facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
-  .fact { display: flex; flex-direction: column; gap: 3px; padding: 12px 14px; border-radius: 14px; background: var(--surface-2); min-width: 0; }
-  .fact .k { font-size: 13px; }
-  .fv { font-size: 18px; font-weight: 600; overflow-wrap: anywhere; }
+  .fact { display: flex; flex-direction: column; gap: 3px; padding: 12px 14px; border-radius: var(--r-14); background: var(--surface-2); min-width: 0; }
+  .fact .k { font-size: var(--fs-13); }
+  .fv { font-size: var(--fs-20); font-weight: 600; overflow-wrap: anywhere; }
   .kv { margin: 0; display: flex; flex-direction: column; }
-  .kv > div { display: flex; justify-content: space-between; gap: 16px; padding: 12px 0; border-top: 1px solid var(--line); font-size: 15px; }
+  .kv > div { display: flex; justify-content: space-between; gap: 16px; padding: 12px 0; border-top: 1px solid var(--line); font-size: var(--fs-15); }
   .kv dt { color: var(--muted); flex: none; }
   .kv dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
 </style>

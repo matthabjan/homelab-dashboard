@@ -51,10 +51,10 @@
 
 <style>
   /* both the height of their neighbours in the header */
-  .seg { display: flex; gap: 2px; padding: 3px; border-radius: 12px; background: var(--surface); box-shadow: var(--shadow); }
-  .seg button { width: 34px; height: 36px; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 9px; background: none; color: var(--muted); cursor: pointer; }
+  .seg { display: flex; gap: 2px; padding: 3px; border-radius: var(--r-12); background: var(--surface); box-shadow: var(--shadow); }
+  .seg button { width: 34px; height: 36px; display: flex; align-items: center; justify-content: center; border: 0; border-radius: var(--r-8); background: none; color: var(--muted); cursor: pointer; }
   .seg button:hover { color: var(--text); }
   .seg button[aria-checked='true'] { background: var(--surface-3); color: var(--text); }
-  .step { width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 14px; background: var(--surface); box-shadow: var(--shadow); color: var(--text); cursor: pointer; }
+  .step { width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border: 0; border-radius: var(--r-14); background: var(--surface); box-shadow: var(--shadow); color: var(--text); cursor: pointer; }
   .step:active { background: var(--surface-2); }
 </style>

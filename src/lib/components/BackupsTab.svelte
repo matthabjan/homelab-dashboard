@@ -75,11 +75,11 @@
 <style>
   /* the week as a box, Recent as a box that opens */
   .week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; padding: 6px 0 4px; }
-  .week span { height: 14px; border-radius: 4px; background: var(--lv); opacity: 0.85; }
+  .week span { height: 14px; border-radius: var(--r-4); background: var(--lv); opacity: 0.85; }
   .week span.none { background: var(--surface-3); opacity: 1; }
-  .week-l { display: flex; justify-content: space-between; padding-bottom: 10px; font-size: 11px; color: var(--muted); }
-  .recent { border-radius: 14px; background: var(--surface-2); }
-  .recent-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; width: 100%; padding: 12px 14px; border: 0; background: none; color: var(--text); font: inherit; font-size: 13px; text-align: left; cursor: pointer; border-radius: 14px; }
+  .week-l { display: flex; justify-content: space-between; padding-bottom: 10px; font-size: var(--fs-11); color: var(--muted); }
+  .recent { border-radius: var(--r-14); background: var(--surface-2); }
+  .recent-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; width: 100%; padding: 12px 14px; border: 0; background: none; color: var(--text); font: inherit; font-size: var(--fs-13); text-align: left; cursor: pointer; border-radius: var(--r-14); }
   .recent-head:disabled { cursor: default; }
   .recent-head:focus-visible { outline: 2px solid var(--acc); outline-offset: -2px; }
   .rt { font-weight: 500; }

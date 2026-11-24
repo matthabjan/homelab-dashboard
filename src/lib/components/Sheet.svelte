@@ -192,7 +192,7 @@
 <style>
   .sheet {
     margin: 12px 12px 12px auto; padding: 0; width: min(520px, calc(100vw - 24px)); height: calc(100dvh - 24px); max-height: none;
-    border: 0; border-radius: 24px; background: var(--surface); color: var(--text); box-shadow: var(--shadow-lg);
+    border: 0; border-radius: var(--r-20); background: var(--surface); color: var(--text); box-shadow: var(--shadow-lg);
   }
   .sheet::backdrop { background: rgba(10, 13, 18, 0.36); }
   .body { height: 100%; box-sizing: border-box; overflow-y: auto; overscroll-behavior: contain; padding: 22px 24px 28px; display: flex; flex-direction: column; gap: 18px; }
@@ -200,10 +200,10 @@
   /* beside the back button the title sits level with its middle */
   header:has(.back) { align-items: center; }
   .ttl { flex: 1; min-width: 0; }
-  h2 { font-size: 21px; font-weight: 700; letter-spacing: -0.015em; }
+  h2 { font-size: var(--fs-20); font-weight: 700; letter-spacing: -0.015em; }
   h2:focus { outline: none; }
-  .ttl p { margin: 2px 0 0; font-size: 13px; }
-  .close { flex: none; width: 40px; height: 40px; border: 0; border-radius: 12px; background: var(--surface-2); color: var(--text); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+  .ttl p { margin: 2px 0 0; font-size: var(--fs-13); }
+  .close { flex: none; width: 40px; height: 40px; border: 0; border-radius: var(--r-12); background: var(--surface-2); color: var(--text); display: flex; align-items: center; justify-content: center; cursor: pointer; }
   .close:hover { background: var(--surface-3); }
   .level { display: flex; flex-direction: column; gap: inherit; min-width: 0; }
   /* the same size and fill as the close button, round so the two read apart */
@@ -218,14 +218,14 @@
   /* phones: a bottom sheet */
   @media (max-width: 760px) {
     /* as tall as its content up to three quarters of the screen; `full` after a drag up, or from the start (`tall`) */
-    .sheet { margin: auto 0 0; width: 100vw; max-width: 100vw; height: auto; max-height: 76dvh; border-radius: 26px 26px 0 0; }
+    .sheet { margin: auto 0 0; width: 100vw; max-width: 100vw; height: auto; max-height: 76dvh; border-radius: var(--r-20) var(--r-20) 0 0; }
     .sheet.full { height: calc(100dvh - 20px - env(safe-area-inset-top)); max-height: none; }
     .body { padding: 0 16px calc(24px + env(safe-area-inset-bottom)); gap: 14px; }
     .close { display: none; }
     .back { width: 44px; height: 44px; }
     /* the handle: what drags, and a button that closes; the sheet itself follows the finger */
     .grabber { display: flex; align-items: center; justify-content: center; flex: none; width: 100%; height: 30px; margin-bottom: -8px; padding: 0; border: 0; background: none; cursor: grab; }
-    .grabber span { width: 40px; height: 5px; border-radius: 3px; background: var(--muted); opacity: 0.45; }
+    .grabber span { width: 40px; height: 5px; border-radius: var(--r-4); background: var(--muted); opacity: 0.45; }
     .grabber:focus-visible { outline: 0; }
     .grabber:focus-visible span { opacity: 1; background: var(--acc); }
     @media (prefers-reduced-motion: no-preference) { .sheet { transition: height 0.24s cubic-bezier(0.2, 0.8, 0.2, 1); } }

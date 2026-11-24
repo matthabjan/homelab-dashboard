@@ -60,14 +60,14 @@
   }
   .tab {
     position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-height: 50px;
-    border: 0; border-radius: 14px; background: none; color: var(--muted); font: inherit; font-size: 11.5px; font-weight: 500; cursor: pointer;
+    border: 0; border-radius: var(--r-14); background: none; color: var(--muted); font: inherit; font-size: var(--fs-11); font-weight: 500; cursor: pointer;
   }
   .tab:active { background: var(--surface-2); }
   .tab :global(svg) { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
   .tab[aria-current='page'] { color: var(--text); }
   .tab[aria-current='page'] :global(svg) { stroke-width: 2.3; }
   .badge {
-    position: absolute; top: 2px; left: calc(50% + 5px); min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px;
-    background: var(--lv); color: var(--surface); font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+    position: absolute; top: 2px; left: calc(50% + 5px); min-width: 18px; height: 18px; padding: 0 5px; border-radius: var(--r-8);
+    background: var(--lv); color: var(--surface); font-size: var(--fs-11); font-weight: 700; display: flex; align-items: center; justify-content: center;
   }
 </style>

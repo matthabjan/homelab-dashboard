@@ -83,6 +83,15 @@
   :root:not([data-theme='light']) .on-light.has-dark { display: none !important; }
 }
 
+/* Type and corners keep to one scale: components use these steps and no sizes of their own (app-css.test.ts checks).
+   Text: 11 captions, 12 secondary lines, 13 small print, 14 row titles, 15 body, 16 headings, 20 figures and sheet
+   titles, 26 the headline on phones (fluid above). Corners: 4 bars, 8 small controls, 12 rows and buttons, 14 boxes,
+   20 cards and sheets, and the pill. */
+:root {
+  --fs-11: 11px; --fs-12: 12px; --fs-13: 13px; --fs-14: 14px; --fs-15: 15px; --fs-16: 16px; --fs-20: 20px; --fs-26: 26px;
+  --r-4: 4px; --r-8: 8px; --r-12: 12px; --r-14: 14px; --r-20: 20px; --r-pill: 999px;
+}
+
 *, *::before, *::after { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
 body {
@@ -90,7 +99,7 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: 'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  font-size: 15px;
+  font-size: var(--fs-15);
   line-height: 1.45;
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
@@ -102,19 +111,19 @@ h1, h2, h3 { margin: 0; }
 /* figures that line up in a column (times, counts, percentages) without a monospace face */
 .num { font-variant-numeric: tabular-nums; }
 /* small print: times, counts, hints */
-.small { font-size: 13px; }
+.small { font-size: var(--fs-13); }
 /* buttons: a quiet one, and one that reads as a link */
-.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 42px; padding: 0 16px; border: 0; border-radius: 12px; background: var(--surface-2); color: var(--text); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 42px; padding: 0 16px; border: 0; border-radius: var(--r-12); background: var(--surface-2); color: var(--text); font: inherit; font-size: var(--fs-14); font-weight: 600; cursor: pointer; white-space: nowrap; }
 .btn:hover { background: var(--surface-3); }
-.link-btn { border: 0; background: none; padding: 6px; color: var(--acc); font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; align-self: flex-start; }
+.link-btn { border: 0; background: none; padding: 6px; color: var(--acc); font: inherit; font-size: var(--fs-13); font-weight: 500; cursor: pointer; align-self: flex-start; }
 /* a filter: which of a list shows */
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.chip { display: inline-flex; align-items: center; gap: 7px; min-height: 30px; padding: 0 11px; border: 0; border-radius: 999px; background: var(--surface-2); color: var(--muted); font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; transition: background-color 0.15s, color 0.15s; }
+.chip { display: inline-flex; align-items: center; gap: 7px; min-height: 30px; padding: 0 11px; border: 0; border-radius: var(--r-pill); background: var(--surface-2); color: var(--muted); font: inherit; font-size: var(--fs-13); font-weight: 500; cursor: pointer; transition: background-color 0.15s, color 0.15s; }
 .chip:hover { color: var(--text); }
 .chip[aria-pressed='true'] { background: var(--text); color: var(--bg); }
 .chip[aria-pressed='true'] .dot { background: currentColor; }
 .muted { color: var(--muted); }
-.card { background: var(--surface); border-radius: 20px; box-shadow: var(--shadow); }
+.card { background: var(--surface); border-radius: var(--r-20); box-shadow: var(--shadow); }
 .lift { transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1), background 0.18s, box-shadow 0.18s; }
 /* phones get no hover lift, only the press scale */
 @media (hover: hover) and (not (max-width: 760px)) { .lift:hover { transform: translateY(-2px); } }
@@ -125,7 +134,7 @@ h1, h2, h3 { margin: 0; }
 @media (max-width: 760px) { .only-desktop { display: none !important; } }
 /* phones: touch targets */
 @media (max-width: 760px) {
-  .btn { min-height: 46px; font-size: 15px; }
+  .btn { min-height: 46px; font-size: var(--fs-15); }
   .chip { min-height: 36px; }
 }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

@@ -49,19 +49,19 @@
   .ev-row { display: flex; align-items: center; gap: 12px; width: 100%; min-width: 0; }
   /* a row that opens a sheet: the whole row is the button, its hover reaching a little past the text */
   .ev:has(.tap) { padding: 4px 0; }
-  .ev-row.tap { margin: 0 -8px; width: calc(100% + 16px); padding: 8px; border: 0; border-radius: 12px; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; transition: background-color 0.15s; }
+  .ev-row.tap { margin: 0 -8px; width: calc(100% + 16px); padding: 8px; border: 0; border-radius: var(--r-12); background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; transition: background-color 0.15s; }
   .ev-row.tap:hover { background: var(--surface-2); }
   .ev-row.tap:focus-visible { outline: 2px solid var(--acc); outline-offset: -2px; }
-  .ev-ico { width: 32px; height: 32px; border-radius: 10px; display: flex; align-items: center; justify-content: center; background: var(--lv-soft); color: var(--lv); flex: none; }
+  .ev-ico { width: 32px; height: 32px; border-radius: var(--r-12); display: flex; align-items: center; justify-content: center; background: var(--lv-soft); color: var(--lv); flex: none; }
   .ev.lv-ok .ev-ico { background: var(--surface-2); color: var(--muted); }
   .txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
-  .t { font-size: 15px; font-weight: 500; }
-  .d { font-size: 13.5px; overflow-wrap: anywhere; }
-  .when { flex: none; font-size: 13px; }
+  .t { font-size: var(--fs-15); font-weight: 500; }
+  .d { font-size: var(--fs-13); overflow-wrap: anywhere; }
+  .when { flex: none; font-size: var(--fs-13); }
   .ev-row :global(.ev-chev) { flex: none; margin-left: -4px; color: var(--muted); }
-  .ev-items { list-style: none; margin: 8px 0 0 44px; padding: 0; display: flex; flex-direction: column; gap: 3px; font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; }
+  .ev-items { list-style: none; margin: 8px 0 0 44px; padding: 0; display: flex; flex-direction: column; gap: 3px; font-size: var(--fs-12); color: var(--muted); overflow-wrap: anywhere; }
   .ev-more { margin-left: 44px; }
-  .ev-more summary { margin-top: 6px; padding: 6px; list-style: none; cursor: pointer; color: var(--acc); font-size: 13px; font-weight: 500; }
+  .ev-more summary { margin-top: 6px; padding: 6px; list-style: none; cursor: pointer; color: var(--acc); font-size: var(--fs-13); font-weight: 500; }
   .ev-more summary::-webkit-details-marker { display: none; }
   .ev-more[open] summary { display: none; }
   .ev-more .ev-items { margin-left: 0; }
