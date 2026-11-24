@@ -78,6 +78,8 @@
   .tx .t { font-size: 14.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .tx .d { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .tx .d.hl { color: color-mix(in srgb, var(--lv) 85%, var(--text)); }
+  /* a tile with a problem says it in full, on two lines at most; healthy tiles keep to one */
+  .tile.alert .tx .d { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
   .inf { flex: none; width: 36px; height: 36px; margin-right: 4px; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 10px; background: none; color: var(--muted); cursor: pointer; }
   .inf:hover { background: var(--surface-3); color: var(--text); }
   /* the details button of a healthy tile shows when the tile is pointed at or focused; a problem's shape always */
