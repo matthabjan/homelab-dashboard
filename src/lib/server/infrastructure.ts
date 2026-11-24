@@ -2,12 +2,10 @@
 // for both. Built from the snapshot's own parts, after attention closed; the Storage and Backups rows come from
 // storage.ts and backups.ts.
 import { plural, worst } from './format.ts';
+import { fmtRate } from '../format.ts';
 import type { InfraPanel, Snapshot } from '#lib/types';
 
 type Parts = Pick<Snapshot, 'host' | 'drives' | 'network'>;
-
-/** Mbit/s: whole numbers from 100 up */
-const rate = (v: number | null) => (v == null ? '—' : v >= 100 ? String(Math.round(v)) : v.toFixed(1));
 
 function system(host: NonNullable<Parts['host']>): InfraPanel {
   const g = (k: string) => host.gauges.find((x) => x.key === k);
@@ -44,7 +42,7 @@ function network(n: NonNullable<Parts['network']>): InfraPanel {
   const blocked = n.dns ? `${n.dns.blockedPct?.toFixed(1) ?? '—'}%` : null;
   return {
     id: 'network', label: 'Network',
-    value: n.down != null ? `↓${rate(n.down)} ↑${rate(n.up)}` : blocked ?? '—', unit: n.down != null ? 'Mbit/s' : 'blocked',
+    value: n.down != null ? `↓${fmtRate(n.down)} ↑${fmtRate(n.up)}` : blocked ?? '—', unit: n.down != null ? 'Mbit/s' : 'blocked',
     sub: [n.source, blocked && n.down != null && `DNS ${blocked} blocked`].filter(Boolean).join(' · '),
     level: 'none'
   };

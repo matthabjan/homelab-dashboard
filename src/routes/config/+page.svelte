@@ -2,13 +2,15 @@
   import { onMount } from 'svelte';
   import { invalidateAll, pushState } from '$app/navigation';
   import { page } from '$app/state';
-  import type { CheckKind, ConfigView, Level } from '#lib/types';
+  import type { ConfigView, Level } from '#lib/types';
   import Icon from '#lib/components/Icon.svelte';
   import AppHeader from '#lib/components/AppHeader.svelte';
   import TabBar from '#lib/components/TabBar.svelte';
   import Sheet from '#lib/components/Sheet.svelte';
   import type { PageProps } from './$types';
   import { ago } from '#lib/ago.ts';
+  import { openStream } from '#lib/live.svelte.ts';
+  import { KIND, since } from '#lib/format.ts';
 
   // Setup answers "is my configuration right?": what loaded, how each service is set up, whether its widget can
   // connect. How the services are doing is the dashboard's job, not this page's.
@@ -20,29 +22,23 @@
 
   // live: reload the page data when the stream reports an update, at most every 5 s
   onMount(() => {
-    const es = new EventSource('/api/stream');
     let last = Date.now();
     let pending: ReturnType<typeof setTimeout> | undefined;
-    es.onmessage = () => {
-      const wait = Math.max(0, last + 5000 - Date.now());
-      pending ??= setTimeout(() => { pending = undefined; last = Date.now(); invalidateAll(); }, wait);
-    };
+    const stream = openStream({
+      message: () => {
+        const wait = Math.max(0, last + 5000 - Date.now());
+        pending ??= setTimeout(() => { pending = undefined; last = Date.now(); invalidateAll(); }, wait);
+      }
+    });
     const tick = setInterval(() => (now = Date.now()), 15_000);
-    return () => { es.close(); clearTimeout(pending); clearInterval(tick); };
+    return () => { stream.close(); clearTimeout(pending); clearInterval(tick); };
   });
-
-  function since(ts: number | null) {
-    if (ts == null) return 'never';
-    const a = ago(ts, now);
-    return a === 'now' ? 'just now' : `${a} ago`;
-  }
 
   type Widget = ConfigView['widgets'][number];
   type Row = ConfigView['services'][number] & { check: ConfigView['checks'][number] | null; widget: Widget | null; auto: ConfigView['icons'][number] | null; fix: boolean };
 
   /** a widget's connection: whether its URL, credentials and permissions work */
   const CONN: Record<Widget['status'], [Level | 'none', string]> = { ok: ['ok', 'Connected'], error: ['crit', 'Failing'], never: ['none', 'Not polled yet'], unsupported: ['warn', 'Unknown type'] };
-  const KIND: Record<CheckKind, string> = { http: 'HTTP', tcp: 'TCP', container: 'Container state', heartbeat: 'Heartbeat' };
   const broken = (w: Widget | null) => w?.status === 'error' || w?.status === 'unsupported';
 
   // one row per service: its check, widget and automatic icon side by side
@@ -174,7 +170,7 @@
                         <span class="pl">
                           <span class="pline"><span class="lab">Check</span>{#if r.check}<b>{KIND[r.check.kind]}</b>{#if r.check.kind === 'heartbeat'}<span>{r.check.interval}</span>{:else if r.check.kind === 'container'}<span>{r.source !== 'services.yaml' ? `from ${r.source}` : r.check.interval}</span>{:else}<span class="mono">{r.check.target.replace(/^[a-z]+:\/\//, '')}</span>{/if}{:else}<span>none</span>{/if}</span>
                           {#if r.widget}
-                            <span class="pline"><span class="lab">Widget</span><span class="dot lv-{wl}" aria-hidden="true"></span><b>{r.widget.type}</b><span>{word.toLowerCase()}{#if r.widget.status === 'ok' || r.widget.status === 'error'}&nbsp;· {since(r.widget.lastOk)}{/if}</span></span>
+                            <span class="pline"><span class="lab">Widget</span><span class="dot lv-{wl}" aria-hidden="true"></span><b>{r.widget.type}</b><span>{word.toLowerCase()}{#if r.widget.status === 'ok' || r.widget.status === 'error'}&nbsp;· {since(r.widget.lastOk, now)}{/if}</span></span>
                             {#if r.widget.error}<span class="perr">{r.widget.error}</span>{/if}
                           {/if}
                         </span>
@@ -191,7 +187,7 @@
                     </span>
                     <span class="cell wide">
                       {#if r.widget}
-                        <span class="what"><span class="state"><span class="dot lv-{wl}" aria-hidden="true"></span>{word}</span>{#if r.widget.status === 'ok' || r.widget.status === 'error'}<span class="sep">·</span><span class="muted when">{since(r.widget.lastOk)}</span>{/if}</span>
+                        <span class="what"><span class="state"><span class="dot lv-{wl}" aria-hidden="true"></span>{word}</span>{#if r.widget.status === 'ok' || r.widget.status === 'error'}<span class="sep">·</span><span class="muted when">{since(r.widget.lastOk, now)}</span>{/if}</span>
                         <span class="sub mono">{r.widget.type}<span class="sep">·</span>{r.widget.origin ?? '—'}</span>
                         {#if r.widget.error}<span class="sub err lv-crit">{r.widget.error}</span>{/if}
                       {:else}
@@ -260,7 +256,7 @@
       <div><dt>Widget</dt><dd>{#if r.widget}{#if r.widget.docs}<a class="docs" href={r.widget.docs} target="_blank" rel="noopener">{r.widget.type}<span class="sr"> (documentation, opens in a new tab)</span></a>{:else}{r.widget.type}{/if}{:else}none{/if}</dd></div>
       {#if r.widget}
         <div><dt>Address</dt><dd class="mono">{r.widget.origin ?? '—'}</dd></div>
-        <div><dt>Connection</dt><dd><span class="state"><span class="dot lv-{wl}" aria-hidden="true"></span>{word}</span>{#if r.widget.status === 'ok' || r.widget.status === 'error'}<span class="muted">&nbsp;· last success {since(r.widget.lastOk)}</span>{/if}</dd></div>
+        <div><dt>Connection</dt><dd><span class="state"><span class="dot lv-{wl}" aria-hidden="true"></span>{word}</span>{#if r.widget.status === 'ok' || r.widget.status === 'error'}<span class="muted">&nbsp;· last success {since(r.widget.lastOk, now)}</span>{/if}</dd></div>
         {#each r.widget.options as o (o.k)}<div><dt class="mono">{o.k}</dt><dd class="mono">{o.v}</dd></div>{/each}
       {/if}
       <div><dt>Icon</dt><dd>{#if r.auto}<span class="mono">{r.auto.icon}</span> · picked automatically{:else if r.icon}set in the config{:else}its initials{/if}</dd></div>

@@ -1,7 +1,9 @@
 <script lang="ts">
   import { onMount, type Snippet } from 'svelte';
   import { ago } from '#lib/ago.ts';
-  import type { Backups, Level, Snapshot, Traffic, Trend } from '#lib/types';
+  import type { Backups, Level, Snapshot, Traffic } from '#lib/types';
+  import { grouped, moved } from '#lib/logic.ts';
+  import { fmtCount, fmtMBs, fmtRate, isProblem, since } from '#lib/format.ts';
   import Gauge from './Gauge.svelte';
   import MeterRow from './MeterRow.svelte';
   import Reading from './Reading.svelte';
@@ -66,36 +68,15 @@
   }
   const tabbed = $derived(panels.length > 1);
 
-  /** How a trend moved: first and last reading, and the change, e.g. "24 h: 61% → 62% (+1.2)". */
-  function moved(t: Trend | null, unit: string): { text: string; delta: number } | null {
-    const vs = t?.values.filter((v): v is number => v != null) ?? [];
-    if (!t || vs.length < 2) return null;
-    const a = vs[0], b = vs[vs.length - 1], h = Math.max(1, Math.round((now - t.from) / 3_600_000));
-    const d = b - a;
-    return { delta: d, text: `${h} h: ${a.toFixed(1)}${unit} → ${b.toFixed(1)}${unit} (${d >= 0 ? '+' : '−'}${Math.abs(d).toFixed(1)})` };
-  }
-  /** rows grouped by `group`, in the order they come (services.yaml order, then by name) */
-  function grouped<T extends { group: string }>(rows: T[]): { name: string; rows: T[] }[] {
-    const out: { name: string; rows: T[] }[] = [];
-    for (const r of rows) {
-      const g = out.find((x) => x.name === r.group);
-      if (g) g.rows.push(r); else out.push({ name: r.group, rows: [r] });
-    }
-    return out;
-  }
   const storageGroups = $derived(grouped(storage));
   const driveGroups = $derived(grouped(drives));
   /** the drive's meta without its place, which its group already says ("NVMe · 1 TB · pve" under "pve") */
   const driveMeta = (d: Snapshot['drives'][number]) => (d.meta.endsWith(` · ${d.group}`) ? d.meta.slice(0, -(d.group.length + 3)) : d.meta);
   /** how far back the charts go, said once above them instead of under each */
   const span = (from: number | null | undefined) => `Last ${from ? Math.max(1, Math.round((now - from) / 3_600_000)) : 24} h`;
-  const fmtRate = (v: number | null) => (v == null ? '—' : v >= 100 ? String(Math.round(v)) : v.toFixed(1));
   /** PBS rows grouped by the service that reports them, then the jobs, in the order the server sorted them */
   const backupGroups = $derived(grouped((backups?.rows ?? []).map((r) => ({ ...r, group: r.source ?? 'Jobs' }))));
   let recentOpen = $state(false);
-  /** "11 h ago", "just now", "never" */
-  const since = (ts: number | null) => (ts == null ? 'never' : ago(ts, now) === 'now' ? 'just now' : `${ago(ts, now)} ago`);
-  const fmtMBs = (v: number | null) => (v == null ? '—' : v >= 10 ? String(Math.round(v)) : v.toFixed(1));
   /** the day's highest reading of a series, the band's when it has one */
   const peakOf = (vs: (number | null)[] | null | undefined) => {
     const ns = (vs ?? []).filter((v): v is number => v != null);
@@ -103,7 +84,6 @@
   };
   const meters = $derived(host?.gauges.filter((g) => g.view === 'meter') ?? []);
   const charts = $derived(host?.gauges.filter((g) => g.view === 'chart') ?? []);
-  const fmtNum = (n: number | null) => (n == null ? '—' : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(n >= 1e4 ? 0 : 1) + 'k' : String(n));
 </script>
 
 {#snippet traffic(t: Traffic, what: string)}
@@ -173,7 +153,7 @@
                 <h3 class="ghead">{g.name}</h3>
                 <div class="rows">
                   {#each g.rows as s (s.name)}
-                    {@const m = moved(s.trend, '%')}
+                    {@const m = moved(s.trend, '%', now)}
                     <!-- a storage in two lines, like a drive: name and fill; size (or why it is off) and the bar with a tick
                          where it turns amber. An off row (unavailable, detached) is grey, the bar at the last known fill -->
                     <div class="row bar lv-{s.level}" title="{s.name} · {s.sub}{m ? ` · ${m.text}` : ''}">
@@ -230,11 +210,11 @@
                    one per hour (AdGuard); without that, just the figures -->
               <Reading
                 label="DNS" source={d.name} href={d.href} {target} {now}
-                names={['Queries', 'Blocked']} current={[fmtNum(d.queries), `${d.blockedPct.toFixed(1)}%`]} unit=""
+                names={['Queries', 'Blocked']} current={[fmtCount(d.queries), `${d.blockedPct.toFixed(1)}%`]} unit=""
                 detail={d.period ? `Last ${d.period}` : undefined}
                 bars values={d.series} values2={d.blockedCounts} from={d.series && d.stepMs ? now - d.series.length * d.stepMs : null}
-                at={(v, v2) => [fmtNum(v), v ? `${(((v2 ?? 0) / v) * 100).toFixed(1)}%` : '—']}
-                format={(v) => `${fmtNum(v)} queries`}
+                at={(v, v2) => [fmtCount(v), v ? `${(((v2 ?? 0) / v) * 100).toFixed(1)}%` : '—']}
+                format={(v) => `${fmtCount(v)} queries`}
               />
             {/if}
           </div>
@@ -256,14 +236,14 @@
                 <h3 class="ghead">{g.name}</h3>
                 <div class="rows">
                   {#each g.rows as r (r.id + r.title)}
-                    {@const bad = r.level === 'warn' || r.level === 'crit'}
+                    {@const bad = isProblem(r.level)}
                     {@const share = r.last != null && r.every ? (now - r.last) / r.every : null}
                     {@const lv = bad ? r.level : share != null && share >= 0.9 ? 'warn' : r.level === 'none' ? 'off' : 'ok'}
-                    <button class="row bar brow lv-{lv}" class:bad onclick={() => onbackup?.(r.id)} aria-label="{r.title}: {r.state}, last run {since(r.last)}{r.every ? `, every ${ago(0, r.every)}` : ''}">
+                    <button class="row bar brow lv-{lv}" class:bad onclick={() => onbackup?.(r.id)} aria-label="{r.title}: {r.state}, last run {since(r.last, now)}{r.every ? `, every ${ago(0, r.every)}` : ''}">
                       <span class="row-head">
                         <span class="name">{r.title}</span>
                         {#if bad}<span class="dstatus lv-{r.level}">{r.state}</span>{/if}
-                        <span class="num pct">{since(r.last)}</span>
+                        <span class="num pct">{since(r.last, now)}</span>
                       </span>
                       <span class="row-line">
                         <span class="meta-t size">{r.every ? `every ${ago(0, r.every)}` : r.state}</span>

@@ -2,6 +2,7 @@
   import { tick } from 'svelte';
   import type { Bookmark, Tile } from '#lib/types';
   import Icon from './Icon.svelte';
+  import { score } from '#lib/logic.ts';
 
   /** Command palette: fuzzy search over services and bookmarks. */
   interface Props {
@@ -39,17 +40,6 @@
     // this dashboard's own pages
     { kind: 'page', id: 'page-config', name: 'Setup', sub: 'config problems, services, widgets, settings', href: '/config', icon: null, iconDark: null, level: null, hay: 'setup config configuration settings problems widgets checks secrets icons' }
   ]);
-
-  function score(hay: string, name: string, query: string) {
-    const n = name.toLowerCase();
-    if (n.startsWith(query)) return 100 - n.length / 100;
-    if (n.split(/[\s\-!]+/).some((w) => w.startsWith(query))) return 80;
-    if (hay.includes(query)) return 60;
-    // subsequence match ("pxm" → "proxmox")
-    let i = 0;
-    for (const c of n) if (c === query[i]) i++;
-    return i === query.length ? 30 : -1;
-  }
 
   const results = $derived.by(() => {
     const query = q.trim().toLowerCase();

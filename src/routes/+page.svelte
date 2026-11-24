@@ -13,51 +13,28 @@
   import Sparkline from '#lib/components/Sparkline.svelte';
   import Sheet from '#lib/components/Sheet.svelte';
   import { ago, until, validFor } from '#lib/ago.ts';
+  import { Live } from '#lib/live.svelte.ts';
+  import { viewStep, type View } from '#lib/logic.ts';
+  import { longpress } from '#lib/actions/longpress.ts';
+  import { KIND, isProblem, pctTxt, since } from '#lib/format.ts';
 
   // The page answers "is everything fine?" at a glance and gets you to a service in one tap: the sentence, what needs
   // attention listed once, a strip of the infrastructure, and a tile per service that both launches it and says how
   // it is. Everything else (strips, charts, readings) is one tap deeper, in a sheet.
   let { data }: PageProps = $props();
   // svelte-ignore state_referenced_locally — only the first snapshot comes from load; the stream replaces it
-  let snap = $state(data.snapshot);
-  let live = $state<'connecting' | 'live' | 'reconnecting'>('connecting');
-  let now = $state(Date.now());
+  const stream = new Live(data.snapshot);
+  onMount(() => stream.start());
+  const snap = $derived(stream.snap);
+  const now = $derived(stream.now);
+  const degraded = $derived(stream.degraded);
+  const flash = $derived(stream.flash);
   let paletteOpen = $state(false);
 
   const allServices = $derived(snap ? snap.groups.flatMap((g) => g.services) : []);
-  const stale = $derived(snap && now - snap.generatedAt > snap.staleAfter);
-  // the stream has been down past a short grace (a server restart is a blip), or the device is offline
-  let lost = $state(false);
-  let offline = $state(false);
-  // a status page must not keep saying "all good" on old data: the page greys out instead
-  const degraded = $derived(!!stale || lost || offline);
-  // services (and 'verdict') whose level changed in the last update, briefly highlighted
-  let flash = $state(new Set<string>());
-  function changes(prev: Snapshot, next: Snapshot) {
-    const was = new Map(prev.groups.flatMap((g) => g.services).map((t) => [t.id, t.level]));
-    const ids = next.groups.flatMap((g) => g.services).filter((t) => was.has(t.id) && was.get(t.id) !== t.level).map((t) => t.id);
-    if (prev.verdict.level !== next.verdict.level) ids.push('verdict');
-    return ids;
-  }
-  let unflash: ReturnType<typeof setTimeout> | undefined;
-  /** a new snapshot from the stream; whatever changed level is highlighted for a moment */
-  function receive(next: Snapshot) {
-    const ids = snap ? changes(snap, next) : [];
-    snap = next;
-    if (!ids.length) return;
-    flash = new Set(ids);
-    clearTimeout(unflash);
-    unflash = setTimeout(() => (flash = new Set()), 2400);
-  }
   const target = $derived(snap?.linkTarget || '_blank');
   // this dashboard's own pages (the config view) open in place; services as settings.linkTarget says
   const linkTarget = (href: string | null | undefined) => (!href ? undefined : href.startsWith('/') ? undefined : target);
-  const isProblem = (level: string) => level === 'crit' || level === 'warn';
-  const pctTxt = (v: number | null, d = 2) => (v == null ? '—' : v >= 99.995 ? '100%' : v.toFixed(d) + '%');
-  /** "2 h ago", "just now" */
-  const since = (ts: number | null) => (ts == null ? 'never' : ago(ts, now) === 'now' ? 'just now' : `${ago(ts, now)} ago`);
-  // the header's live state: the stream down, the data old, or current
-  const liveState = $derived<'live' | 'reconnecting' | 'stale'>(live === 'reconnecting' ? 'reconnecting' : stale ? 'stale' : 'live');
 
   // ---- what the page shows, from the snapshot ----
   // what needs attention, the top item first: every warning and critical item (notes, such as pending updates, are
@@ -164,73 +141,6 @@
     : sheet?.kind === 'activity' ? 'Last 24 hours' : ''
   );
 
-  // A long press on a tile opens its details (touch and pen; the button at the tile's end does the same for everyone).
-  // The click that follows the press is swallowed, so the service isn't launched as well.
-  function longpress(node: HTMLElement, open: () => void) {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let fired = false, touch = false, x = 0, y = 0;
-    const down = (e: PointerEvent) => {
-      touch = e.pointerType !== 'mouse';
-      fired = false;
-      if (!touch) return;
-      x = e.clientX; y = e.clientY;
-      timer = setTimeout(() => { fired = true; open(); }, 450);
-    };
-    const move = (e: PointerEvent) => { if (Math.hypot(e.clientX - x, e.clientY - y) > 10) clearTimeout(timer); };
-    const cancel = () => clearTimeout(timer);
-    const click = (e: MouseEvent) => { if (fired) { e.preventDefault(); fired = false; } };
-    // the browser's own long-press menu would cover the sheet
-    const menu = (e: Event) => { if (touch) e.preventDefault(); };
-    node.addEventListener('pointerdown', down);
-    node.addEventListener('pointermove', move);
-    node.addEventListener('pointerup', cancel);
-    node.addEventListener('pointercancel', cancel);
-    node.addEventListener('click', click);
-    node.addEventListener('contextmenu', menu);
-    return {
-      destroy() {
-        clearTimeout(timer);
-        node.removeEventListener('pointerdown', down); node.removeEventListener('pointermove', move); node.removeEventListener('pointerup', cancel);
-        node.removeEventListener('pointercancel', cancel); node.removeEventListener('click', click); node.removeEventListener('contextmenu', menu);
-      }
-    };
-  }
-
-  /** (re)open the stream now: the banner's Retry, coming back online. Set once mounted */
-  let connect = () => {};
-  onMount(() => {
-    let es: EventSource | undefined;
-    let retry: ReturnType<typeof setTimeout> | undefined;
-    let grace: ReturnType<typeof setTimeout> | undefined;
-    const connected = () => { live = 'live'; lost = false; clearTimeout(grace); grace = undefined; };
-    connect = () => {
-      clearTimeout(retry);
-      es?.close();
-      es = new EventSource('/api/stream');
-      es.onopen = connected;
-      es.onmessage = (e: MessageEvent<string>) => { receive(JSON.parse(e.data)); connected(); };
-      es.onerror = () => {
-        live = 'reconnecting';
-        es?.close();
-        grace ??= setTimeout(() => (lost = true), 8000);
-        retry = setTimeout(connect, 4000);
-      };
-    };
-    connect();
-    const tick = setInterval(() => (now = Date.now()), 15_000);
-    const vis = () => { if (document.visibilityState === 'visible') { now = Date.now(); if (live === 'reconnecting') connect(); } };
-    const net = () => { offline = !navigator.onLine; if (!offline && live === 'reconnecting') connect(); };
-    document.addEventListener('visibilitychange', vis);
-    addEventListener('online', net);
-    addEventListener('offline', net);
-    net();
-    now = Date.now();
-    return () => {
-      es?.close(); clearInterval(tick); clearTimeout(retry); clearTimeout(grace); clearTimeout(unflash);
-      document.removeEventListener('visibilitychange', vis); removeEventListener('online', net); removeEventListener('offline', net);
-    };
-  });
-
   // the alert count on the tab title and, for the installed app, on its icon
   $effect(() => {
     const n = snap?.needCount ?? 0;
@@ -242,15 +152,14 @@
   // ---- phones: one view at a time (Home, Services, Alerts), picked in the tab bar ----
   // The view is history state. Leaving Home adds an entry, so back returns to Home and then leaves the app; switching
   // between the other two replaces it. Above the phone breakpoint every section shows and the view changes nothing.
-  type View = NonNullable<App.PageState['view']>;
   const view = $derived<View>(page.state.view ?? 'home');
   const VIEW_NAME: Record<View, string> = { home: '', services: 'Services', alerts: 'Alerts' };
   function setView(v: View) {
-    if (v === view) return scrollTo({ top: 0, behavior: 'smooth' });
-    if (v === 'home') {
-      if (page.state.viewPushed) history.back();
-      else replaceState('', {});
-    } else if (view === 'home') pushState('', { view: v, viewPushed: true });
+    const step = viewStep(view, v, !!page.state.viewPushed);
+    if (step === 'stay') return scrollTo({ top: 0, behavior: 'smooth' });
+    if (step === 'back') history.back();
+    else if (step === 'reset') replaceState('', {});
+    else if (step === 'push') pushState('', { view: v, viewPushed: true });
     else replaceState('', { ...page.state, view: v });
     scrollTo(0, 0);
   }
@@ -288,7 +197,6 @@
     info: 'M12 16v-4M12 8h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z',
     ok: 'M20 6 9 17l-5-5'
   };
-  const KIND: Record<string, string> = { http: 'HTTP', tcp: 'TCP', container: 'Container state', heartbeat: 'Heartbeat' };
 </script>
 
 <svelte:window onkeydown={onKey} />
@@ -323,7 +231,7 @@
 {:else}
   <div class="page" id="top" data-view={view}>
     <AppHeader
-      title={snap.title} logo={snap.logo} logoDark={snap.logoDark} demo={snap.demo} current="home" section={VIEW_NAME[view]} live={{ state: liveState, age: ago(snap.generatedAt, now) }}
+      title={snap.title} logo={snap.logo} logoDark={snap.logoDark} demo={snap.demo} current="home" section={VIEW_NAME[view]} live={{ state: stream.header, age: ago(snap.generatedAt, now) }}
       deepLink={snap.deepLink} {target} configProblems={snap.configProblems} onsearch={() => (paletteOpen = true)}
     />
 
@@ -332,10 +240,10 @@
       <div class="banner" role="alert">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={ICONS.crit} /></svg>
         <span class="txt">
-          <span class="t">{offline ? 'You’re offline' : lost ? 'Can’t reach the dashboard' : 'Updates have stopped'}</span>
+          <span class="t">{stream.offline ? 'You’re offline' : stream.lost ? 'Can’t reach the dashboard' : 'Updates have stopped'}</span>
           <span class="d">Showing the last known state, {age === 'now' ? 'just now' : age + ' old'}.</span>
         </span>
-        {#if !offline}<button onclick={() => connect()}>Retry</button>{/if}
+        {#if !stream.offline}<button onclick={() => stream.connect()}>Retry</button>{/if}
       </div>
     {/if}
 
@@ -351,7 +259,7 @@
             {#if degraded}<span class="tag">Last known state</span>{/if}
             <h1>{snap.verdict.title}</h1>
             {#if snap.verdict.sub || snap.lastChange}
-              <p class="muted">{[snap.verdict.sub, !snap.needCount && snap.lastChange ? `last change ${since(snap.lastChange)}` : ''].filter(Boolean).join(' · ')}</p>
+              <p class="muted">{[snap.verdict.sub, !snap.needCount && snap.lastChange ? `last change ${since(snap.lastChange, now)}` : ''].filter(Boolean).join(' · ')}</p>
             {/if}
           </div>
         </div>
@@ -408,7 +316,7 @@
         <div class="quiet only-phone lv-ok" data-v="alerts">
           <span class="mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5" /></svg></span>
           <p class="qt">Nothing needs attention</p>
-          <p class="muted">{snap.verdict.title}{snap.lastChange ? ` · last change ${since(snap.lastChange)}` : ''}</p>
+          <p class="muted">{snap.verdict.title}{snap.lastChange ? ` · last change ${since(snap.lastChange, now)}` : ''}</p>
         </div>
       {/if}
 
@@ -486,7 +394,7 @@
                 <li class="tile lv-{t.level}" class:alert={bad} class:flash={flash.has(t.id)}>
                   {#snippet inner()}
                     <span class="ic"><Icon src={t.icon} dark={t.iconDark} name={t.name} size={24} /></span>
-                    <span class="tx"><span class="t">{t.name}</span><span class="d" class:hl={isProblem(t.lineLevel ?? '')}>{t.line || t.status}</span></span>
+                    <span class="tx"><span class="t">{t.name}</span><span class="d" class:hl={isProblem(t.lineLevel)}>{t.line || t.status}</span></span>
                   {/snippet}
                   {#if t.href}
                     <a class="tmain" href={t.href} target={target} rel="noopener" onclick={() => opened(t.id)} use:longpress={() => details(t.id)}>{@render inner()}</a>
@@ -564,7 +472,7 @@
       {@const j = sheetJob}
       <div class="sh-head">
         <span class="ic big"><Icon src={t.icon} dark={t.iconDark} name={t.name} size={28} /></span>
-        <span class="txt"><span class="state-w lv-{t.level}"><span class="dot lv-{t.level}" aria-hidden="true"></span>{t.status}</span><span class="d" class:hl={isProblem(t.lineLevel ?? '')}>{t.line}</span></span>
+        <span class="txt"><span class="state-w lv-{t.level}"><span class="dot lv-{t.level}" aria-hidden="true"></span>{t.status}</span><span class="d" class:hl={isProblem(t.lineLevel)}>{t.line}</span></span>
       </div>
       {#if t.href}<a class="primary wide" href={t.href} target={target} rel="noopener" onclick={() => opened(t.id)}>Open {t.name} {@render arrow()}</a>{/if}
       {#if t.beats}
@@ -576,13 +484,13 @@
       {/if}
       {#if t.stats.length}
         <div class="facts">
-          {#each t.stats as s}<div class="fact lv-{s.level ?? 'none'}"><span class="muted k">{s.k}</span><span class="fv" class:hl={isProblem(s.level ?? '')}>{s.v}</span></div>{/each}
+          {#each t.stats as s}<div class="fact lv-{s.level ?? 'none'}"><span class="muted k">{s.k}</span><span class="fv" class:hl={isProblem(s.level)}>{s.v}</span></div>{/each}
         </div>
       {/if}
       <dl class="kv">
         {#if j}
           <div><dt>Schedule</dt><dd>every {ago(0, j.every)} · grace {ago(0, j.grace)}</dd></div>
-          <div><dt>Last run</dt><dd>{since(j.lastOk)}{#if j.lastFail && (!j.lastOk || j.lastFail > j.lastOk)} · failure reported {since(j.lastFail)}{/if}</dd></div>
+          <div><dt>Last run</dt><dd>{since(j.lastOk, now)}{#if j.lastFail && (!j.lastOk || j.lastFail > j.lastOk)} · failure reported {since(j.lastFail, now)}{/if}</dd></div>
           <div><dt>Next run</dt><dd>{until(j.due, now)} · {j.status}</dd></div>
         {:else if t.check}
           <div><dt>Check</dt><dd>{KIND[t.check] ?? t.check}</dd></div>
