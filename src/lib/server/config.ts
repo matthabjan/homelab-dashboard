@@ -375,3 +375,11 @@ export function assetUrl(rel: string | null | undefined): string | null {
   if (/^https?:\/\//.test(rel)) return rel;
   return '/assets/' + rel.replace(/^\/+/, '').split('/').map(encodeURIComponent).join('/');
 }
+
+const byId = new WeakMap<Service[], Map<string, Service>>();
+/** The config's services by id. Built once per loaded config (a reload or a label discovery makes a new list). */
+export function serviceById(cfg: Pick<Config, 'services'>): Map<string, Service> {
+  let m = byId.get(cfg.services);
+  if (!m) byId.set(cfg.services, (m = new Map(cfg.services.map((s) => [s.id, s]))));
+  return m;
+}

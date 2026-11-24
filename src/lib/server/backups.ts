@@ -2,7 +2,7 @@
 // each job is judged where it is read (pbs.ts against backupMaxAgeHours, check.ts for heartbeats); this adds them up.
 import { ago, until } from '../ago.ts';
 import { plural, worst } from './format.ts';
-import type { BackupRow, Backups, InfraPanel, Job, Level, PbsBackups, Severity } from '#lib/types';
+import type { BackupRow, Backups, InfraPanel, Job, Level, PbsBackups, Service, Severity } from '#lib/types';
 
 /** One PBS service's backups. */
 export interface PbsSource {
@@ -53,6 +53,9 @@ function panel(sheet: Backups, pbs: PbsSource[], jobs: Job[], now: number): Infr
 }
 
 const DAY = 86_400_000;
+/** A service whose events are backup news: a PBS server, or a job marked `backup`. */
+export const isBackupService = (s: Pick<Service, 'heartbeat' | 'widget'>) => !!s.heartbeat?.backup || s.widget?.type === 'proxmoxbackupserver';
+
 export const DAYS = 7;
 
 /**

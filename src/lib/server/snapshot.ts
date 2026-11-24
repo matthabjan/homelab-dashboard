@@ -1,15 +1,19 @@
 // Turns engine state + history into the JSON the browser renders.
 import fs from 'node:fs';
-import { resolveIcon, assetUrl, darkAssetUrl } from './config.ts';
-import { probeStats, uptimeSince, probeBuckets, probeDays, eventLevels, series, recentEvents, openScores } from './db.ts';
-import { fmtHours, fmtSize, plural } from './format.ts';
+import { resolveIcon, assetUrl, darkAssetUrl, serviceById } from './config.ts';
+import { probeStats, uptimeSince, probeBuckets, probeDays, eventLevels, series, recentEvents, openScores, type ProbeBucketRow } from './db.ts';
 import { hostService, hostSource } from './local.ts';
 import { heartbeatStatus, kindOf, status as checkStatus, withoutBlips } from './check.ts';
 import { createAttention, type Raised } from './attention.ts';
 import { infrastructure } from './infrastructure.ts';
-import { backups as backupsOf, DAYS } from './backups.ts';
+import { backups as backupsOf, isBackupService, DAYS } from './backups.ts';
 import { storage as storageOf } from './storage.ts';
-import type { AttentionItem, Backups, ConfigProblem, Drive, Fact, Gauge, IoReading, Job, Level, NetworkReading, Settings, Severity, SheetRef, Snapshot, Tile, Traffic, Trend } from '#lib/types';
+import { system, type History } from './system.ts';
+import { drives as drivesOf } from './drives.ts';
+import { network as networkOf } from './network.ts';
+import { fleet as fleetOf, BUCKETS, BUCKET_MS } from './fleet.ts';
+import { verdict as verdictOf } from './verdict.ts';
+import type { AttentionItem, ConfigProblem, Job, Level, Settings, Severity, SheetRef, Snapshot, Tile, Trend } from '#lib/types';
 import type { Engine } from './engine.ts';
 
 const RANK: Record<Severity | Level, number> = { crit: 3, warn: 2, info: 1, ok: 0 };
@@ -21,31 +25,41 @@ const MIN_SLOW_SAMPLES = 10; // ~5 min of probes before a service can be called 
 /** What the snapshot reads from the engine; the Engine itself satisfies it. */
 export type SnapshotInput = Pick<Engine, 'cfg' | 'state' | 'autoIcons' | 'iconVariants' | 'shared' | 'temps' | 'local'>;
 type ProbeSummary = { up24: number | null; p95: number | null; p95h: number | null; n1: number; up7: number | null };
+type Series = ReturnType<typeof series>;
+type BackupHistory = { checks: ReturnType<typeof probeDays>; events: ReturnType<typeof eventLevels> };
+/** History as it was read this minute: each kind of query in a slot of its own type. */
+type Minute = { ts: number; stats: Map<string, ProbeSummary>; series: Map<string, Series>; fleet?: ProbeBucketRow[]; backupDays?: BackupHistory };
 /** What a builder carries from one snapshot to the next. */
-type Memory = { minute: { ts: number; data: Map<string, unknown> }; attention: ReturnType<typeof createAttention> };
+type Memory = { minute: Minute; attention: ReturnType<typeof createAttention> };
+const blankMinute = (ts: number): Minute => ({ ts, stats: new Map(), series: new Map() });
 
 /**
  * A snapshot builder. It remembers when each alert first appeared (so attention shows "since" instead of
  * "last polled") and keeps history queries for a minute, so keep one per engine.
  */
 export function createSnapshot(): (input: SnapshotInput, now: number) => Snapshot {
-  const mem: Memory = { minute: { ts: 0, data: new Map() }, attention: createAttention() };
+  const mem: Memory = { minute: blankMinute(0), attention: createAttention() };
   return (input, now) => build(input, now, mem);
 }
 
 /**
- * `read()` once a minute per key: the snapshot is rebuilt after every round and heartbeat, and the history queries
- * behind it (probe statistics, the 24 h strips, the gauges' series) are most of its cost (the strip ~80 ms at 30
- * services). History moves on by a probe or two in that minute.
+ * This minute's history: the snapshot is rebuilt after every round and heartbeat, and the history queries behind it
+ * (probe statistics, the 24 h strips, the gauges' series) are most of its cost (the strip ~80 ms at 30 services), so
+ * each is read once a minute. History moves on by a probe or two in that minute.
  */
-function perMinute<T>(mem: Memory, now: number, key: string, read: () => T): T {
-  if (now - mem.minute.ts > 60_000) mem.minute = { ts: now, data: new Map() };
-  if (!mem.minute.data.has(key)) mem.minute.data.set(key, read());
-  return mem.minute.data.get(key) as T;
+function minute(mem: Memory, now: number): Minute {
+  if (now - mem.minute.ts > 60_000) mem.minute = blankMinute(now);
+  return mem.minute;
+}
+/** `read()` once per key of a minute's slot. */
+function once<V>(slot: Map<string, V>, key: string, read: () => V): V {
+  let v = slot.get(key);
+  if (v === undefined) slot.set(key, (v = read()));
+  return v;
 }
 
 function stats(mem: Memory, sid: string, now: number): ProbeSummary {
-  return perMinute(mem, now, `stats ${sid}`, () => {
+  return once(minute(mem, now).stats, sid, () => {
     const d = probeStats(sid, now - 24 * H);
     const h1 = probeStats(sid, now - H);
     return { up24: d.uptime, p95: d.p95, p95h: h1.p95, n1: h1.n, up7: uptimeSince(sid, now - 7 * 24 * H) };
@@ -53,7 +67,7 @@ function stats(mem: Memory, sid: string, now: number): ProbeSummary {
 }
 
 /** A metric's 24 h series in `points` buckets. */
-const series24 = (mem: Memory, now: number, key: string, points: number) => perMinute(mem, now, `series ${key} ${points}`, () => series(key, now - 24 * H, now, points));
+const series24 = (mem: Memory, now: number, key: string, points: number): Series => once(minute(mem, now).series, `${key} ${points}`, () => series(key, now - 24 * H, now, points));
 
 /** A metric's 24 h trend, or null while it has fewer than two samples (nothing to draw). */
 const trend24 = (mem: Memory, now: number, key: string | undefined, points: number): Trend | null => {
@@ -61,40 +75,6 @@ const trend24 = (mem: Memory, now: number, key: string | undefined, points: numb
   const s = series24(mem, now, key, points);
   return s.values.filter((v) => v != null).length > 1 ? { values: s.values, from: s.from } : null;
 };
-
-const level = (v: number | null | undefined, warn: number, crit: number): Level | 'none' => (v == null ? 'none' : v >= crit ? 'crit' : v >= warn ? 'warn' : 'ok');
-
-/**
- * A drive's row in the Drives panel, and what is wrong with it: each problem is raised for the service that reported
- * the drive, as a predicate of the drive ("WD Red has 8% life left").
- */
-function driveStatus(d: Drive, where: string, th: Settings['thresholds']) {
-  /** severity, alert text, alert key */
-  const problems: ['crit' | 'warn', string, string][] = [];
-  if (d.health === 'failing') problems.push(['crit', 'is failing SMART', 'health']);
-  if (d.health === 'warning') problems.push(['warn', 'has a past or minor SMART problem', 'health']);
-  if (d.lifeLeft != null && d.lifeLeft <= th.driveLifeWarnPct) problems.push(['warn', `has ${d.lifeLeft}% life left`, 'life']);
-  if (d.errors) problems.push(['warn', `has ${d.errors} media errors or bad sectors`, 'errors']);
-  if (d.tempC != null && d.tempC >= th.driveTempWarnC) problems.push(['warn', `is at ${d.tempC} °C`, 'temp']);
-  const level: Level = problems.some((p) => p[0] === 'crit') ? 'crit' : problems.length ? 'warn' : 'ok';
-  const detail = [
-    d.lifeLeft != null && `${d.lifeLeft}% life left`,
-    d.tempC != null && `${d.tempC} °C`,
-    d.hours != null && `${fmtHours(d.hours)} powered on`,
-    d.written != null && `${fmtSize(d.written)} written`,
-    d.errors ? `${d.errors} errors` : null
-  ].filter(Boolean).join(' · ');
-  const status = d.health === 'failing' ? 'failing' : level === 'warn' ? 'check' : d.health === 'unknown' ? '—' : 'ok';
-  /** shown next to the model; power-on time and data written stay in `detail` (the tooltip) */
-  const facts: Fact[] = [];
-  if (d.tempC != null) facts.push({ k: '', v: `${d.tempC} °C`, level: d.tempC >= th.driveTempWarnC ? 'warn' : null });
-  if (d.errors) facts.push({ k: 'errors', v: String(d.errors), level: 'warn' });
-  const lifeLevel: Level = d.lifeLeft != null && d.lifeLeft <= th.driveLifeWarnPct ? 'warn' : 'ok';
-  return {
-    row: { name: d.model, group: where, meta: [d.kind, fmtSize(d.size), where].join(' · '), detail: detail || 'no SMART details', status, level, life: d.lifeLeft, lifeLevel, tempC: d.tempC, facts },
-    problems
-  };
-}
 
 /**
  * A service's or link's icon in both themes: its own `iconDark`, else the measured variant of its configured icon (one
@@ -109,7 +89,6 @@ function themed(engine: SnapshotInput, name: string, icon: string | null | undef
 }
 
 type Round = ReturnType<Memory['attention']['begin']>;
-type Th = Settings['thresholds'];
 /** Every service that has polled its widget at least once, with that result. */
 const widgetsOf = (engine: SnapshotInput) => engine.cfg.services.flatMap((s) => {
   const w = engine.state(s.id).widget;
@@ -136,14 +115,12 @@ function configAlerts(engine: SnapshotInput, round: Round) {
   }
 }
 
-const isBackupService = (s: SnapshotInput['cfg']['services'][number]) => !!s.heartbeat?.backup || s.widget?.type === 'proxmoxbackupserver';
-
 /**
  * The sheet an event's row in Activity opens: what a backup service reported (backups completed) the Backups sheet,
  * anything else about a service (an outage, an update) that service's sheet.
  */
 function feedTarget(engine: SnapshotInput, sid: string | null, reported: boolean): SheetRef | null {
-  const s = sid ? engine.cfg.services.find((x) => x.id === sid) : undefined;
+  const s = sid ? serviceById(engine.cfg).get(sid) : undefined;
   if (!s) return null;
   return reported && isBackupService(s) ? { kind: 'infra', tab: 'backups' } : { kind: 'service', id: s.id };
 }
@@ -228,84 +205,10 @@ function serviceTiles(engine: SnapshotInput, now: number, mem: Memory, round: Ro
   return tiles;
 }
 
-/** The System panel: the Proxmox node, or the machine the dashboard runs on, plus the kernel's temperatures. */
 /** The machine on the System panel: the Proxmox node (with its service) when host.source picks it, else the local host. */
 function hostReading(engine: SnapshotInput) {
   const service = hostSource(engine.cfg) === 'proxmox' ? hostService(engine.cfg) : undefined;
   return { service, hw: service ? engine.state(service.id).widget?.host : engine.local };
-}
-
-/** The System panel: the host's gauges (the Disk gauge's level from storage.ts) and facts; CPU and NVMe heat raised. */
-function hostPanel(engine: SnapshotInput, { service: hostSvc, hw }: ReturnType<typeof hostReading>, diskLevel: Level | 'none', now: number, mem: Memory, round: Round): Snapshot['host'] {
-  const { settings } = engine.cfg;
-  const th = settings.thresholds;
-  // 15-minute buckets: fine enough to scrub through, coarse enough to stay smooth; each with its lowest and highest
-  // reading, so the chart's band keeps a spike the average flattens
-  const hist = (key: string | undefined) => {
-    if (!key) return { series: null };
-    const s = series24(mem, now, key, 96);
-    return s.values.filter((v) => v != null).length > 1 ? { series: s.values, lo: s.lo, hi: s.hi, from: s.from } : { series: null };
-  };
-  let host = null;
-  if (hw || engine.temps) {
-    const temps = engine.temps;
-    const gauges: Gauge[] = [];
-    if (hw) {
-      gauges.push({ key: 'cpu', label: 'CPU', val: hw.cpu == null ? '—' : Math.round(hw.cpu), unit: '%', pct: hw.cpu, level: level(hw.cpu, 75, 90), sub: `${hw.cpus} threads`, ...hist('host.cpu'), view: 'chart', max: 100, warn: 75 });
-      // memory and disk fill barely move in a day: meter rows with a small line, not charts. The amounts are the detail
-      gauges.push({ key: 'mem', label: 'Memory', val: Math.round(hw.memPct), unit: '%', pct: hw.memPct, level: level(hw.memPct, 80, 92), sub: `${(hw.mem / 1024 ** 3).toFixed(1)} of ${Math.round(hw.maxmem / 1024 ** 3)} GiB`, ...hist('host.mem'), view: 'meter', max: 100, warn: 80 });
-      gauges.push({ key: 'disk', label: 'Disk', val: hw.disk.pct == null ? '—' : Math.round(hw.disk.pct), unit: '%', pct: hw.disk.pct, level: diskLevel, sub: hw.disk.name, ...hist(hostSvc ? hw.disk.metric : 'host.disk'), view: 'meter', max: 100, warn: th.storageAmberPct });
-    }
-    if (temps?.cpu != null) {
-      const span = th.tempWarnC + 15 - th.tempMinC;
-      const tp = Math.max(0, Math.min(100, ((temps.cpu - th.tempMinC) / span) * 100));
-      // the chart's dashed line shows the limit and its legend the day's peak; without history yet there is no chart,
-      // and the corner names the limit instead
-      const tempHist = hist('host.temp');
-      gauges.push({ key: 'temp', label: 'Thermals', val: Math.round(temps.cpu), unit: '°C', pct: tp, level: level(temps.cpu, th.tempWarnC, th.tempWarnC + 10), sub: tempHist.series ? 'CPU' : `limit ${th.tempWarnC} °C`, ...tempHist, view: 'chart', max: null, warn: th.tempWarnC });
-      // the kernel's sensors are the Proxmox node's (the dashboard shares its kernel), so its tile carries them
-      const whose = hostSvc ? { service: hostSvc } : { source: 'host' };
-      if (temps.cpu >= th.tempWarnC) round.raise({ ...whose, key: 'cpu-temp', sev: temps.cpu >= th.tempWarnC + 10 ? 'crit' : 'warn', title: `CPU at ${Math.round(temps.cpu)} °C`, detail: `limit ${th.tempWarnC} °C` });
-      temps.nvme.forEach((n, i) => { if (n >= th.driveTempWarnC) round.raise({ ...whose, key: `nvme-temp-${i}`, sev: 'warn', title: `NVMe at ${Math.round(n)} °C`, detail: 'drive is running hot' }); });
-    }
-    host = {
-      name: settings.host.name || (hw?.node ?? 'host'),
-      href: hostSvc?.href ?? null,
-      facts: [
-        ...(hw?.uptime ? [{ label: 'Uptime', value: hw.uptime }] : []),
-        ...(hw?.guestsTotal != null ? [{ label: 'Guests', value: `${hw.guestsRunning} of ${hw.guestsTotal} running` }] : [])
-      ],
-      gauges,
-      io: hw?.io ? ioReading(hw.node, hw.io, now, mem) : null
-    };
-  }
-  return host;
-}
-
-/** The node's disk read and write (MB/s) with their 24 h series, like Network's traffic. */
-function ioReading(source: string, io: { read: number; write: number }, now: number, mem: Memory): IoReading {
-  const r = series24(mem, now, 'host.io.read', 96);
-  const w = series24(mem, now, 'host.io.write', 96);
-  const charted = r.values.filter((v) => v != null).length > 1;
-  return { source, read: io.read, write: io.write, seriesRead: charted ? r.values : null, seriesWrite: charted ? w.values : null, from: charted ? r.from : null };
-}
-
-/** The Drives panel: one row per disk (a disk passed through whole is listed once), its problems raised. */
-function drivesPanel(engine: SnapshotInput, th: Th, round: Round): Snapshot['drives'] {
-  const drives: Snapshot['drives'] = [];
-  const seenSerials = new Set();
-  for (const s of engine.cfg.services) {
-    const w = engine.state(s.id).widget;
-    for (const d of [...(w?.drives || [])].sort((a, b) => a.model.localeCompare(b.model, undefined, { numeric: true }))) {
-      // a disk passed through whole is reported by the host and by the VM
-      if (d.serial && seenSerials.has(d.serial)) continue;
-      if (d.serial) seenSerials.add(d.serial);
-      const { row, problems } = driveStatus(d, d.where ?? s.name, th);
-      for (const [sev, text, key] of problems) round.raise({ sev, service: s, key: `drive-${d.serial ?? d.model}-${key}`, title: `${d.model} ${text}`, detail: row.meta });
-      drives.push(row);
-    }
-  }
-  return drives;
 }
 
 /** After attention closed: each tile takes its worst alert when that is worse than its check says. */
@@ -319,61 +222,6 @@ function applyWorst(tiles: Map<string, Tile>, att: ReturnType<Round['close']>) {
     }
     t.line ||= t.level === 'ok' ? 'Online' : '';
   }
-}
-
-/** WAN and LAN traffic with 24 h series, and DNS statistics, from the widgets settings.network picks. */
-function networkPanel(engine: SnapshotInput, widgets: ReturnType<typeof widgetsOf>, now: number, mem: Memory): Snapshot['network'] {
-  const { settings } = engine.cfg;
-  let network: Snapshot['network'] = null;
-  const netPick = settings.network?.service;
-  const net = netPick
-    ? widgets.find((x) => x.s.name === netPick && x.w.network)
-    : widgets.find((x) => x.w.network && !x.w.network.fallback) || widgets.find((x) => x.w.network);
-  const dnsPick = settings.network?.dns;
-  const dns = widgets.find((x) => x.w.dns && (!dnsPick || x.s.name === dnsPick));
-  const lan = widgets.find((x) => x.w.lan);
-  /**
-   * Rates plus 24 h series for one reading, from the metrics `<key>.down` / `<key>.up`.
-   */
-  const traffic = (key: string, reading: NetworkReading, href: string | null): Traffic => {
-    const sDown = series24(mem, now, `${key}.down`, 72);
-    const sUp = series24(mem, now, `${key}.up`, 72);
-    return { source: reading.source, href, down: reading.down, up: reading.up, seriesDown: sDown.values, seriesUp: sUp.values, downLo: sDown.lo, downHi: sDown.hi, spanH: Math.max(1, Math.round((now - sDown.from) / H)), from: sDown.from };
-  };
-  if (net || dns || lan?.w.lan) {
-    const nw = net?.w.network;
-    network = {
-      ...(nw ? traffic(nw.fallback ? 'fritz' : 'net', nw, net.s.href) : { source: null, href: null, down: null, up: null, seriesDown: null, seriesUp: null, spanH: null, from: null }),
-      lan: lan?.w.lan ? traffic('lan', lan.w.lan, lan.s.href) : null,
-      dns: dns?.w.dns ? { ...dns.w.dns, href: dns.s.href, name: dns.s.name } : null
-    };
-  }
-  return network;
-}
-
-/** The fleet availability strip (48 × 30 min), and the same buckets per service as each tile's `beats`. */
-function fleetStrip(engine: SnapshotInput, tiles: Map<string, Tile>, now: number, mem: Memory): Snapshot['fleet'] {
-  const th = engine.cfg.settings.thresholds;
-  const B = 30 * 60_000;
-  const start = now - 48 * B;
-  const buckets: Snapshot['fleet'] = Array.from({ length: 48 }, () => 'none');
-  // a bucket is amber when a probe took over twice the service's own Slow limit (history of removed services: the global one)
-  const slowLimit = new Map(engine.cfg.services.map((s) => [s.id, s.latencyWarnMs ?? th.latencyWarnMs]));
-  // bucket indexes count from the `start` of the query, which may be up to a minute older than this one
-  for (const r of perMinute(mem, now, 'fleet', () => probeBuckets(start, B))) {
-    const i = Math.max(0, Math.min(47, Math.floor(Number(r.b))));
-    const ratio = r.fails / r.n;
-    const slowMs = slowLimit.get(String(r.sid)) ?? th.latencyWarnMs;
-    const lv: Level = ratio >= 0.5 ? 'crit' : ratio >= 0.1 || (r.maxms ?? 0) > slowMs * 2 ? 'warn' : 'ok';
-    if (buckets[i] === 'none' || RANK[lv] > RANK[buckets[i]]) buckets[i] = lv;
-    // the same buckets per service, for the strip on each tile
-    const t = tiles.get(String(r.sid));
-    if (t) {
-      t.beats ??= Array.from({ length: 48 }, () => 'none');
-      t.beats[i] = lv;
-    }
-  }
-  return buckets;
 }
 
 /** Heartbeat services with their schedule: when each last ran, when the next run is due, and its state in short. */
@@ -392,38 +240,6 @@ function jobList(engine: SnapshotInput, now: number): Job[] {
       status: word ?? '', level: lvl === 'unknown' ? 'none' : lvl
     }];
   });
-}
-
-/**
- * The hero's sentence. Healthy: how many services are up, jobs counted apart ("All 11 services up", "5 backup jobs on
- * schedule"). Otherwise: the top attention item, its detail, and the way to the service.
- */
-function verdictOf(engine: SnapshotInput, all: Tile[], jobs: Job[], backups: Backups, att: ReturnType<Round['close']>): Snapshot['verdict'] {
-  const th = engine.cfg.settings.thresholds;
-  const probed = all.filter((t) => t.level !== 'unknown');
-  const services = probed.filter((t) => t.check !== 'heartbeat');
-  const servicesUp = services.filter((t) => t.status !== 'Down').length;
-  const certWarn = all.filter((t) => t.cert && t.cert.days < th.certWarnDays).length;
-  const onSchedule = jobs.filter((j) => j.state !== 'down').length;
-  const jobWord = jobs.every((j) => j.backup) ? 'backup job' : 'job';
-
-  const subParts: string[] = [];
-  let title = att.headline.title.replace(/\.$/, '');
-  let action: Snapshot['verdict']['action'] = null;
-  if (att.needCount) {
-    const top = att.items[0];
-    if (top.detail) subParts.push(top.detail);
-    subParts.push(`${servicesUp} of ${services.length} services up`);
-    if (top.href) action = { label: `Open ${top.service ?? 'it'}`, href: top.href };
-  } else {
-    if (services.length === 1 && servicesUp === 1) title = `${services[0].name} is up`;
-    else if (services.length) title = servicesUp === services.length ? `All ${services.length} services up` : `${servicesUp} of ${services.length} services up`;
-    if (jobs.length) subParts.push(onSchedule === jobs.length ? `${plural(jobs.length, jobWord)} on schedule` : `${onSchedule} of ${plural(jobs.length, jobWord)} on schedule`);
-    // an overdue backup raises an alert, so here they are current
-    if (backups.rows.length && !jobs.length) subParts.push('backups current');
-    if (certWarn) subParts.push(`${plural(certWarn, 'certificate')} expiring`);
-  }
-  return { ...att.headline, title, sub: subParts.join(' · '), action };
 }
 
 /** The Most used row: services with a link, by their decaying open score, ties in services.yaml order. */
@@ -448,35 +264,42 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
   const reading = hostReading(engine);
   const reports = engine.cfg.services.flatMap((s) => { const rows = engine.state(s.id).widget?.storage; return rows?.length ? [{ service: s, rows }] : []; });
   const disks = storageOf(reports, reading.hw ? { service: reading.service, node: reading.hw.node, disk: reading.hw.disk } : null, th, (m) => trend24(mem, now, m, 48));
-  const host = hostPanel(engine, reading, disks.gaugeLevel, now, mem, round);
+  const history: History = (key, points) => series24(mem, now, key, points);
+  const sys = system({ service: reading.service, hw: reading.hw, temps: engine.temps, diskLevel: disks.gaugeLevel, host: settings.host, thresholds: th }, history);
+  const host = sys.host;
+  for (const a of sys.raised) round.raise(a);
   for (const a of disks.raised) round.raise(a);
   const storage = disks.rows;
-  const drives = drivesPanel(engine, th, round);
+  const disksOf = drivesOf(engine.cfg.services.map((service) => ({ service, drives: engine.state(service.id).widget?.drives ?? [] })), th);
+  for (const a of disksOf.raised) round.raise(a);
+  const drives = disksOf.rows;
 
   // short outages stay out of Activity, so more are read than are shown
   const events = withoutBlips(recentEvents(now - 24 * H, 60), now, th.minOutageMinutes * 60_000).slice(0, 20)
-    .map(({ outage, ...e }) => ({ ...e, href: (e.sid && engine.cfg.services.find((s) => s.id === e.sid)?.href) ?? null, open: feedTarget(engine, e.sid, outage == null) }));
+    .map(({ outage, ...e }) => ({ ...e, href: (e.sid && serviceById(engine.cfg).get(e.sid)?.href) ?? null, open: feedTarget(engine, e.sid, outage == null) }));
   const att = round.close(events);
   for (const f of att.feed) if ('key' in f) f.open = noteTarget(engine, f);
   applyWorst(tiles, att);
   const all = [...tiles.values()];
   const widgets = widgetsOf(engine);
-  const network = networkPanel(engine, widgets, now, mem);
-  const buckets = fleetStrip(engine, tiles, now, mem);
+  const network = networkOf(widgets, settings.network, now, history);
+  // a bucket is amber when a probe took over twice the service's own Slow limit (history of removed services: the global one)
+  const slowLimit = new Map(engine.cfg.services.map((s) => [s.id, s.latencyWarnMs ?? th.latencyWarnMs]));
+  const m = minute(mem, now);
+  const strip = fleetOf((m.fleet ??= probeBuckets(now - BUCKETS * BUCKET_MS, BUCKET_MS)), (sid) => slowLimit.get(sid) ?? th.latencyWarnMs);
+  for (const t of all) t.beats = strip.beats.get(t.id) ?? null;
+  const buckets = strip.fleet;
   const ups = all.map((t) => t.uptime24).filter((x) => x != null);
   const fleetAvail = ups.length ? ups.reduce((a, b) => a + b, 0) / ups.length : null;
   const jobs = jobList(engine, now);
   // the week behind the Backups strip: the backup jobs' checks per day, and what the backup services reported
-  const backupHistory = perMinute(mem, now, 'backup days', () => {
-    const since = now - DAYS * 24 * H;
-    const services = engine.cfg.services;
-    return {
-      checks: probeDays(services.filter((s) => s.heartbeat?.backup).map((s) => s.id), since, 24 * H),
-      events: eventLevels(services.filter((s) => s.heartbeat?.backup || s.widget?.type === 'proxmoxbackupserver').map((s) => s.id), since)
-    };
+  const since = now - DAYS * 24 * H;
+  const backupHistory = (m.backupDays ??= {
+    checks: probeDays(engine.cfg.services.filter((s) => s.heartbeat?.backup).map((s) => s.id), since, 24 * H),
+    events: eventLevels(engine.cfg.services.filter(isBackupService).map((s) => s.id), since)
   });
   const { sheet: backups, panel: backupsPanel } = backupsOf(widgets.flatMap(({ s, w }) => (w.backups ? [{ id: s.id, name: s.name, backups: w.backups }] : [])), jobs, now, backupHistory, settings.thresholds.backupMaxAgeHours * H);
-  const verdict = verdictOf(engine, all, jobs, backups, att);
+  const verdict = verdictOf({ tiles: all, jobs, backupRows: backups.rows.length, certWarnDays: th.certWarnDays }, att);
   const mostUsed = mostUsedRow(all, settings, now);
 
   return {
