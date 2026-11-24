@@ -1,6 +1,7 @@
 // The System panel: the machine's gauges (CPU, memory, disk, temperature), its facts and its disk I/O, from the
 // Proxmox node or the machine the dashboard runs on. Heat is raised here; the Disk gauge's level comes from storage.ts,
-// which judges every fill once.
+// which judges every fill once. A busy CPU or full memory only colours its gauge, like a storage bar's amber: load
+// comes and goes, so it raises nothing and never marks the strip's cell.
 import type { Raised } from './attention.ts';
 import type { Gauge, HostVitals, IoReading, Level, Service, Settings, Snapshot, Temps } from '#lib/types';
 
@@ -19,7 +20,7 @@ export interface SystemInput {
   /** the Disk gauge's level, from storage.ts */
   diskLevel: Level | 'none';
   host: Settings['host'];
-  thresholds: Pick<Settings['thresholds'], 'storageAmberPct' | 'tempMinC' | 'tempWarnC' | 'driveTempWarnC'>;
+  thresholds: Pick<Settings['thresholds'], 'storageAmberPct' | 'cpuWarnPct' | 'memWarnPct' | 'tempMinC' | 'tempWarnC' | 'driveTempWarnC'>;
 }
 
 const level = (v: number | null | undefined, warn: number, crit: number): Level | 'none' => (v == null ? 'none' : v >= crit ? 'crit' : v >= warn ? 'warn' : 'ok');
@@ -45,9 +46,9 @@ export function system({ service, hw, temps, diskLevel, host: settings, threshol
   };
   const gauges: Gauge[] = [];
   if (hw) {
-    gauges.push({ key: 'cpu', label: 'CPU', val: hw.cpu == null ? '—' : Math.round(hw.cpu), unit: '%', pct: hw.cpu, level: level(hw.cpu, 75, 90), sub: `${hw.cpus} threads`, ...hist('host.cpu'), view: 'chart', max: 100, warn: 75 });
+    gauges.push({ key: 'cpu', label: 'CPU', val: hw.cpu == null ? '—' : Math.round(hw.cpu), unit: '%', pct: hw.cpu, level: level(hw.cpu, th.cpuWarnPct, th.cpuWarnPct + 15), sub: `${hw.cpus} threads`, ...hist('host.cpu'), view: 'chart', max: 100, warn: th.cpuWarnPct });
     // memory and disk fill barely move in a day: meter rows with a small line, not charts. The amounts are the detail
-    gauges.push({ key: 'mem', label: 'Memory', val: Math.round(hw.memPct), unit: '%', pct: hw.memPct, level: level(hw.memPct, 80, 92), sub: `${(hw.mem / 1024 ** 3).toFixed(1)} of ${Math.round(hw.maxmem / 1024 ** 3)} GiB`, ...hist('host.mem'), view: 'meter', max: 100, warn: 80 });
+    gauges.push({ key: 'mem', label: 'Memory', val: Math.round(hw.memPct), unit: '%', pct: hw.memPct, level: level(hw.memPct, th.memWarnPct, th.memWarnPct + 12), sub: `${(hw.mem / 1024 ** 3).toFixed(1)} of ${Math.round(hw.maxmem / 1024 ** 3)} GiB`, ...hist('host.mem'), view: 'meter', max: 100, warn: th.memWarnPct });
     gauges.push({ key: 'disk', label: 'Disk', val: hw.disk.pct == null ? '—' : Math.round(hw.disk.pct), unit: '%', pct: hw.disk.pct, level: diskLevel, sub: hw.disk.name, ...hist(service ? hw.disk.metric : 'host.disk'), view: 'meter', max: 100, warn: th.storageAmberPct });
   }
   if (temps?.cpu != null) {

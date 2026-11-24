@@ -48,6 +48,10 @@ export interface Settings {
     latencyWarnMs: number;
     storageAmberPct: number;
     storageWarnPct: number;
+    /** the CPU gauge turns amber at this load (red 15 points above); it colours the gauge, it raises nothing */
+    cpuWarnPct: number;
+    /** the same for the Memory gauge (red 12 points above) */
+    memWarnPct: number;
     tempMinC: number;
     tempWarnC: number;
     driveLifeWarnPct: number;

@@ -63,6 +63,8 @@ export const DEFAULT_SETTINGS: Settings = {
     latencyWarnMs: 250,
     storageAmberPct: 70,
     storageWarnPct: 85,
+    cpuWarnPct: 75, // amber on the CPU gauge; red 15 points above
+    memWarnPct: 80, // amber on the Memory gauge; red 12 points above
     tempMinC: 30,
     tempWarnC: 75,
     driveLifeWarnPct: 10, // warn when a drive has this much of its rated endurance left

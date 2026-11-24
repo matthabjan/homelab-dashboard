@@ -3,23 +3,24 @@
 // storage.ts and backups.ts.
 import { plural, worst } from './format.ts';
 import { fmtRate } from '../format.ts';
-import type { InfraPanel, Snapshot } from '#lib/types';
+import type { InfraPanel, Level, Snapshot } from '#lib/types';
 
 type Parts = Pick<Snapshot, 'host' | 'drives' | 'network'>;
 
-function system(host: NonNullable<Parts['host']>): InfraPanel {
+/** `level`: as bad as what is raised for the machine (heat, its own disk). A gauge's colour alone marks nothing. */
+function system(host: NonNullable<Parts['host']>, level: Level | 'none'): InfraPanel {
   const g = (k: string) => host.gauges.find((x) => x.key === k);
   const cpu = g('cpu'), mem = g('mem'), temp = g('temp');
   return {
     id: 'system', label: 'System', where: host.name, value: '',
     sub: host.facts.map((f) => `${f.label} ${f.value}`).join(' · '),
     stats: [
-      cpu && { k: 'CPU', v: `${cpu.val}%`, level: cpu.level },
-      mem && { k: 'RAM', v: mem.pct != null ? `${Math.round(mem.pct)}%` : '—', level: mem.level },
+      cpu && { k: 'CPU', v: `${cpu.val}%`, level: 'ok' as const },
+      mem && { k: 'RAM', v: mem.pct != null ? `${Math.round(mem.pct)}%` : '—', level: 'ok' as const },
       // the temperature only when it needs a look: the cells stay equal, and the sheet charts it
       temp && (temp.level === 'warn' || temp.level === 'crit') && { k: 'TEMP', v: `${temp.val}°C`, level: temp.level }
     ].filter((x) => !!x),
-    level: worst(host.gauges.map((x) => x.level))
+    level
   };
 }
 
@@ -49,9 +50,9 @@ function network(n: NonNullable<Parts['network']>): InfraPanel {
 }
 
 /** One panel per area that has data, in the card's order. */
-export function infrastructure(p: Parts, from: { storage: InfraPanel | null; backups: InfraPanel | null }): InfraPanel[] {
+export function infrastructure(p: Parts, from: { system: Level | 'none'; storage: InfraPanel | null; backups: InfraPanel | null }): InfraPanel[] {
   const out: InfraPanel[] = [];
-  if (p.host) out.push(system(p.host));
+  if (p.host) out.push(system(p.host, from.system));
   if (from.storage) out.push(from.storage);
   if (p.drives.length) out.push(drives(p.drives));
   if (p.network) out.push(network(p.network));

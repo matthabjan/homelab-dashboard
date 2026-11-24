@@ -72,6 +72,8 @@ export function storage(reports: StorageReport[], gauge: GaugeDisk | null, th: T
   return {
     rows,
     raised: disk ? [...raised, disk] : raised,
+    /** the gauge's own alert (its disk is no storage row): the System panel's, not the Storage panel's */
+    gaugeAlert: disk ?? null,
     gaugeLevel: gauge?.disk.pct == null ? 'none' as const : usageLevel(gauge.disk.pct, th),
     panel: rows.length ? panel(rows, raised) : null
   };

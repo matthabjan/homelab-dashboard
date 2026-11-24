@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import { resolveIcon, assetUrl, darkAssetUrl, serviceById } from './config.ts';
 import { probeStats, uptimeSince, probeBuckets, probeDays, eventLevels, series, recentEvents, openScores, type ProbeBucketRow } from './db.ts';
 import { hostService, hostSource } from './local.ts';
+import { worst } from './format.ts';
 import { heartbeatStatus, kindOf, status as checkStatus, withoutBlips } from './check.ts';
 import { createAttention, type Raised } from './attention.ts';
 import { infrastructure } from './infrastructure.ts';
@@ -326,7 +327,7 @@ function build(engine: SnapshotInput, now: number, mem: Memory): Snapshot {
     storage,
     drives,
     network,
-    infrastructure: infrastructure({ host, drives, network }, { storage: disks.panel, backups: backupsPanel }),
+    infrastructure: infrastructure({ host, drives, network }, { system: worst([...sys.raised, ...(disks.gaugeAlert ? [disks.gaugeAlert] : [])].map((a) => a.sev)), storage: disks.panel, backups: backupsPanel }),
     mostUsed,
     groups: groups.map((g) => {
       const ts = g.services.map((s) => (tiles.get(s.id) as Tile)); // every service got a tile above

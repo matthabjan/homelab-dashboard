@@ -369,3 +369,18 @@ test('System and Network panels: charts with each bucket\'s low and high, slow r
   // the LAN's burst survives in the band of its download
   assert.equal(Math.max(...(snap.network?.lan?.downHi ?? []).filter((v) => v != null)), 300);
 });
+
+test('the System cell is marked only by what is raised: a busy CPU colours its gauge, heat marks the cell', () => {
+  const now = day(33);
+  const vitals = { node: 'pve', cpu: 81, cpus: 8, mem: 3.5, maxmem: 4, memPct: 88, disk: { name: 'local', pct: 30, sub: '30 / 100 GiB', metric: 'storage.pve.local' }, uptime: null, guestsRunning: null, guestsTotal: null, updates: null };
+  const pve: TestService = { name: 'PVE', widget: { type: 'proxmox', url: 'https://pve.home.arpa:8006' }, state: { widget: { ...widget(now, []), host: vitals } } };
+  const busy = createSnapshot()(snapshotInput({ services: [pve], temps: { cpu: 50, nvme: [], drives: [] } }), now);
+  assert.deepEqual(busy.host?.gauges.map((x) => [x.key, x.level]), [['cpu', 'warn'], ['mem', 'warn'], ['disk', 'ok'], ['temp', 'ok']], 'the sheet shows it');
+  assert.deepEqual([panel(busy, 'system')?.level, panel(busy, 'system')?.stats?.map((x) => x.level)], ['none', ['ok', 'ok']], 'nothing is raised, so the cell is not marked');
+  assert.equal(busy.needCount, 0);
+  const hot = createSnapshot()(snapshotInput({ services: [pve], temps: { cpu: 80, nvme: [72], drives: [] } }), now);
+  assert.deepEqual([panel(hot, 'system')?.level, hot.needCount], ['warn', 2]);
+  // the local host's own disk, with no storage row to carry it, is the System panel's alert
+  const local = createSnapshot()(snapshotInput({ local: { ...vitals, node: 'box', cpu: 10, memPct: 40, disk: { name: '/', pct: 91, sub: '91 / 100 GiB' } } }), now);
+  assert.deepEqual([panel(local, 'system')?.level, local.attention.map((a) => a.title)], ['warn', ['Disk / is 91% full']]);
+});

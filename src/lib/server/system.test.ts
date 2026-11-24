@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { system, type History, type SystemInput } from './system.ts';
 import type { HostVitals } from '#lib/types';
 
-const thresholds = { storageAmberPct: 70, tempMinC: 30, tempWarnC: 75, driveTempWarnC: 70 };
+const thresholds = { storageAmberPct: 70, cpuWarnPct: 75, memWarnPct: 80, tempMinC: 30, tempWarnC: 75, driveTempWarnC: 70 };
 const GiB = 1024 ** 3;
 const hw: HostVitals = { node: 'pve', cpu: 12.4, cpus: 8, mem: 41 * GiB, maxmem: 64 * GiB, memPct: 64, disk: { name: 'local-zfs', pct: 58, sub: '58 / 100 GiB', metric: 'storage.pve.local-zfs' }, io: { read: 2.5, write: 0.5 }, uptime: '38 d', guestsRunning: 6, guestsTotal: 7, updates: null };
 const pve = { id: 'g-pve', name: 'PVE', href: 'https://pve.home.arpa:8006' };
@@ -67,4 +67,12 @@ test('heat: the CPU warns at tempWarnC and is critical 10 °C above it, a hot NV
 test('sensors without vitals: the panel is just the temperature', () => {
   const { host } = system(input({ hw: null, temps: { cpu: 50, nvme: [], drives: [] } }), history({}));
   assert.deepEqual([host?.name, host?.gauges.map((g) => g.key)], ['host', ['temp']]);
+});
+
+test('load colours its gauge at the limits from settings and raises nothing', () => {
+  const busy = system(input({ hw: { ...hw, cpu: 81, memPct: 93 } }), history({}));
+  assert.deepEqual(busy.host?.gauges.map((g) => [g.key, g.level, g.warn]), [['cpu', 'warn', 75], ['mem', 'crit', 80], ['disk', 'ok', 70]]);
+  assert.deepEqual(busy.raised, []);
+  const lenient = system(input({ hw: { ...hw, cpu: 81, memPct: 93 }, thresholds: { ...thresholds, cpuWarnPct: 85, memWarnPct: 90 } }), history({}));
+  assert.deepEqual(lenient.host?.gauges.map((g) => [g.key, g.level, g.warn]), [['cpu', 'ok', 85], ['mem', 'warn', 90], ['disk', 'ok', 70]]);
 });
