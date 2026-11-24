@@ -1,15 +1,15 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { ago } from '#lib/ago.ts';
-  import type { Backups, FeedItem, Level, Snapshot, Traffic } from '#lib/types';
-  import { grouped, moved } from '#lib/logic.ts';
-  import { fmtCount, fmtMBs, fmtRate, isProblem, since } from '#lib/format.ts';
-  import Gauge from './Gauge.svelte';
-  import MeterRow from './MeterRow.svelte';
-  import Reading from './Reading.svelte';
-  import EventList from './EventList.svelte';
+  import type { Backups, Level, Snapshot } from '#lib/types';
   import Glyph from './Glyph.svelte';
+  import SystemTab from './SystemTab.svelte';
+  import StorageTab from './StorageTab.svelte';
+  import DrivesTab from './DrivesTab.svelte';
+  import NetworkTab from './NetworkTab.svelte';
+  import BackupsTab from './BackupsTab.svelte';
 
+  // The Infrastructure sheet: a tab per area that has data, each drawn by its own component in one style (rounded
+  // boxes of two-line rows with a bar, or chart tiles). The tabs and the line beside them say what the strip's cells do.
   interface Props {
     /** the strip's panels: each is a tab, with its level and line */
     panels: Snapshot['infrastructure'];
@@ -32,19 +32,6 @@
     clock?: number;
   }
   let { panels: summaries, host, storage, drives, network, target, now, initial, backups, onbackup, lastChange = null, clock }: Props = $props();
-
-  // the Backups tab's Recent list: the last 7 days of PBS and backup-job events, refreshed when something changes
-  let events = $state<FeedItem[]>([]);
-  $effect(() => {
-    void lastChange;
-    const ctl = new AbortController();
-    fetch('/api/events?backups', { signal: ctl.signal })
-      .then((r) => (r.ok ? r.json() : []))
-      .then((items: FeedItem[]) => (events = items))
-      .catch(() => {});
-    return () => ctl.abort();
-  });
-  const recentCount = $derived(events.length);
 
   /** a tab of the card: its panel id, its name and the dot it shows */
   interface Panel {
@@ -84,35 +71,9 @@
   }
   const tabbed = $derived(panels.length > 1);
 
-  const storageGroups = $derived(grouped(storage));
-  const driveGroups = $derived(grouped(drives));
-  /** the drive's meta without its place, which its group already says ("NVMe · 1 TB · pve" under "pve") */
-  const driveMeta = (d: Snapshot['drives'][number]) => (d.meta.endsWith(` · ${d.group}`) ? d.meta.slice(0, -(d.group.length + 3)) : d.meta);
   /** how far back the charts go, said once above them instead of under each */
   const span = (from: number | null | undefined) => `Last ${from ? Math.max(1, Math.round((now - from) / 3_600_000)) : 24} h`;
-  /** PBS rows grouped by the service that reports them, then the jobs, in the order the server sorted them */
-  const backupGroups = $derived(grouped((backups?.rows ?? []).map((r) => ({ ...r, group: r.source ?? 'Jobs' }))));
-  let recentOpen = $state(false);
-  /** the day's highest reading of a series, the band's when it has one */
-  const peakOf = (vs: (number | null)[] | null | undefined) => {
-    const ns = (vs ?? []).filter((v): v is number => v != null);
-    return ns.length > 1 ? Math.max(...ns) : null;
-  };
-  const meters = $derived(host?.gauges.filter((g) => g.view === 'meter') ?? []);
-  const charts = $derived(host?.gauges.filter((g) => g.view === 'chart') ?? []);
 </script>
-
-{#snippet traffic(t: Traffic, what: string)}
-  <!-- one traffic reading as a tile: download filled with its band, upload as a second line, both in Mbit/s -->
-  {@const top = peakOf(t.downHi ?? t.seriesDown)}
-  <Reading
-    label={what} source={t.source} href={t.href} {target} {now}
-    names={['Down', 'Up']} current={[fmtRate(t.down), fmtRate(t.up)]} unit="Mbit/s" peak={top != null ? `peak ${fmtRate(top)}` : null}
-    values={t.seriesDown} values2={t.seriesUp} lo={t.downLo} hi={t.downHi} from={t.from}
-    at={(v, v2) => [fmtRate(v), fmtRate(v2)]}
-    format={(v) => `${fmtRate(v)} Mbit/s down`}
-  />
-{/snippet}
 
 <div class="infra-card">
   <div class="head">
@@ -144,141 +105,15 @@
     {#each panels as p (p.id)}
       <div class="panel {p.id}" class:off={view !== p.id} id="vp-{p.id}" role={tabbed ? 'tabpanel' : undefined} aria-labelledby={tabbed ? `vt-${p.id}` : undefined}>
         {#if p.id === 'system' && host}
-          <!-- what barely moves in a day as meter rows, then a chart for each reading that does (3B) -->
-          {#if meters.length}<div class="meters">{#each meters as g (g.key)}<MeterRow {g} />{/each}</div>{/if}
-          <p class="span">{span(host.gauges.find((g) => g.from)?.from)}</p>
-          <div class="gauges">
-            {#each charts.filter((g) => g.key === 'cpu') as g (g.key)}<Gauge {g} {now} />{/each}
-            {#if host.io}
-              {@const io = host.io}
-              <Reading
-                label="Disk I/O" source={io.source} {target} {now}
-                names={['Read', 'Write']} current={[fmtMBs(io.read), fmtMBs(io.write)]} unit="MB/s"
-                values={io.seriesRead} values2={io.seriesWrite} from={io.from}
-                at={(v, v2) => [fmtMBs(v), fmtMBs(v2)]}
-                format={(v) => `${fmtMBs(v)} MB/s read`}
-              />
-            {/if}
-            {#each charts.filter((g) => g.key !== 'cpu') as g (g.key)}<Gauge {g} {now} />{/each}
-          </div>
+          <SystemTab {host} {target} {now} {span} />
         {:else if p.id === 'storage'}
-          <!-- grouped by the service that reports them, each group a box like the chart tiles; the order inside stays stable -->
-          <div class="groups">
-            {#each storageGroups as g (g.name)}
-              <section class="group" aria-label={g.name}>
-                <h3 class="ghead">{g.name}</h3>
-                <div class="rows">
-                  {#each g.rows as s (s.name)}
-                    {@const m = moved(s.trend, '%', now)}
-                    <!-- a storage in two lines, like a drive: name and fill; size (or why it is off) and the bar with a tick
-                         where it turns amber. An off row (unavailable, detached) is grey, the bar at the last known fill -->
-                    <div class="row bar lv-{s.level}" title="{s.name} · {s.sub}{m ? ` · ${m.text}` : ''}">
-                      <div class="row-head">
-                        <span class="name">{s.name}</span>
-                        <span class="num pct">{s.pct != null ? `${Math.round(s.pct)}%` : '—'}</span>
-                      </div>
-                      <div class="row-line">
-                        <span class="meta-t size">{s.sub}</span>
-                        <span class="track"><span class="fill" style:width="{Math.min(100, s.pct ?? 0)}%"></span><span class="tick" style:left="{s.warn}%" title="amber from {s.warn}%"></span></span>
-                      </div>
-                    </div>
-                  {/each}
-                </div>
-              </section>
-            {/each}
-          </div>
+          <StorageTab {storage} {now} />
         {:else if p.id === 'drives'}
-          <!-- grouped by where they sit, like Storage -->
-          <div class="groups">
-            {#each driveGroups as g (g.name)}
-              <section class="group" aria-label={g.name}>
-                <h3 class="ghead">{g.name}</h3>
-                <div class="rows">
-                  {#each g.rows as d}
-                    <!-- a drive in two lines: model, temperature and (only when it is not ok) its SMART verdict; what it is and
-                         its life left as a labelled bar. The rest is in the tooltip -->
-                    <div class="row bar lv-{d.lifeLevel}" title="{d.name} · {d.meta} · {d.detail}">
-                      <div class="row-head">
-                        <span class="name">{d.name}</span>
-                        {#each d.facts as f}<span class="dfact num" class:lv-warn={f.level === 'warn'}>{f.v}{f.k ? ` ${f.k}` : ''}</span>{/each}
-                        {#if d.status !== 'ok'}<span class="dstatus lv-{d.level}">{d.status}</span>{/if}
-                      </div>
-                      <div class="row-line">
-                        <span class="meta-t">{driveMeta(d)}</span>
-                        {#if d.life != null}
-                          <span class="life" title="{d.life}% of the drive's rated write endurance remains"><span class="muted">Life left</span><span class="track"><span class="fill" style:width="{Math.max(0, Math.min(100, d.life))}%"></span></span><span class="num lpct">{d.life}%</span></span>
-                        {/if}
-                      </div>
-                    </div>
-                  {/each}
-                </div>
-              </section>
-            {/each}
-          </div>
+          <DrivesTab {drives} />
         {:else if p.id === 'network' && network}
-          <p class="span">{span(network.from ?? network.lan?.from)}</p>
-          <div class="net">
-            {#if network.source}{@render traffic(network, 'WAN')}{/if}
-            {#if network.lan}{@render traffic(network.lan, 'LAN')}{/if}
-            {#if network.dns}
-              {@const d = network.dns}
-              <!-- DNS: queries per hour as bars with the blocked part, over the server's statistics interval when it reports
-                   one per hour (AdGuard); without that, just the figures -->
-              <Reading
-                label="DNS" source={d.name} href={d.href} {target} {now}
-                names={['Queries', 'Blocked']} current={[fmtCount(d.queries), `${d.blockedPct.toFixed(1)}%`]} unit=""
-                detail={d.period ? `Last ${d.period}` : undefined}
-                bars values={d.series} values2={d.blockedCounts} from={d.series && d.stepMs ? now - d.series.length * d.stepMs : null}
-                at={(v, v2) => [fmtCount(v), v ? `${(((v2 ?? 0) / v) * 100).toFixed(1)}%` : '—']}
-                format={(v) => `${fmtCount(v)} queries`}
-              />
-            {/if}
-          </div>
+          <NetworkTab {network} {target} {now} {span} />
         {:else if p.id === 'backups' && backups}
-          <!-- the week, then the backups grouped like Storage and Drives: PBS by the service that reports it, then the
-               jobs. A row is a storage row: name and when it last ran; how often it should and a bar for the share of
-               that gone by (amber in the last tenth; full, in its colour and with a pill on a problem). A tap opens
-               its service -->
-          <div class="groups">
-            <section class="group" aria-label="Last 7 days">
-              <h3 class="ghead">Last 7 days</h3>
-              <div class="week" role="img" aria-label="Backups over the last 7 days: {backups.days.map((d) => (d === 'none' ? 'nothing recorded' : d === 'ok' ? 'fine' : d === 'warn' ? 'warning' : 'late')).join(', ')}">
-                {#each backups.days as d, i (i)}<span class="lv-{d}" class:none={d === 'none'}></span>{/each}
-              </div>
-              <div class="week-l"><span>7 days ago</span><span>today</span></div>
-            </section>
-            {#each backupGroups as g (g.name)}
-              <section class="group" aria-label={g.name}>
-                <h3 class="ghead">{g.name}</h3>
-                <div class="rows">
-                  {#each g.rows as r (r.id + r.title)}
-                    {@const bad = isProblem(r.level)}
-                    {@const share = r.last != null && r.every ? (now - r.last) / r.every : null}
-                    {@const lv = bad ? r.level : share != null && share >= 0.9 ? 'warn' : r.level === 'none' ? 'off' : 'ok'}
-                    <button class="row bar brow lv-{lv}" class:bad onclick={() => onbackup?.(r.id)} aria-label="{r.title}: {r.state}, last run {since(r.last, now)}{r.every ? `, every ${ago(0, r.every)}` : ''}">
-                      <span class="row-head">
-                        <span class="name">{r.title}</span>
-                        {#if bad}<span class="dstatus lv-{r.level}">{r.state}</span>{/if}
-                        <span class="num pct">{since(r.last, now)}</span>
-                      </span>
-                      <span class="row-line">
-                        <span class="meta-t size">{r.every ? `every ${ago(0, r.every)}` : r.state}</span>
-                        <span class="track"><span class="fill" style:width="{bad ? 100 : Math.min(100, Math.max(0, (share ?? 0) * 100))}%"></span></span>
-                      </span>
-                    </button>
-                  {/each}
-                </div>
-              </section>
-            {/each}
-            <!-- what happened, folded: Activity and each service's sheet list it too -->
-            <section class="group recent">
-              <button class="recent-head" aria-expanded={recentOpen} disabled={!recentCount} onclick={() => (recentOpen = !recentOpen)}>
-                <span><span class="rt">Recent</span> <span class="muted">· {recentCount ? `${recentCount} ${recentCount === 1 ? 'event' : 'events'} in 7 days` : 'nothing in 7 days'}</span></span>
-                {#if recentCount}<Glyph name="down" class={recentOpen ? 'chev open' : 'chev'} />{/if}
-              </button>
-              {#if recentOpen && recentCount}<div class="recent-list"><EventList items={events} now={clock ?? now} /></div>{/if}
-            </section>
-          </div>
+          <BackupsTab {backups} {now} clock={clock ?? now} {lastChange} {onbackup} />
         {/if}
       </div>
     {/each}
@@ -325,68 +160,8 @@
   /* hidden panels still hold their height; visibility also takes them out of the tab order and the accessibility tree */
   .panel.off { visibility: hidden; }
 
-  /* system: memory and disk as meter rows in one box, then chart tiles like Network's, one per row in the sheet, side
-     by side only where the card is wide */
-  .meters { display: flex; flex-direction: column; padding: 0 14px; margin-bottom: 14px; border-radius: 14px; background: var(--surface-2); }
-  .gauges { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: 12px; }
-
-  /* storage and drives: one row pattern, two lines each (name and figure; what it is and a bar), a rule above
-     every row (the first row's is clipped off); rows flow into as many columns as fit */
-  .groups { display: flex; flex-direction: column; gap: 12px; }
-  .group { padding: 10px 14px 2px; border-radius: 14px; background: var(--surface-2); }
-  .ghead { font-size: 12px; font-weight: 500; color: var(--muted); margin: 0 0 1px; }
-  .rows { display: flex; flex-direction: column; }
-  .row { display: flex; flex-direction: column; gap: 5px; min-width: 0; padding: 10px 0 11px; border-top: 1px solid var(--line); }
-  .row:first-child { border-top: 0; padding-top: 6px; }
-  .row-head { display: flex; align-items: baseline; gap: 10px; }
-  .row-head .name { flex: 1 1 auto; min-width: 0; font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .row-line { display: flex; align-items: center; gap: 12px; min-height: 16px; }
-  .meta-t { flex: 1 1 auto; min-width: 0; font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  /* words in the text font, figures with even digits */
-  .num { font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .pct { flex: none; font-size: 14px; font-weight: 600; }
-  .bar { --fill: var(--acc); }
-  .bar.lv-warn, .bar.lv-crit { --fill: var(--lv); }
-  .bar.lv-warn .pct, .bar.lv-crit .pct { color: var(--lv); }
-  .bar.lv-off { --fill: color-mix(in srgb, var(--muted) 50%, transparent); }
-  .bar.lv-off .name, .bar.lv-off .pct { color: var(--muted); }
-  /* storage: the size in a fixed slot, so every bar starts at the same place */
-  .size { flex: none; width: 8.5em; }
-  .row-line > .track { flex: 1 1 auto; }
-  .dstatus { flex: none; font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 999px; color: var(--lv); background: var(--lv-soft); }
-  .dfact { flex: none; font-size: 12px; color: var(--muted); }
-  .dfact.lv-warn { color: var(--lv); }
-  .life { flex: none; display: flex; align-items: center; gap: 6px; font-size: 12px; }
-  /* fixed track and a right-aligned slot wide enough for "100%", so every drive's bar lines up */
-  .life .track { display: block; flex: none; width: 56px; }
-  .lpct { min-width: 4ch; text-align: right; }
-  .track { position: relative; display: block; height: 5px; border-radius: 4px; background: var(--track); overflow: hidden; }
-  /* where the bar turns amber, like the dashed line on the charts */
-  .tick { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--warn); opacity: 0.7; }
-  .bar.lv-off .tick { display: none; }
-  .fill { display: block; height: 100%; border-radius: 4px; background: var(--fill); transition: width 0.6s cubic-bezier(0.2, 0.8, 0.2, 1); }
-
-  /* network: WAN, LAN and DNS as tiles like System's, stacked in the sheet, side by side when the card is wide */
-  .span { margin: 0 0 10px; font-size: 12px; color: var(--muted); }
-  /* backups: the week as a box, rows as buttons that look like storage rows, Recent as a box that opens */
-  .week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; padding: 6px 0 4px; }
-  .week span { height: 14px; border-radius: 4px; background: var(--lv); opacity: 0.85; }
-  .week span.none { background: var(--surface-3); opacity: 1; }
-  .week-l { display: flex; justify-content: space-between; padding-bottom: 10px; font-size: 11px; color: var(--muted); }
-  .brow { width: 100%; border-left: 0; border-right: 0; border-bottom: 0; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
-  .brow:hover .name { color: var(--acc); }
-  .brow:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; border-radius: 6px; }
-  .brow .row-head, .brow .row-line { width: 100%; }
-  .bar.lv-ok { --fill: var(--acc); }
-  .recent { padding: 0; }
-  .recent-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; width: 100%; padding: 12px 14px; border: 0; background: none; color: var(--text); font: inherit; font-size: 13px; text-align: left; cursor: pointer; border-radius: 14px; }
-  .recent-head:disabled { cursor: default; }
-  .recent-head:focus-visible { outline: 2px solid var(--acc); outline-offset: -2px; }
-  .rt { font-weight: 500; }
-  .recent-head :global(.chev) { color: var(--muted); transition: transform 0.2s; }
-  .recent-head :global(.chev.open) { transform: rotate(180deg); }
-  .recent-list { padding: 0 14px 6px; }
-  .net { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: 12px; }
+  /* Storage, Drives and Backups are boxes, one under the other */
+  .panel.storage, .panel.drives, .panel.backups { gap: 12px; }
 
   @container infra (max-width: 519.98px) {
     /* phones: equal segments across the card */
