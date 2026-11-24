@@ -1,6 +1,7 @@
 <script lang="ts">
   import { untrack, type Snippet } from 'svelte';
   import { fly } from 'svelte/transition';
+  import Glyph from './Glyph.svelte';
 
   // Details on demand: a modal side panel on desktop, a bottom sheet on phones. The native <dialog> brings focus
   // handling, Esc, Android's back gesture and the backdrop; a click on the backdrop closes it too. On phones the
@@ -169,7 +170,7 @@
       <!-- a level deeper: a round button back to the one below, beside the title; where it leads is its label -->
       {#if backTo}
         <button class="back" onclick={onback} aria-label="Back to {backTo}" title="Back to {backTo}">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
+          <Glyph name="left" size={20} stroke={2.4} />
         </button>
       {/if}
       <div class="ttl">
@@ -177,7 +178,7 @@
         {#if sub}<p class="muted">{sub}</p>{/if}
       </div>
       <button class="close" onclick={onclose} aria-label={backTo ? 'Close all' : 'Close'}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
+        <Glyph name="close" stroke={2.2} />
       </button>
     </header>
     {#if open}
@@ -191,7 +192,7 @@
 <style>
   .sheet {
     margin: 12px 12px 12px auto; padding: 0; width: min(520px, calc(100vw - 24px)); height: calc(100dvh - 24px); max-height: none;
-    border: 0; border-radius: 24px; background: var(--surface); color: var(--text); box-shadow: var(--shadow-lg);
+    border: 0; border-radius: var(--r-20); background: var(--surface); color: var(--text); box-shadow: var(--shadow-lg);
   }
   .sheet::backdrop { background: rgba(10, 13, 18, 0.36); }
   .body { height: 100%; box-sizing: border-box; overflow-y: auto; overscroll-behavior: contain; padding: 22px 24px 28px; display: flex; flex-direction: column; gap: 18px; }
@@ -199,16 +200,16 @@
   /* beside the back button the title sits level with its middle */
   header:has(.back) { align-items: center; }
   .ttl { flex: 1; min-width: 0; }
-  h2 { font-size: 21px; font-weight: 700; letter-spacing: -0.015em; }
+  h2 { font-size: var(--fs-20); font-weight: 700; letter-spacing: -0.015em; }
   h2:focus { outline: none; }
-  .ttl p { margin: 2px 0 0; font-size: 13px; }
-  .close { flex: none; width: 40px; height: 40px; border: 0; border-radius: 12px; background: var(--surface-2); color: var(--text); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+  .ttl p { margin: 2px 0 0; font-size: var(--fs-13); }
+  .close { flex: none; width: 40px; height: 40px; border: 0; border-radius: var(--r-12); background: var(--surface-2); color: var(--text); display: flex; align-items: center; justify-content: center; cursor: pointer; }
   .close:hover { background: var(--surface-3); }
   .level { display: flex; flex-direction: column; gap: inherit; min-width: 0; }
   /* the same size and fill as the close button, round so the two read apart */
   .back { flex: none; width: 40px; height: 40px; margin-right: 2px; border: 0; border-radius: 50%; background: var(--surface-2); color: var(--text); display: flex; align-items: center; justify-content: center; cursor: pointer; }
   .back:hover { background: var(--surface-3); }
-  .back svg { margin-left: -2px; }
+  .back :global(svg) { margin-left: -2px; }
   .grabber { display: none; }
   @media (prefers-reduced-motion: no-preference) {
     .sheet[open] { animation: in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1); }
@@ -217,14 +218,14 @@
   /* phones: a bottom sheet */
   @media (max-width: 760px) {
     /* as tall as its content up to three quarters of the screen; `full` after a drag up, or from the start (`tall`) */
-    .sheet { margin: auto 0 0; width: 100vw; max-width: 100vw; height: auto; max-height: 76dvh; border-radius: 26px 26px 0 0; }
+    .sheet { margin: auto 0 0; width: 100vw; max-width: 100vw; height: auto; max-height: 76dvh; border-radius: var(--r-20) var(--r-20) 0 0; }
     .sheet.full { height: calc(100dvh - 20px - env(safe-area-inset-top)); max-height: none; }
     .body { padding: 0 16px calc(24px + env(safe-area-inset-bottom)); gap: 14px; }
     .close { display: none; }
     .back { width: 44px; height: 44px; }
     /* the handle: what drags, and a button that closes; the sheet itself follows the finger */
     .grabber { display: flex; align-items: center; justify-content: center; flex: none; width: 100%; height: 30px; margin-bottom: -8px; padding: 0; border: 0; background: none; cursor: grab; }
-    .grabber span { width: 40px; height: 5px; border-radius: 3px; background: var(--muted); opacity: 0.45; }
+    .grabber span { width: 40px; height: 5px; border-radius: var(--r-4); background: var(--muted); opacity: 0.45; }
     .grabber:focus-visible { outline: 0; }
     .grabber:focus-visible span { opacity: 1; background: var(--acc); }
     @media (prefers-reduced-motion: no-preference) { .sheet { transition: height 0.24s cubic-bezier(0.2, 0.8, 0.2, 1); } }

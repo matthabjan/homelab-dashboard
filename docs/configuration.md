@@ -40,7 +40,7 @@ Every key is optional. Anything you leave out keeps its default, and nested obje
 | `linkTarget` | `_blank` | Where service links open: `_blank` (a new tab) or `_self`. |
 | `tlsVerify` | `true` | Verify TLS certificates when calling widget APIs. You can override it per service. See [TLS for widget APIs](deployment.md#tls-for-widget-apis). |
 | `deepLink` | none | A header button that links to a detailed-metrics tool, as `{ name, href }`. |
-| `retentionDays` | `30` | How many days of probes, metrics and events to keep. Older rows are deleted every 6 hours. |
+| `retentionDays` | `30` | How many days of probes, metrics and events to keep. Older rows are deleted at start and every 6 hours. |
 
 ```yaml
 deepLink:
@@ -130,13 +130,15 @@ A value below the minimum is raised to it, and one that isn't a number falls bac
 | `offsiteMaxDetachedDays` | `135` | Remind you when a removable PBS datastore hasn't been attached for this long. |
 | `storageAmberPct` | `70` | The storage bar and the *Disk* gauge turn amber (in the sheet only; the Storage cell stays calm). It also colours OpenMediaVault's fullest-disk stat. |
 | `storageWarnPct` | `85` | The storage bar and the *Disk* gauge turn red and raise an alert, once per disk; the Storage row turns amber. |
+| `cpuWarnPct` | `75` | The *CPU* gauge turns amber at this load and red 15 points above. It colours the gauge in the sheet only: load comes and goes, so it raises no alert and the System cell stays calm. |
+| `memWarnPct` | `80` | The same for the *Memory* gauge, red 12 points above. |
 | `tempMinC` | `30` | Bottom of the temperature gauge's scale. |
 | `tempWarnC` | `75` | Warn at this CPU temperature; at +10 °C it is critical. NVMe drives warn at 70 °C. |
 | `driveLifeWarnPct` | `10` | Warn when a drive has this much of its rated endurance left (SMART wear). |
 | `driveTempWarnC` | `70` | Warn when a drive in **Drives** reaches this temperature. |
 | `minOutageMinutes` | `5` | An outage shorter than this, which is already over, stays out of **Activity**; the service's sheet still lists it, and the uptime and strips count it. A *went down* shows in Activity once the outage has lasted this long (the list of what needs attention shows it right away). `0` shows every outage. |
 
-CPU and memory gauges use fixed limits: CPU warns at 75% and is critical at 90%, memory at 80% and 92%.
+The System cell on the dashboard is marked only when something is raised for the machine: its temperature, an NVMe running hot, or its own disk filling up.
 
 ---
 

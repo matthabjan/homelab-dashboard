@@ -100,9 +100,9 @@
 <style>
   /* Chart.svelte's frame */
   .chart { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 6px; }
-  .yax { position: relative; min-width: 2.4ch; font-size: 10.5px; line-height: 1; color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
+  .yax { position: relative; min-width: 2.4ch; font-size: var(--fs-11); line-height: 1; color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
   .yax span { position: absolute; right: 0; transform: translateY(-50%); white-space: nowrap; }
-  .plot { position: relative; height: var(--chart-h, 120px); cursor: crosshair; touch-action: pan-y; outline: none; border-radius: 4px; }
+  .plot { position: relative; height: var(--chart-h, 120px); cursor: crosshair; touch-action: pan-y; outline: none; border-radius: var(--r-4); }
   .plot:focus-visible { box-shadow: 0 0 0 2px var(--acc); }
   svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
   .grid { stroke: var(--line); stroke-width: 1; vector-effect: non-scaling-stroke; }
@@ -110,7 +110,7 @@
   .part { fill: var(--chart-2, var(--acc-2)); fill-opacity: 0.85; }
   .bar.on { fill-opacity: 0.8; }
   .part.on { fill-opacity: 1; }
-  .xax { grid-column: 2; position: relative; height: 17px; font-size: 10.5px; line-height: 1; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .xax { grid-column: 2; position: relative; height: 17px; font-size: var(--fs-11); line-height: 1; color: var(--muted); font-variant-numeric: tabular-nums; }
   .xax span { position: absolute; top: 5px; transform: translateX(-50%); white-space: nowrap; transition: opacity 0.15s; }
   .xax .end { left: auto; right: 0; transform: none; }
   .xax.scrubbing span:not(.at) { opacity: 0.25; }

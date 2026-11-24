@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import Glyph from './Glyph.svelte';
 
   type Theme = 'system' | 'light' | 'dark';
 
@@ -40,20 +41,20 @@
 <div class="seg only-desktop" role="radiogroup" aria-label="Theme">
   {#each OPTIONS as o (o.id)}
     <button role="radio" aria-checked={current === o.id} aria-label={o.label} title={o.label} onclick={() => pick(o.id)}>
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={o.d} /></svg>
+      <Glyph d={o.d} />
     </button>
   {/each}
 </div>
 <button class="step only-phone" aria-label="{opt.label}. Switch to {next.label.toLowerCase()}" title="{opt.label} · switch to {next.label.toLowerCase()}" onclick={() => pick(next.id)}>
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={opt.d} /></svg>
+  <Glyph d={opt.d} size={18} />
 </button>
 
 <style>
   /* both the height of their neighbours in the header */
-  .seg { display: flex; gap: 2px; padding: 3px; border-radius: 12px; background: var(--surface); box-shadow: var(--shadow); }
-  .seg button { width: 34px; height: 36px; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 9px; background: none; color: var(--muted); cursor: pointer; }
+  .seg { display: flex; gap: 2px; padding: 3px; border-radius: var(--r-12); background: var(--surface); box-shadow: var(--shadow); }
+  .seg button { width: 34px; height: 36px; display: flex; align-items: center; justify-content: center; border: 0; border-radius: var(--r-8); background: none; color: var(--muted); cursor: pointer; }
   .seg button:hover { color: var(--text); }
   .seg button[aria-checked='true'] { background: var(--surface-3); color: var(--text); }
-  .step { width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 14px; background: var(--surface); box-shadow: var(--shadow); color: var(--text); cursor: pointer; }
+  .step { width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border: 0; border-radius: var(--r-14); background: var(--surface); box-shadow: var(--shadow); color: var(--text); cursor: pointer; }
   .step:active { background: var(--surface-2); }
 </style>

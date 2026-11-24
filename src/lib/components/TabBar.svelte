@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Level } from '#lib/types';
+  import Glyph from './Glyph.svelte';
 
   // Phones: the app's four destinations in the thumb zone, the same on every page. Home, Services and Alerts are the
   // dashboard's views; Search opens the palette. Hidden above the phone breakpoint, where the header and the
@@ -24,17 +25,17 @@
 </script>
 
 {#snippet searchInner()}
-  <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+  <Glyph bare name="search" />
   Search
 {/snippet}
 
 <nav class="tabs only-phone" aria-label="Sections">
   <a class="tab" href="/" onclick={nav('home')} aria-current={current === 'home' ? 'page' : undefined}>
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11 12 4l8 7v8a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z" /></svg>
+    <Glyph bare name="home" />
     Home
   </a>
   <a class="tab" href="/#view-services" onclick={nav('services')} aria-current={current === 'services' ? 'page' : undefined}>
-    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="6.5" height="6.5" rx="1.5" /><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5" /><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5" /><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5" /></svg>
+    <Glyph bare name="grid" />
     Services
   </a>
   {#if onsearch}
@@ -43,7 +44,7 @@
     <a class="tab" href="/#search">{@render searchInner()}</a>
   {/if}
   <a class="tab" href="/#view-alerts" onclick={nav('alerts')} aria-current={current === 'alerts' ? 'page' : undefined}>
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15zM10 21h4" /></svg>
+    <Glyph bare name="bell" />
     Alerts
     {#if needCount}<span class="badge num lv-{level === 'crit' ? 'crit' : 'warn'}" aria-hidden="true">{needCount}</span><span class="sr">, {needCount} need{needCount === 1 ? 's' : ''} attention</span>{/if}
   </a>
@@ -59,14 +60,14 @@
   }
   .tab {
     position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-height: 50px;
-    border: 0; border-radius: 14px; background: none; color: var(--muted); font: inherit; font-size: 11.5px; font-weight: 500; cursor: pointer;
+    border: 0; border-radius: var(--r-14); background: none; color: var(--muted); font: inherit; font-size: var(--fs-11); font-weight: 500; cursor: pointer;
   }
   .tab:active { background: var(--surface-2); }
-  .tab svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+  .tab :global(svg) { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
   .tab[aria-current='page'] { color: var(--text); }
-  .tab[aria-current='page'] svg { stroke-width: 2.3; }
+  .tab[aria-current='page'] :global(svg) { stroke-width: 2.3; }
   .badge {
-    position: absolute; top: 2px; left: calc(50% + 5px); min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px;
-    background: var(--lv); color: var(--surface); font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+    position: absolute; top: 2px; left: calc(50% + 5px); min-width: 18px; height: 18px; padding: 0 5px; border-radius: var(--r-8);
+    background: var(--lv); color: var(--surface); font-size: var(--fs-11); font-weight: 700; display: flex; align-items: center; justify-content: center;
   }
 </style>

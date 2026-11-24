@@ -34,15 +34,15 @@
   .meter { --fill: var(--acc); display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'n v' 'b d'; align-items: center; gap: 6px 14px; padding: 11px 0; }
   .meter + :global(.meter) { border-top: 1px solid var(--line); }
   .meter.alert { --fill: var(--lv); }
-  .name { grid-area: n; display: flex; align-items: baseline; gap: 8px; min-width: 0; font-size: 13px; font-weight: 500; }
-  .name small { font-size: 12px; font-weight: 400; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .v { grid-area: v; font-size: 15px; font-weight: 600; text-align: right; }
+  .name { grid-area: n; display: flex; align-items: baseline; gap: 8px; min-width: 0; font-size: var(--fs-13); font-weight: 500; }
+  .name small { font-size: var(--fs-12); font-weight: 400; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .v { grid-area: v; font-size: var(--fs-15); font-weight: 600; text-align: right; }
   .meter.alert .v { color: var(--lv); }
-  .unit { margin-left: 2px; font-size: 12px; font-weight: 400; color: var(--muted); }
-  .num { font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .track { grid-area: b; position: relative; height: 6px; border-radius: 4px; background: var(--track); }
-  .fill { position: absolute; inset: 0 auto 0 0; border-radius: 4px; background: var(--fill); transition: width 0.6s cubic-bezier(0.2, 0.8, 0.2, 1); }
+  .unit { margin-left: 2px; font-size: var(--fs-12); font-weight: 400; color: var(--muted); }
+  .num { white-space: nowrap; }
+  .track { grid-area: b; position: relative; height: 6px; border-radius: var(--r-4); background: var(--track); }
+  .fill { position: absolute; inset: 0 auto 0 0; border-radius: var(--r-4); background: var(--fill); transition: width 0.6s cubic-bezier(0.2, 0.8, 0.2, 1); }
   .tick { position: absolute; top: -2px; bottom: -2px; width: 2px; margin-left: -1px; background: var(--warn); opacity: 0.75; }
-  .day { grid-area: d; display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--muted); }
+  .day { grid-area: d; display: flex; align-items: center; gap: 8px; font-size: var(--fs-11); color: var(--muted); }
   .spark { display: block; width: 56px; }
 </style>

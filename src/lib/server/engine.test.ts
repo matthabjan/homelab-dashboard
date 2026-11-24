@@ -146,3 +146,17 @@ test('rounds never overlap: a tick while the round still runs is skipped', async
   await settle();
   assert.equal(e.busy.has('widgets'), false);
 });
+
+test('start prunes history past retentionDays: a container that restarts often is pruned too', async () => {
+  const { insertProbe } = await import('./db.ts');
+  fs.writeFileSync(path.join(tmp, 'services.yaml'), '- Apps:\n    - Pruned:\n        siteMonitor: https://pruned.home.arpa\n');
+  const e = new Engine(script());
+  e.load();
+  insertProbe('apps-pruned', Date.now() - 40 * 86_400_000, true, 10);
+  insertProbe('apps-pruned', Date.now() - 86_400_000, true, 11);
+  assert.equal(lastProbes('apps-pruned', 10).length, 2);
+  e.start();
+  e.stop();
+  assert.deepEqual(lastProbes('apps-pruned', 10).map((p) => p.ms), [11], 'the 40-day-old probe is gone (retentionDays: 30)');
+  await settle();
+});

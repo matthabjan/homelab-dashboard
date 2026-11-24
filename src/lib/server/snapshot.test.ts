@@ -130,7 +130,7 @@ test('certificates: a warning under certWarnDays, critical under 3 days, then ex
   assert.equal(tile(snap, 'Fine').cert?.days, 60);
 });
 
-test('verdict and facts: how many services are up, or the top attention item with the way to its service', () => {
+test('verdict and facts: how many services are up, the one attention item with the way to its service, or how many there are', () => {
   const now = day(5);
   const calm = build([probed('Web', now)], now);
   assert.deepEqual(calm.verdict, { level: 'ok', tag: 'All systems normal', title: 'Web is up', sub: '', action: null });
@@ -141,8 +141,11 @@ test('verdict and facts: how many services are up, or the top attention item wit
     probed('Web', now, { state: { check: { fails: 2, down: true, since: now - MIN, reason: 'HTTP 502', ms: null, checked: now } } }),
     probed('Mail', now, { state: { cert: { validTo: now + 5 * D + MIN, trusted: true, selfSigned: false } } })
   ], now);
-  assert.deepEqual([issues.verdict.level, issues.verdict.tag, issues.verdict.title, issues.verdict.action], ['crit', '2 need attention', 'Web is down', null], 'no href, so no Open action');
-  assert.match(issues.verdict.sub, /^HTTP 502 · since \d\d:\d\d · 1 of 2 services up$/);
+  assert.deepEqual([issues.verdict.level, issues.verdict.tag, issues.verdict.title, issues.verdict.action], ['crit', '2 need attention', '2 things need attention', null], 'the list names them');
+  assert.equal(issues.verdict.sub, '1 critical · 1 warning · 1 of 2 services up');
+  const one = build([probed('Web', now, { state: { check: { fails: 2, down: true, since: now - MIN, reason: 'HTTP 502', ms: null, checked: now } } }), probed('Mail', now)], now);
+  assert.deepEqual([one.verdict.title, one.verdict.action], ['Web is down', null], 'no href, so no Open action');
+  assert.match(one.verdict.sub, /^HTTP 502 · since \d\d:\d\d · 1 of 2 services up$/);
   const linked = build([probed('Web', now, { href: 'https://web.home.arpa', state: { check: { fails: 2, down: true, since: now - MIN, reason: 'HTTP 502', ms: null, checked: now } } })], now);
   assert.deepEqual(linked.verdict.action, { label: 'Open Web', href: 'https://web.home.arpa' });
 });
@@ -245,14 +248,15 @@ test('backups: every PBS widget and every job reach the card and the sheet, whic
   assert.equal(snap.jobs[0].status, 'overdue', 'the service sheet says what the row says');
 });
 
-test('a widget alert heads the verdict with its service named, but not on its own tile', () => {
+test('a widget alert heads the attention list with its service named, but not on its own tile', () => {
   const now = day(22);
   const health = (title: string): Alert => ({ sev: 'crit', key: 'health', title, detail: 'critical when below 1' });
   const snap = build([
     { name: 'Media server', state: { widget: widget(now, [health('Health is Degraded')]) } },
     { name: 'Pi-hole', state: { widget: widget(now, [health('Pi-hole is not filtering')]) } }
   ], now);
-  assert.equal(snap.verdict.title, 'Media server: Health is Degraded', 'equal severity and age: the first raised');
+  assert.equal(snap.attention[0].title, 'Media server: Health is Degraded', 'equal severity and age: the first raised');
+  assert.equal(snap.verdict.title, '2 things need attention');
   assert.equal(tile(snap, 'Media server').line, 'Health is Degraded · critical when below 1');
 });
 
@@ -368,4 +372,19 @@ test('System and Network panels: charts with each bucket\'s low and high, slow r
   assert.deepEqual(panel(hot, 'system')?.stats?.map((x) => [x.k, x.v, x.level]), [['CPU', '12%', 'ok'], ['RAM', '50%', 'ok'], ['TEMP', '80°C', 'warn']]);
   // the LAN's burst survives in the band of its download
   assert.equal(Math.max(...(snap.network?.lan?.downHi ?? []).filter((v) => v != null)), 300);
+});
+
+test('the System cell is marked only by what is raised: a busy CPU colours its gauge, heat marks the cell', () => {
+  const now = day(33);
+  const vitals = { node: 'pve', cpu: 81, cpus: 8, mem: 3.5, maxmem: 4, memPct: 88, disk: { name: 'local', pct: 30, sub: '30 / 100 GiB', metric: 'storage.pve.local' }, uptime: null, guestsRunning: null, guestsTotal: null, updates: null };
+  const pve: TestService = { name: 'PVE', widget: { type: 'proxmox', url: 'https://pve.home.arpa:8006' }, state: { widget: { ...widget(now, []), host: vitals } } };
+  const busy = createSnapshot()(snapshotInput({ services: [pve], temps: { cpu: 50, nvme: [], drives: [] } }), now);
+  assert.deepEqual(busy.host?.gauges.map((x) => [x.key, x.level]), [['cpu', 'warn'], ['mem', 'warn'], ['disk', 'ok'], ['temp', 'ok']], 'the sheet shows it');
+  assert.deepEqual([panel(busy, 'system')?.level, panel(busy, 'system')?.stats?.map((x) => x.level)], ['none', ['ok', 'ok']], 'nothing is raised, so the cell is not marked');
+  assert.equal(busy.needCount, 0);
+  const hot = createSnapshot()(snapshotInput({ services: [pve], temps: { cpu: 80, nvme: [72], drives: [] } }), now);
+  assert.deepEqual([panel(hot, 'system')?.level, hot.needCount], ['warn', 2]);
+  // the local host's own disk, with no storage row to carry it, is the System panel's alert
+  const local = createSnapshot()(snapshotInput({ local: { ...vitals, node: 'box', cpu: 10, memPct: 40, disk: { name: '/', pct: 91, sub: '91 / 100 GiB' } } }), now);
+  assert.deepEqual([panel(local, 'system')?.level, local.attention.map((a) => a.title)], ['warn', ['Disk / is 91% full']]);
 });

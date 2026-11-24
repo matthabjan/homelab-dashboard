@@ -1,6 +1,7 @@
 <script lang="ts">
   import ThemeToggle from './ThemeToggle.svelte';
   import type { Settings } from '#lib/types';
+  import Glyph from './Glyph.svelte';
 
   // The header every page shares: the brand (home), search, the live state, the monitoring link and Setup. On phones
   // search moves to the tab bar, so the header keeps room for the title.
@@ -30,7 +31,7 @@
 </script>
 
 {#snippet searchInner()}
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+  <Glyph name="search" />
   <span class="ph">Open a service…</span>
   <kbd class="mono">/</kbd>
 {/snippet}
@@ -57,12 +58,12 @@
     {#if deepLink?.href}
       <a class="deep lift" href={deepLink.href} {target} rel="noopener">
         {deepLink.name ?? 'Monitoring'}
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8" /></svg>
+        <Glyph name="out" size={13} stroke={2.4} />
       </a>
     {/if}
     <ThemeToggle />
     <a class="hbtn" class:on={current === 'setup'} href={current === 'setup' ? '/' : '/config'} aria-label={setupLabel} title={setupLabel}>
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1" /><circle cx="15" cy="6" r="2" /><circle cx="9" cy="12" r="2" /><circle cx="17" cy="18" r="2" /></svg>
+      <Glyph bare name="setup" />
       {#if configProblems && current !== 'setup'}<span class="cfg-badge mono" aria-hidden="true">{configProblems}</span>{/if}
     </a>
   </div>
@@ -71,23 +72,23 @@
 <style>
   .top { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; }
   .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
-  .brand img { width: 36px; height: 36px; border-radius: 11px; }
-  .bname { font-size: 20px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .brand img { width: 36px; height: 36px; border-radius: var(--r-12); }
+  .bname { font-size: var(--fs-20); font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .bsec { font-weight: 400; color: var(--muted); }
-  .search { flex: 1 1 260px; max-width: 440px; margin-left: auto; display: flex; align-items: center; gap: 10px; min-height: 42px; padding: 0 12px 0 14px; border: 0; border-radius: 12px; color: var(--muted); cursor: pointer; text-align: left; }
+  .search { flex: 1 1 260px; max-width: 440px; margin-left: auto; display: flex; align-items: center; gap: 10px; min-height: 42px; padding: 0 12px 0 14px; border: 0; border-radius: var(--r-12); color: var(--muted); cursor: pointer; text-align: left; }
   .search:hover { color: var(--text); }
   .search .ph { flex: 1; }
-  kbd { font-size: 11px; padding: 2px 7px; border-radius: 6px; background: var(--surface-2); }
+  kbd { font-size: var(--fs-11); padding: 2px 7px; border-radius: var(--r-8); background: var(--surface-2); }
   .right { display: flex; align-items: center; gap: 8px; }
-  .live { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); white-space: nowrap; }
+  .live { display: inline-flex; align-items: center; gap: 8px; font-size: var(--fs-13); color: var(--muted); white-space: nowrap; }
   .pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 4px var(--ok-soft); animation: breathe 3s ease-in-out infinite; }
   .live.warn .pulse { background: var(--warn); box-shadow: 0 0 0 4px var(--warn-soft); }
-  .demo { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; padding: 2px 6px; border-radius: 5px; background: var(--surface-3); color: var(--text); }
-  .hbtn { position: relative; display: flex; align-items: center; justify-content: center; width: 42px; height: 42px; border-radius: 12px; background: var(--surface); box-shadow: var(--shadow); color: var(--text); }
+  .demo { font-size: var(--fs-11); text-transform: uppercase; letter-spacing: 0.06em; padding: 2px 6px; border-radius: var(--r-4); background: var(--surface-3); color: var(--text); }
+  .hbtn { position: relative; display: flex; align-items: center; justify-content: center; width: 42px; height: 42px; border-radius: var(--r-12); background: var(--surface); box-shadow: var(--shadow); color: var(--text); }
   .hbtn.on { background: var(--text); color: var(--bg); }
-  .hbtn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
-  .cfg-badge { position: absolute; top: -4px; right: -4px; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 9px; background: var(--warn); color: var(--bg); font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center; }
-  .deep { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; padding: 0 14px; min-height: 42px; border-radius: 12px; background: var(--surface); box-shadow: var(--shadow); }
+  .hbtn :global(svg) { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+  .cfg-badge { position: absolute; top: -4px; right: -4px; min-width: 17px; height: 17px; padding: 0 4px; border-radius: var(--r-8); background: var(--warn); color: var(--bg); font-size: var(--fs-11); font-weight: 600; display: flex; align-items: center; justify-content: center; }
+  .deep { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-13); font-weight: 500; padding: 0 14px; min-height: 42px; border-radius: var(--r-12); background: var(--surface); box-shadow: var(--shadow); }
   @keyframes breathe { 50% { box-shadow: 0 0 0 7px transparent; } }
 
   /* phones: brand, the live dot and Setup; search is in the tab bar */
@@ -98,7 +99,7 @@
     .right { margin-left: auto; gap: 6px; }
     .live { min-width: 28px; min-height: 28px; justify-content: center; }
     .live-word { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-    .hbtn { width: 44px; height: 44px; border-radius: 14px; }
-    .bname { font-size: 19px; }
+    .hbtn { width: 44px; height: 44px; border-radius: var(--r-14); }
+    .bname { font-size: var(--fs-20); }
   }
 </style>

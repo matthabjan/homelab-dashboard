@@ -86,9 +86,9 @@ Guidelines: match gethomepage's widget fields where an equivalent exists. Never 
 
 `development` is published as `:dev`, and `main` as `:edge`.
 
-1. Bump `version` in `package.json` and the pinned tags in the README and `docs/deployment.md` compose examples on `development`, and merge to `main` through a pull request.
+1. Bump `version` in `package.json` and the pinned tags in the README and `docs/deployment.md` compose examples on `development`, and merge to `main` through a pull request. Write the release notes in that pull request's description under `## Changes` (without that heading, everything above the first `---` is used).
 2. Tag `main`: `git tag vX.Y.Z && git push origin vX.Y.Z`. Publishing a release in the GitHub UI with a new `vX.Y.Z` tag on `main` works too; the workflow then keeps that release instead of creating one.
-3. The [CI workflow](.github/workflows/ci.yml) checks that the tag matches `package.json`, pushes `X.Y.Z`, `X.Y`, `X` and `latest` to Docker Hub, creates the GitHub Release with generated notes, and syncs this README to Docker Hub.
+3. The [CI workflow](.github/workflows/ci.yml) checks that the tag matches `package.json`, pushes `X.Y.Z`, `X.Y`, `X` and `latest` to Docker Hub, creates the GitHub Release (the pull request's `## Changes`, then GitHub's generated list), and syncs this README to Docker Hub.
 
 Images are built once and promoted. The `:dev` build (`linux/amd64` and `linux/arm64`, with provenance, an SBOM and a GitHub artifact attestation) is the one that gets `:edge` and the release tags, as long as `main` has the same files as when `:dev` was built. So don't push to `development` between merging and tagging. If `development` has moved on, `main` and the tag are checked and built from scratch.
 

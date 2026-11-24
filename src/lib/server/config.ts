@@ -63,6 +63,8 @@ export const DEFAULT_SETTINGS: Settings = {
     latencyWarnMs: 250,
     storageAmberPct: 70,
     storageWarnPct: 85,
+    cpuWarnPct: 75, // amber on the CPU gauge; red 15 points above
+    memWarnPct: 80, // amber on the Memory gauge; red 12 points above
     tempMinC: 30,
     tempWarnC: 75,
     driveLifeWarnPct: 10, // warn when a drive has this much of its rated endurance left
@@ -374,4 +376,12 @@ export function assetUrl(rel: string | null | undefined): string | null {
   if (!rel) return null;
   if (/^https?:\/\//.test(rel)) return rel;
   return '/assets/' + rel.replace(/^\/+/, '').split('/').map(encodeURIComponent).join('/');
+}
+
+const byId = new WeakMap<Service[], Map<string, Service>>();
+/** The config's services by id. Built once per loaded config (a reload or a label discovery makes a new list). */
+export function serviceById(cfg: Pick<Config, 'services'>): Map<string, Service> {
+  let m = byId.get(cfg.services);
+  if (!m) byId.set(cfg.services, (m = new Map(cfg.services.map((s) => [s.id, s]))));
+  return m;
 }

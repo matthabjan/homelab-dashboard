@@ -48,6 +48,10 @@ export interface Settings {
     latencyWarnMs: number;
     storageAmberPct: number;
     storageWarnPct: number;
+    /** the CPU gauge turns amber at this load (red 15 points above); it colours the gauge, it raises nothing */
+    cpuWarnPct: number;
+    /** the same for the Memory gauge (red 12 points above) */
+    memWarnPct: number;
     tempMinC: number;
     tempWarnC: number;
     driveLifeWarnPct: number;
@@ -820,8 +824,8 @@ export interface Snapshot {
     /** where it sits (the host or NAS that reports it): rows are grouped by it */
     group: string;
     meta: string;
-    /** every SMART detail as one line, for the tooltip */
-    detail: string;
+    /** what SMART says, as labelled lines: the row lists them when it is opened */
+    details: { k: string; v: string }[];
     status: string;
     level: Level;
     /** % of rated endurance left, drawn as a bar; null when the drive doesn't report it */

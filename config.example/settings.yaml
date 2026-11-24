@@ -58,6 +58,8 @@ thresholds:
   latencyWarnMs: 250
   storageAmberPct: 70
   storageWarnPct: 85
+  cpuWarnPct: 75             # the CPU gauge turns amber (in the sheet only; it raises nothing)
+  memWarnPct: 80             # the same for the Memory gauge
   tempMinC: 30
   tempWarnC: 75
   driveLifeWarnPct: 10       # drive with this much rated endurance left → warning
