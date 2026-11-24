@@ -29,11 +29,23 @@ test('healthy: backups without jobs are "current"; expiring certificates are cou
   assert.equal(v.sub, 'backups current · 1 certificate expiring');
 });
 
-test('something needs attention: the top item, its detail, how many are up and the way to its service', () => {
+test('one thing needs attention: that item, its detail, how many are up and the way to its service', () => {
   const top = { sev: 'crit', key: 'm|check', title: 'Music is down', detail: 'Connection refused', service: 'Music', href: 'https://music.home.arpa' } as AttentionItem;
-  const att = { headline: { level: 'crit' as const, tag: 'Down', title: 'Music is down.' }, needCount: 2, items: [top] };
+  const att = { headline: { level: 'crit' as const, tag: 'Down', title: 'Music is down.' }, needCount: 1, items: [top] };
   const v = verdict({ ...base, tiles: [tile('A'), tile('Music', { level: 'crit', status: 'Down' })] }, att);
   assert.deepEqual(v, { level: 'crit', tag: 'Down', title: 'Music is down', sub: 'Connection refused · 1 of 2 services up', action: { label: 'Open Music', href: 'https://music.home.arpa' } });
   const config = verdict({ ...base, tiles: [tile('A')] }, { ...att, items: [{ ...top, detail: undefined, service: undefined, href: '/config#problems' } as unknown as AttentionItem] });
   assert.deepEqual([config.sub, config.action], ['1 of 1 services up', { label: 'Open it', href: '/config#problems' }]);
+});
+
+test('several things need attention: how many and how bad; the list names them, so no item and no action here', () => {
+  const item = (sev: string, n: number) => ({ sev, key: `k${n}`, title: `Problem ${n}`, detail: 'why', service: 'Music', href: 'https://music.home.arpa' }) as AttentionItem;
+  const head = { level: 'crit' as const, tag: '3 need attention', title: 'Problem 1.' };
+  const tiles = [tile('A'), tile('Music', { level: 'crit', status: 'Down' })];
+  const mixed = verdict({ ...base, tiles }, { headline: head, needCount: 3, items: [item('crit', 1), item('warn', 2), item('warn', 3), item('info', 4)] });
+  assert.deepEqual(mixed, { level: 'crit', tag: '3 need attention', title: '3 things need attention', sub: '1 critical · 2 warnings · 1 of 2 services up', action: null });
+  const warnings = verdict({ ...base, tiles: [tile('A')] }, { headline: { ...head, level: 'warn' }, needCount: 2, items: [item('warn', 1), item('warn', 2)] });
+  assert.deepEqual([warnings.title, warnings.sub], ['2 things need attention', '2 warnings · 1 of 1 services up']);
+  const crits = verdict({ ...base, tiles: [tile('A')] }, { headline: head, needCount: 2, items: [item('crit', 1), item('crit', 2)] });
+  assert.equal(crits.sub, '2 critical · 1 of 1 services up');
 });

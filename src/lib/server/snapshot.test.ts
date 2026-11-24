@@ -130,7 +130,7 @@ test('certificates: a warning under certWarnDays, critical under 3 days, then ex
   assert.equal(tile(snap, 'Fine').cert?.days, 60);
 });
 
-test('verdict and facts: how many services are up, or the top attention item with the way to its service', () => {
+test('verdict and facts: how many services are up, the one attention item with the way to its service, or how many there are', () => {
   const now = day(5);
   const calm = build([probed('Web', now)], now);
   assert.deepEqual(calm.verdict, { level: 'ok', tag: 'All systems normal', title: 'Web is up', sub: '', action: null });
@@ -141,8 +141,11 @@ test('verdict and facts: how many services are up, or the top attention item wit
     probed('Web', now, { state: { check: { fails: 2, down: true, since: now - MIN, reason: 'HTTP 502', ms: null, checked: now } } }),
     probed('Mail', now, { state: { cert: { validTo: now + 5 * D + MIN, trusted: true, selfSigned: false } } })
   ], now);
-  assert.deepEqual([issues.verdict.level, issues.verdict.tag, issues.verdict.title, issues.verdict.action], ['crit', '2 need attention', 'Web is down', null], 'no href, so no Open action');
-  assert.match(issues.verdict.sub, /^HTTP 502 · since \d\d:\d\d · 1 of 2 services up$/);
+  assert.deepEqual([issues.verdict.level, issues.verdict.tag, issues.verdict.title, issues.verdict.action], ['crit', '2 need attention', '2 things need attention', null], 'the list names them');
+  assert.equal(issues.verdict.sub, '1 critical · 1 warning · 1 of 2 services up');
+  const one = build([probed('Web', now, { state: { check: { fails: 2, down: true, since: now - MIN, reason: 'HTTP 502', ms: null, checked: now } } }), probed('Mail', now)], now);
+  assert.deepEqual([one.verdict.title, one.verdict.action], ['Web is down', null], 'no href, so no Open action');
+  assert.match(one.verdict.sub, /^HTTP 502 · since \d\d:\d\d · 1 of 2 services up$/);
   const linked = build([probed('Web', now, { href: 'https://web.home.arpa', state: { check: { fails: 2, down: true, since: now - MIN, reason: 'HTTP 502', ms: null, checked: now } } })], now);
   assert.deepEqual(linked.verdict.action, { label: 'Open Web', href: 'https://web.home.arpa' });
 });
@@ -245,14 +248,15 @@ test('backups: every PBS widget and every job reach the card and the sheet, whic
   assert.equal(snap.jobs[0].status, 'overdue', 'the service sheet says what the row says');
 });
 
-test('a widget alert heads the verdict with its service named, but not on its own tile', () => {
+test('a widget alert heads the attention list with its service named, but not on its own tile', () => {
   const now = day(22);
   const health = (title: string): Alert => ({ sev: 'crit', key: 'health', title, detail: 'critical when below 1' });
   const snap = build([
     { name: 'Media server', state: { widget: widget(now, [health('Health is Degraded')]) } },
     { name: 'Pi-hole', state: { widget: widget(now, [health('Pi-hole is not filtering')]) } }
   ], now);
-  assert.equal(snap.verdict.title, 'Media server: Health is Degraded', 'equal severity and age: the first raised');
+  assert.equal(snap.attention[0].title, 'Media server: Health is Degraded', 'equal severity and age: the first raised');
+  assert.equal(snap.verdict.title, '2 things need attention');
   assert.equal(tile(snap, 'Media server').line, 'Health is Degraded · critical when below 1');
 });
 

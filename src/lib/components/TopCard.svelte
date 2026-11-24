@@ -6,8 +6,8 @@
   import Icon from './Icon.svelte';
   import Glyph from './Glyph.svelte';
 
-  // The answer first: one sentence. While something needs attention, what to do about the top item, and beside it
-  // everything that needs attention, once; otherwise the most used services.
+  // The answer first: one sentence. While something needs attention, beside it everything that does, once; a single
+  // problem is the sentence itself, with what to do about it. Otherwise the most used services.
   interface Props {
     snap: Snapshot;
     /** every warning and critical item, the top one first */
@@ -48,12 +48,14 @@
         {/if}
       </div>
     </div>
-    {#if problems.length || snap.verdict.action}
+    {#if problems.length > 1}
+      <!-- several problems: the sentence counts them. Phones lead to the whole list; wide screens have it beside this,
+           where every row opens its service -->
+      <div class="acts only-phone"><button class="btn primary" onclick={() => onview('alerts')}>Review all {problems.length} problems</button></div>
+    {:else if problems.length || snap.verdict.action}
       {@const first = problems[0]}
       <div class="acts">
-        <!-- phones lead to the whole list when there is more than one problem; wide screens have it beside this -->
-        {#if problems.length > 1}<button class="btn primary only-phone" onclick={() => onview('alerts')}>Review all {problems.length} problems</button>{/if}
-        {#if first?.sid}{@const sid = first.sid}<button class="btn primary" class:only-desktop={problems.length > 1} onclick={() => ondetails(sid)}>See details</button>{/if}
+        {#if first?.sid}{@const sid = first.sid}<button class="btn primary" onclick={() => ondetails(sid)}>See details</button>{/if}
         {#if snap.verdict.action}
           <a class="btn" class:primary={!first?.sid} href={snap.verdict.action.href} target={linkTarget(snap.verdict.action.href)} rel="noopener">{snap.verdict.action.label} <Glyph name="out" size={13} stroke={2.4} /></a>
         {/if}

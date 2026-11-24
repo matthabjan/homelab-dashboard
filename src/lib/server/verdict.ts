@@ -1,5 +1,7 @@
 // The top card's sentence. Healthy: how many services are up, jobs counted apart ("All 11 services up", "5 backup jobs
-// on schedule"). Otherwise: the top attention item, its detail, and the way to the service.
+// on schedule"). One thing needs attention: that item, its detail, and the way to its service. Several do: how many
+// and how bad ("12 things need attention", "3 critical · 9 warnings"), since the list beside the sentence names them
+// and saying the first one twice told nothing.
 import { plural } from './format.ts';
 import type { Closed } from './attention.ts';
 import type { Job, Snapshot, Tile } from '#lib/types';
@@ -26,9 +28,16 @@ export function verdict({ tiles, jobs, backupRows, certWarnDays }: VerdictInput,
   let action: Snapshot['verdict']['action'] = null;
   if (att.needCount) {
     const top = att.items[0];
-    if (top.detail) subParts.push(top.detail);
+    if (att.needCount > 1) {
+      const need = att.items.filter((a) => a.sev !== 'info');
+      const nCrit = need.filter((a) => a.sev === 'crit').length;
+      title = `${att.needCount} things need attention`;
+      subParts.push([nCrit && `${nCrit} critical`, need.length - nCrit && plural(need.length - nCrit, 'warning')].filter(Boolean).join(' · '));
+    } else {
+      if (top.detail) subParts.push(top.detail);
+      if (top.href) action = { label: `Open ${top.service ?? 'it'}`, href: top.href };
+    }
     subParts.push(`${servicesUp} of ${services.length} services up`);
-    if (top.href) action = { label: `Open ${top.service ?? 'it'}`, href: top.href };
   } else {
     if (services.length === 1 && servicesUp === 1) title = `${services[0].name} is up`;
     else if (services.length) title = servicesUp === services.length ? `All ${services.length} services up` : `${servicesUp} of ${services.length} services up`;
