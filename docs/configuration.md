@@ -40,7 +40,7 @@ Every key is optional. Anything you leave out keeps its default, and nested obje
 | `linkTarget` | `_blank` | Where service links open: `_blank` (a new tab) or `_self`. |
 | `tlsVerify` | `true` | Verify TLS certificates when calling widget APIs. You can override it per service. See [TLS for widget APIs](deployment.md#tls-for-widget-apis). |
 | `deepLink` | none | A header button that links to a detailed-metrics tool, as `{ name, href }`. |
-| `retentionDays` | `30` | How many days of probes, metrics and events to keep. Older rows are deleted every 6 hours. |
+| `retentionDays` | `30` | How many days of probes, metrics and events to keep. Older rows are deleted at start and every 6 hours. |
 
 ```yaml
 deepLink:

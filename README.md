@@ -8,7 +8,7 @@ A self-hosted launcher and status page for a homelab on **any Docker host**: it 
 
 It is made for your **LAN or VPN** (WireGuard, Tailscale, …): it has no login of its own and must not be reachable from the internet.
 
-![Dashboard in dark mode with problems: the top problem with its buttons, beside it everything that needs attention, the infrastructure strip with a small chart per area, a tile per service with its status line, and recent activity](docs/screenshots/desktop-dark.png)
+![Dashboard in dark mode with problems: how many things need attention, beside it each of them, the infrastructure strip with a small chart per area, a tile per service with its status line, and recent activity](docs/screenshots/desktop-dark.png)
 
 - **One glance.** One sentence gives the state ("All 15 services up · 3 jobs on schedule", or the most important problem with buttons to see its details and open that service). Beside it, everything else that needs attention is listed once, most severe first, with how long each has been raised and a filter by level. When all is well, the page is short and quiet.
 - **Infrastructure at a glance, details on demand.** One strip with a cell per area, each with its figure and a small picture of it: **System** (CPU and memory of the Proxmox node or the machine the dashboard runs on, the temperature when it runs hot, and the CPU's last 24 hours), **Storage** (the fullest), **Drives** (SMART health, one mark per drive), **Network** (traffic, DNS block rate) and **Backups** (PBS and backup jobs, the last seven days). Each one opens its tab of a sheet with the full detail: 24-hour charts with a labelled scale that you can scrub through (CPU, disk I/O, temperature, with the range of readings around each line; memory and disk fill as bars with their 24 h change), every storage with its fill, grouped by the host or NAS it belongs to, every drive with SMART health, WAN and LAN traffic charts, DNS queries per hour with the blocked share, and every backup with a bar for how far through its schedule it is.
@@ -26,7 +26,7 @@ It is made for your **LAN or VPN** (WireGuard, Tailscale, …): it has no login 
 
 ![Light mode with everything healthy: "All 15 services up", the most used services, the infrastructure strip, the service tiles and recent activity](docs/screenshots/desktop-light.png)
 
-![On a phone: Home in dark mode with the top problem, the way to all problems, the most used services and the infrastructure strip above the bottom bar; and the Services view in light mode with everything healthy, a row per service with its status line](docs/screenshots/phones.png)
+![On a phone: Home in dark mode with how many things need attention, the way to all of them, the most used services and the infrastructure strip above the bottom bar; and the Services view in light mode with everything healthy, a row per service with its status line](docs/screenshots/phones.png)
 
 ![The Infrastructure sheet on a phone: the System tab in dark mode with memory and disk as bars, then CPU and disk I/O as 24-hour charts with a labelled scale; and the Network tab in light mode with WAN and LAN traffic charts and DNS queries per hour](docs/screenshots/infrastructure.png)
 
