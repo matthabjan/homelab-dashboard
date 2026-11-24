@@ -17,30 +17,58 @@ interface OpenRow { sid: string; score: number; last: number }
 
 let db: DatabaseSync | undefined;
 
+const hasColumn = (d: DatabaseSync, table: string, column: string) => d.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === column);
+
+/**
+ * The schema as numbered steps; `PRAGMA user_version` counts how many a database has had. A step that has shipped is
+ * never edited: a change to the schema is a new step at the end.
+ */
+const MIGRATIONS: ((d: DatabaseSync) => void)[] = [
+  // 1: the schema of 0.4. Databases written before the version was kept (0.0.2 to 0.4.4) are at 0 with most of it in
+  // place, so this step creates what is missing: everything in a new database, in an old one the decaying open score
+  // (0.1.0; it starts from the plain open counts), the events' index by service (0.2) and `outage` (0.3.0; old events
+  // count as no outage).
+  (d) => {
+    d.exec(`
+      CREATE TABLE IF NOT EXISTS probes (sid TEXT NOT NULL, ts INTEGER NOT NULL, ok INTEGER NOT NULL, ms REAL);
+      CREATE INDEX IF NOT EXISTS probes_sid_ts ON probes (sid, ts);
+      CREATE INDEX IF NOT EXISTS probes_ts ON probes (ts);
+      CREATE TABLE IF NOT EXISTS metrics (key TEXT NOT NULL, ts INTEGER NOT NULL, v REAL NOT NULL);
+      CREATE INDEX IF NOT EXISTS metrics_key_ts ON metrics (key, ts);
+      CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, sev TEXT NOT NULL, sid TEXT, title TEXT NOT NULL, detail TEXT, outage INTEGER);
+      CREATE INDEX IF NOT EXISTS events_ts ON events (ts);
+      CREATE INDEX IF NOT EXISTS events_sid_ts ON events (sid, ts);
+      CREATE TABLE IF NOT EXISTS opens (sid TEXT PRIMARY KEY, n INTEGER NOT NULL DEFAULT 0, last INTEGER, score REAL NOT NULL DEFAULT 0);
+      CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT);
+    `);
+    if (!hasColumn(d, 'opens', 'score')) d.exec('ALTER TABLE opens ADD COLUMN score REAL NOT NULL DEFAULT 0; UPDATE opens SET score = n');
+    if (!hasColumn(d, 'events', 'outage')) d.exec('ALTER TABLE events ADD COLUMN outage INTEGER');
+  }
+];
+
+/**
+ * Bring a database up to this version's schema: each step it has not had yet, in order, each in a transaction with
+ * its version. A database from a newer version is used as it is (steps only add), with a warning.
+ */
+export function migrate(d: DatabaseSync): void {
+  const at = Number(d.prepare('PRAGMA user_version').get()?.user_version ?? 0);
+  if (at > MIGRATIONS.length) console.warn(`[db] the database is from a newer version (schema ${at}, this version knows ${MIGRATIONS.length})`);
+  for (let v = at; v < MIGRATIONS.length; v++) {
+    d.exec('BEGIN');
+    try {
+      MIGRATIONS[v](d);
+      d.exec(`PRAGMA user_version = ${v + 1}`);
+      d.exec('COMMIT');
+    } catch (e) { d.exec('ROLLBACK'); throw e; }
+  }
+}
+
 export function openDb(): DatabaseSync {
   if (db) return db;
   fs.mkdirSync(DATA_DIR, { recursive: true });
   db = new DatabaseSync(path.join(DATA_DIR, 'dashboard.db'));
-  db.exec(`
-    PRAGMA journal_mode = WAL;
-    PRAGMA synchronous = NORMAL;
-    CREATE TABLE IF NOT EXISTS probes (sid TEXT NOT NULL, ts INTEGER NOT NULL, ok INTEGER NOT NULL, ms REAL);
-    CREATE INDEX IF NOT EXISTS probes_sid_ts ON probes (sid, ts);
-    CREATE INDEX IF NOT EXISTS probes_ts ON probes (ts);
-    CREATE TABLE IF NOT EXISTS metrics (key TEXT NOT NULL, ts INTEGER NOT NULL, v REAL NOT NULL);
-    CREATE INDEX IF NOT EXISTS metrics_key_ts ON metrics (key, ts);
-    CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, sev TEXT NOT NULL, sid TEXT, title TEXT NOT NULL, detail TEXT, outage INTEGER);
-    CREATE INDEX IF NOT EXISTS events_ts ON events (ts);
-    CREATE INDEX IF NOT EXISTS events_sid_ts ON events (sid, ts);
-    CREATE TABLE IF NOT EXISTS opens (sid TEXT PRIMARY KEY, n INTEGER NOT NULL DEFAULT 0, last INTEGER, score REAL NOT NULL DEFAULT 0);
-    CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT);
-  `);
-  // databases from before the decaying score start from their plain open counts
-  if (!db.prepare('PRAGMA table_info(opens)').all().some((c) => c.name === 'score')) {
-    db.exec('ALTER TABLE opens ADD COLUMN score REAL NOT NULL DEFAULT 0; UPDATE opens SET score = n');
-  }
-  // databases from before outages were marked: their old events count as no outage
-  if (!db.prepare('PRAGMA table_info(events)').all().some((c) => c.name === 'outage')) db.exec('ALTER TABLE events ADD COLUMN outage INTEGER');
+  db.exec('PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;');
+  migrate(db);
   return db;
 }
 
