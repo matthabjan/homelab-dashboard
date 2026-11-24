@@ -1,8 +1,10 @@
 <script lang="ts">
   import type { Level } from '#lib/types';
+  import Glyph from './Glyph.svelte';
 
   // The Infrastructure sheet's row, the same for a storage, a drive and a backup: two lines, the name with its
-  // figure, then what it is with a bar. A rule sits above every row but the first of its box.
+  // figure, then what it is with a bar. A rule sits above every row but the first of its box. A row with `details`
+  // opens in place and lists them (nothing a row knows is only in a tooltip); one with `onclick` leads elsewhere.
   interface Props {
     name: string;
     /** colours the bar and the figure: a problem in its colour, `off` grey */
@@ -23,13 +25,14 @@
     tick?: number | null;
     /** instead of the bar: the drive's rated endurance left in %, as a small labelled bar */
     life?: number | null;
-    /** the details the row has no room for */
-    title?: string;
-    /** with it the row is a button; `label` is what it says to a screen reader */
+    /** what the row has no room for, as labelled lines: with them the row is a button that opens and lists them */
+    details?: { k: string; v: string }[];
+    /** with it the row is a button that leads elsewhere; `label` is what it says to a screen reader */
     onclick?: () => void;
     label?: string;
   }
-  let { name, level, value, facts = [], pill = null, meta, aligned = false, fill = null, tick = null, life = null, title, onclick, label }: Props = $props();
+  let { name, level, value, facts = [], pill = null, meta, aligned = false, fill = null, tick = null, life = null, details, onclick, label }: Props = $props();
+  let open = $state(false);
 </script>
 
 {#snippet lines()}
@@ -38,21 +41,27 @@
     {#each facts as f}<span class="dfact num" class:lv-warn={f.warn}>{f.text}</span>{/each}
     {#if pill}<span class="dstatus lv-{pill.level}">{pill.text}</span>{/if}
     {#if value != null}<span class="num pct">{value}</span>{/if}
+    {#if details}<Glyph name="down" size={14} class={open ? 'chev open' : 'chev'} />{/if}
   </span>
   <span class="row-line">
     <span class="meta-t" class:size={aligned}>{meta}</span>
     {#if life != null}
-      <span class="life" title="{life}% of the drive's rated write endurance remains"><span class="muted">Life left</span><span class="track"><span class="fill" style:width="{Math.max(0, Math.min(100, life))}%"></span></span><span class="num lpct">{life}%</span></span>
+      <span class="life"><span class="muted">Life left</span><span class="track"><span class="fill" style:width="{Math.max(0, Math.min(100, life))}%"></span></span><span class="num lpct">{life}%</span></span>
     {:else if fill != null}
-      <span class="track"><span class="fill" style:width="{Math.min(100, Math.max(0, fill))}%"></span>{#if tick != null}<span class="tick" style:left="{tick}%" title="amber from {tick}%"></span>{/if}</span>
+      <span class="track"><span class="fill" style:width="{Math.min(100, Math.max(0, fill))}%"></span>{#if tick != null}<span class="tick" style:left="{tick}%"></span>{/if}</span>
     {/if}
   </span>
+  {#if details && open}
+    <span class="more">{#each details as d (d.k)}<span class="fact"><span class="k">{d.k}</span><span class="v num">{d.v}</span></span>{/each}</span>
+  {/if}
 {/snippet}
 
-{#if onclick}
-  <button class="row bar brow lv-{level}" {title} {onclick} aria-label={label}>{@render lines()}</button>
+{#if details}
+  <button class="row bar brow opens lv-{level}" aria-expanded={open} onclick={() => (open = !open)}>{@render lines()}</button>
+{:else if onclick}
+  <button class="row bar brow lv-{level}" {onclick} aria-label={label}>{@render lines()}</button>
 {:else}
-  <div class="row bar lv-{level}" {title} aria-label={label}>{@render lines()}</div>
+  <div class="row bar lv-{level}">{@render lines()}</div>
 {/if}
 
 <style>
@@ -91,4 +100,13 @@
   .brow:hover .name { color: var(--acc); }
   .brow:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; border-radius: 6px; }
   .brow .row-head, .brow .row-line { width: 100%; }
+  /* a row that opens in place: a chevron at its end, and under it the rest as labelled lines */
+  .opens:hover .name { color: var(--text); }
+  .row-head :global(.chev) { flex: none; align-self: center; margin-left: -4px; color: var(--muted); transition: transform 0.15s; }
+  .row-head :global(.chev.open) { transform: rotate(180deg); }
+  .more { display: flex; flex-direction: column; width: 100%; margin-top: 4px; padding: 2px 10px; border-radius: 10px; background: var(--surface); }
+  .fact { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; font-size: 12px; }
+  .fact + .fact { border-top: 1px solid var(--line); }
+  .fact .k { color: var(--muted); }
+  .fact .v { text-align: right; white-space: normal; overflow-wrap: anywhere; }
 </style>

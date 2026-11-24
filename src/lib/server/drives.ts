@@ -23,21 +23,23 @@ function driveStatus(d: Drive, where: string, th: Th) {
   if (d.errors) problems.push(['warn', `has ${d.errors} media errors or bad sectors`, 'errors']);
   if (d.tempC != null && d.tempC >= th.driveTempWarnC) problems.push(['warn', `is at ${d.tempC} °C`, 'temp']);
   const level: Level = problems.some((p) => p[0] === 'crit') ? 'crit' : problems.length ? 'warn' : 'ok';
-  const detail = [
-    d.lifeLeft != null && `${d.lifeLeft}% life left`,
-    d.tempC != null && `${d.tempC} °C`,
-    d.hours != null && `${fmtHours(d.hours)} powered on`,
-    d.written != null && `${fmtSize(d.written)} written`,
-    d.errors ? `${d.errors} errors` : null
-  ].filter(Boolean).join(' · ');
   const status = d.health === 'failing' ? 'failing' : level === 'warn' ? 'check' : d.health === 'unknown' ? '—' : 'ok';
-  /** shown next to the model; power-on time and data written stay in `detail` (the tooltip) */
+  /** what the row lists when it is opened */
+  const details = [
+    { k: 'SMART', v: { failing: 'failing', warning: 'a past or minor problem', unknown: 'not reported', ok: 'passed' }[d.health] },
+    ...(d.lifeLeft != null ? [{ k: 'Rated endurance left', v: `${d.lifeLeft}%` }] : []),
+    ...(d.tempC != null ? [{ k: 'Temperature', v: `${d.tempC} °C` }] : []),
+    ...(d.hours != null ? [{ k: 'Powered on', v: fmtHours(d.hours) }] : []),
+    ...(d.written != null ? [{ k: 'Data written', v: fmtSize(d.written) }] : []),
+    ...(d.errors ? [{ k: 'Media errors or bad sectors', v: String(d.errors) }] : [])
+  ];
+  /** shown next to the model; the rest is in `details` */
   const facts: Fact[] = [];
   if (d.tempC != null) facts.push({ k: '', v: `${d.tempC} °C`, level: d.tempC >= th.driveTempWarnC ? 'warn' : null });
   if (d.errors) facts.push({ k: 'errors', v: String(d.errors), level: 'warn' });
   const lifeLevel: Level = d.lifeLeft != null && d.lifeLeft <= th.driveLifeWarnPct ? 'warn' : 'ok';
   return {
-    row: { name: d.model, group: where, meta: [d.kind, fmtSize(d.size), where].join(' · '), detail: detail || 'no SMART details', status, level, life: d.lifeLeft, lifeLevel, tempC: d.tempC, facts },
+    row: { name: d.model, group: where, meta: [d.kind, fmtSize(d.size), where].join(' · '), details, status, level, life: d.lifeLeft, lifeLevel, tempC: d.tempC, facts },
     problems
   };
 }

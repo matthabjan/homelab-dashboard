@@ -14,7 +14,7 @@ test('a healthy drive: an ok row grouped by its service, nothing raised', () => 
   const r = drives([{ service: nas, drives: [drive('Disk 1', { lifeLeft: 96, tempC: 36, hours: 100 })] }], th);
   assert.deepEqual(r.raised, []);
   assert.deepEqual(r.rows.map((d) => [d.name, d.group, d.meta, d.status, d.level, d.life, d.lifeLevel]), [['Disk 1', 'NAS', 'SSD · 2 TB · NAS', 'ok', 'ok', 96, 'ok']]);
-  assert.equal(r.rows[0].detail, '96% life left · 36 °C · 4 d powered on');
+  assert.deepEqual(r.rows[0].details, [{ k: 'SMART', v: 'passed' }, { k: 'Rated endurance left', v: '96%' }, { k: 'Temperature', v: '36 °C' }, { k: 'Powered on', v: '4 d' }]);
   assert.deepEqual(r.rows[0].facts, [{ k: '', v: '36 °C', level: null }]);
 });
 
@@ -49,5 +49,5 @@ test('a disk passed through whole is listed once, for the first service that rep
 
 test('SMART unknown: a row without a verdict', () => {
   const r = drives([{ service: nas, drives: [drive('USB stick', { kind: 'USB', health: 'unknown' })] }], th);
-  assert.deepEqual([r.rows[0].status, r.rows[0].level, r.rows[0].detail], ['—', 'ok', 'no SMART details']);
+  assert.deepEqual([r.rows[0].status, r.rows[0].level, r.rows[0].details], ['—', 'ok', [{ k: 'SMART', v: 'not reported' }]]);
 });
